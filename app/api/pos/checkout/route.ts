@@ -51,7 +51,12 @@ export async function POST(request: Request) {
     }
 
     const clientId = Number(body.clientId ?? 1) || 1;
-    const depotName = body.depotName?.trim() || "Boutique";
+    const depotName = body.depotName?.trim() || user.emplacement || "";
+    
+    if (!depotName) {
+      return NextResponse.json({ error: "Aucun dépôt spécifié pour cette vente (Boutique fallback désactivé)." }, { status: 400 });
+    }
+
     const moyenReglement = body.moyenReglement?.trim() || "Espece";
     const cashVersement = Number(body.versement || 0);
 

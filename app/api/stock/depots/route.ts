@@ -4,32 +4,19 @@ import { NextResponse } from "next/server";
 export async function GET() {
   const supabase = await createClient();
   
-  // As there's no defined 'depots' table in this schema, 
-  // we extract active depot names directly from assigned users and existing stock records.
-  
-  const [usersRes, stocksRes] = await Promise.all([
-    supabase.from("users").select("emplacement").not("emplacement", "is", null),
-    supabase.from("stocks").select("depot_nom").not("depot_nom", "is", null)
-  ]);
+  // Use the dedicated 'depots' table as the primary source of truth.
+  const { data, error } = await supabase
+    .from("depots")
+    .select("nom")
+    .eq("is_active", true)
+    .order("nom");
 
-  const uniqueDepots = new Set<string>();
-
-  if (usersRes.data) {
-    usersRes.data.forEach((u: any) => uniqueDepots.add(u.emplacement));
-  }
-  if (stocksRes.data) {
-    stocksRes.data.forEach((s: any) => uniqueDepots.add(s.depot_nom));
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Ensure 'Global', 'Principal', 'Boutique' exist as sensible fallback options
-  // if no data is found (especially during setup).
-  if (uniqueDepots.size === 0) {
-    uniqueDepots.add("Boutique");
-    uniqueDepots.add("Dépôt Principal");
-  }
+  // Extract names
+  const depotNames = data?.map(d => d.nom) || [];
 
-  // Sort them
-  const sortedDepots = Array.from(uniqueDepots).sort((a, b) => a.localeCompare(b));
-
-  return NextResponse.json(sortedDepots);
+  return NextResponse.json(depotNames);
 }

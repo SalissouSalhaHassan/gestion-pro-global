@@ -77,7 +77,13 @@ export async function POST(request: Request) {
     }
 
     // 3. Initialize Stock record
-    const targetDepot = (!depot_nom || depot_nom === "Tous") ? "Boutique" : depot_nom;
+    let targetDepot = (!depot_nom || depot_nom === "Tous") ? user.emplacement : depot_nom;
+    
+    if (!targetDepot) {
+       // Fallback to first available depot if user has no assignment
+       const { data: d } = await supabase.from("depots").select("nom").eq("is_active", true).limit(1).maybeSingle();
+       targetDepot = d?.nom || "Principal";
+    }
     
     if (Number(initial_stock) > 0) {
       const { error: stockError } = await supabase
