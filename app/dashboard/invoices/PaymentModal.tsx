@@ -63,7 +63,10 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
   const [selectedAdvanceId, setSelectedAdvanceId] = useState<number | null>(null);
 
   const totalPaid = payments
-    .filter(p => p.moyen_reglement !== 'Crédit')
+    .filter(p => {
+      const mode = (p.moyen_reglement || "").toLowerCase();
+      return !mode.includes('redit');
+    })
     .reduce((acc, curr) => acc + Number(curr.montant_regle), 0);
   const remainingToPay = (invoice.total_ttc || 0) - totalPaid;
 
@@ -104,7 +107,10 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
       const res = await fetch(`/api/invoices/${invoice.id}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newPayment)
+        body: JSON.stringify({
+          ...newPayment,
+          montant_regle: (newPayment.moyen_reglement?.toLowerCase().includes('redit')) ? 0 : newPayment.montant_regle
+        })
       });
       if (res.ok) {
         setNewPayment({ ...newPayment, reference_paiement: "", banque: "" });

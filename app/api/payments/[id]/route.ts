@@ -30,13 +30,16 @@ export async function DELETE(
   // 3. Recalculate Invoice Totals
   const { data: allPayments, error: fetchAllError } = await supabase
     .from("paiements")
-    .select("montant_regle")
+    .select("montant_regle, moyen_reglement")
     .eq("facture_id", invoiceId);
 
   if (fetchAllError) return NextResponse.json({ error: fetchAllError.message }, { status: 500 });
 
   const totalPaid = allPayments
-    .filter(p => p.moyen_reglement !== 'Crédit')
+    .filter(p => {
+      const mode = (p.moyen_reglement || "").toLowerCase();
+      return !mode.includes('redit');
+    })
     .reduce((acc, curr) => acc + Number(curr.montant_regle), 0);
 
   // Get invoice total_ttc

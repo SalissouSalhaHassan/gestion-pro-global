@@ -237,20 +237,31 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
           </p>
 
           {/* TOTALS GRID (3 BOXES) - ALWAYS HORIZONTAL */}
-          <div className="flex flex-row w-full mb-4 border border-black min-h-[40px]">
-            <div className="flex-1 border-r border-black p-1 text-center bg-[#ebebeb] flex flex-col justify-center">
-              <span className="font-black uppercase text-[9px] leading-none">TOTAL</span>
-              <span className="text-sm font-[900] mt-0.5 whitespace-nowrap">{Number(invoice.total_ttc).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex-1 border-r border-black p-1 text-center bg-[#f9f9f9] flex flex-col justify-center">
-              <span className="font-black uppercase text-[9px] leading-none">MONTANT PAYÉ</span>
-              <span className="text-sm font-[900] mt-0.5 whitespace-nowrap">{Number(invoice.montant_paye).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex-1 p-1 text-center bg-white flex flex-col justify-center">
-              <span className="font-black uppercase text-[9px] leading-none">RESTE À PAYER</span>
-              <span className="text-sm font-[900] mt-0.5 whitespace-nowrap">{Number(invoice.total_ttc - invoice.montant_paye).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-          </div>
+          {/* CALCULATED TOTALS */}
+          {(() => {
+            const actualPaid = payments ? payments.filter(p => {
+              const mode = (p.moyen_reglement || "").toLowerCase();
+              return !mode.includes('redit');
+            }).reduce((acc, curr) => acc + Number(curr.montant_regle), 0) : 0;
+            const actualRemaining = Math.max(0, Number(invoice.total_ttc) - actualPaid);
+            
+            return (
+              <div className="flex flex-row w-full mb-4 border border-black min-h-[40px]">
+                <div className="flex-1 border-r border-black p-1 text-center bg-[#ebebeb] flex flex-col justify-center">
+                  <span className="font-black uppercase text-[9px] leading-none">TOTAL</span>
+                  <span className="text-sm font-[900] mt-0.5 whitespace-nowrap">{Number(invoice.total_ttc).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex-1 border-r border-black p-1 text-center bg-[#f9f9f9] flex flex-col justify-center">
+                  <span className="font-black uppercase text-[9px] leading-none">MONTANT PAYÉ</span>
+                  <span className="text-sm font-[900] mt-0.5 whitespace-nowrap">{actualPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex-1 p-1 text-center bg-white flex flex-col justify-center">
+                  <span className="font-black uppercase text-[9px] leading-none">RESTE À PAYER</span>
+                  <span className="text-sm font-[900] mt-0.5 whitespace-nowrap">{actualRemaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* HISTORY SECTION */}
           <div className="mt-4">
@@ -271,7 +282,13 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                       <td className="border-r border-black p-0.5 text-center">{new Date(p.date_operation).toLocaleDateString("fr-FR")}</td>
                       <td className="border-r border-black p-0.5 text-center">{p.moyen_reglement || "Espèce"}</td>
                       <td className="border-r border-black p-0.5 text-center">{p.reference || ""}</td>
-                      <td className="p-0.5 text-right px-2">{Number(p.montant_regle).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="p-0.5 text-right px-2">
+                        {(() => {
+                          const mode = (p.moyen_reglement || "").toLowerCase();
+                          if (mode.includes('redit')) return "0,00";
+                          return Number(p.montant_regle).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                        })()}
+                      </td>
                     </tr>
                   ))
                 ) : (
@@ -281,7 +298,10 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                 )}
                 <tr className="bg-[#f0f0f0] font-black text-xs border-t border-black">
                   <td colSpan={3} className="p-0.5 text-right px-2 uppercase">Total Versé</td>
-                  <td className="p-0.5 text-right px-2">{payments.filter(p => p.moyen_reglement !== 'Crédit').reduce((acc, curr) => acc + Number(curr.montant_regle), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                  <td className="p-0.5 text-right px-2">{payments.filter(p => {
+                    const mode = (p.moyen_reglement || "").toLowerCase();
+                    return !mode.includes('redit');
+                  }).reduce((acc, curr) => acc + Number(curr.montant_regle), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                 </tr>
               </tbody>
             </table>

@@ -140,8 +140,8 @@ export default function InvoicesPage() {
       return 0;
     });
 
-    const total = invoices.reduce((acc, curr) => acc + curr.total_ttc, 0);
-    const pending = invoices.reduce((acc, curr) => acc + curr.montant_restant, 0);
+    const total = filtered.reduce((acc, curr) => acc + (Number(curr.total_ttc) || 0), 0);
+    const pending = filtered.reduce((acc, curr) => acc + (Number(curr.montant_restant) || 0), 0);
 
     return { filteredInvoices: filtered, totalRevenue: total, pendingRevenue: pending };
   }, [invoices, query, sortField, sortAsc]);

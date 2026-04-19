@@ -166,12 +166,19 @@ export async function POST(request: Request) {
       // 1. CREDIT HANDLING
       if (moyenReglement === "Crédit") {
         const { data: fact } = await supabase.from("factures").select("total_ttc").eq("id", extractedId).single();
+        // Update invoice totals
         await supabase.from("factures").update({ 
            statut: "Non Payée",
            mode_paiement: "Crédit",
            montant_paye: 0,
            montant_restant: fact?.total_ttc || 0
         }).eq("id", extractedId);
+
+        // Also ensure any 'Crédit' payment record inserted by RPC has 0 amount
+        await supabase.from("paiements")
+          .update({ montant_regle: 0 })
+          .eq("facture_id", extractedId)
+          .ilike("moyen_reglement", "crédit");
       } 
       
       // 2. ADVANCE (AVANCE) HANDLING - FIFO Logic
