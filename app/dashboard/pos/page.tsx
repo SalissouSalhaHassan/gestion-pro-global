@@ -674,6 +674,19 @@ const S = {
     background: "rgba(255,255,255,0.9)",
     transition: "all 0.2s",
   },
+  ticketQtyInput: {
+    width: 60,
+    padding: "4px 4px",
+    border: "1px solid #cbd5e1",
+    borderRadius: "8px",
+    fontWeight: 800,
+    fontSize: 14,
+    color: "#0f172a",
+    textAlign: "center" as const,
+    outline: "none",
+    background: "rgba(255,255,255,0.9)",
+    transition: "all 0.2s",
+  },
 };
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1424,7 +1437,18 @@ function PosPage() {
                         }}
                       >
                         <td style={S.ticketTd}>{item.designation}</td>
-                        <td style={{ ...S.ticketTd, textAlign: "center" }}>{item.quantite}</td>
+                        <td style={{ ...S.ticketTd, textAlign: "center" }}>
+                          <input
+                            type="number"
+                            className="pos-price-input"
+                            value={item.quantite}
+                            onChange={(e) => updateQuantity(item.id, parseFloat(e.target.value) || 1)}
+                            onClick={(e) => e.stopPropagation()}
+                            onFocus={(e) => e.target.select()}
+                            style={S.ticketQtyInput}
+                            min="1"
+                          />
+                        </td>
                         <td style={{ ...S.ticketTd, textAlign: "right" }}>
                           <input
                             type="number"
