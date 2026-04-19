@@ -53,6 +53,28 @@ export async function POST(request: Request) {
     const depotName = body.depotName?.trim() || "Boutique";
     const moyenReglement = body.moyenReglement?.trim() || "Espece";
 
+    // ─── SELF-HEALING: ENSURE DEFAULT CLIENT AND DEPOT EXIST ───
+    if (clientId === 1) {
+      const { data: c1 } = await supabase.from("clients").select("id").eq("id", 1).single();
+      if (!c1) {
+        await supabase.from("clients").insert({
+          id: 1, 
+          nom: "CLIENT COMPTANT", 
+          ref_client: "COMPTANT", 
+          is_deleted: false 
+        });
+      }
+    }
+    
+    const { data: d1 } = await supabase.from("depots").select("id").eq("nom", depotName).single();
+    if (!d1) {
+      await supabase.from("depots").insert({ 
+        nom: depotName, 
+        emplacement: "Point de vente", 
+        is_active: true 
+      });
+    }
+
     // ─── INVENTORY GUARD: PRE-VALIDATION ───
     const isAdmin = await isAdminOrManager(user);
     const itemIds = items.map(it => it.id);
