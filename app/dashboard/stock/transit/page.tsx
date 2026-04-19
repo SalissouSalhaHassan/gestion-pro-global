@@ -22,6 +22,7 @@ type Transit = {
   status: string;
   details: any[];
   created_by: string;
+  received_by?: string | null;
   notes: string;
 };
 

@@ -100,20 +100,19 @@ export async function POST(request: Request) {
       const { data, error } = await supabase.rpc("update_invoice_from_pos_safe", {
         p_invoice_id: Number(body.invoiceId),
         p_client_id: clientId,
-        p_vendeur: user.email ?? "Caisse",
+        p_vendeur: user.username ?? "Caisse",
         p_moyen_reglement: moyenReglement === "Avance" ? "Crédit" : moyenReglement,
         p_depot_nom: depotName,
         p_items: items,
         p_user_id_text: user.id,
       });
       if (error) throw error;
-      result = data;
-      invoiceId = Number(body.id || body.invoiceId);
+      invoiceId = Number(body.invoiceId);
     } else {
       // MODE: NEW SALE
       const { data, error } = await supabase.rpc("checkout_pos_sale", {
         p_client_id: clientId,
-        p_vendeur: user.email ?? "Caisse",
+        p_vendeur: user.username ?? "Caisse",
         p_emplacement: body.emplacement ?? null,
         p_moyen_reglement: moyenReglement === "Avance" ? "Crédit" : moyenReglement,
         p_depot_nom: depotName,

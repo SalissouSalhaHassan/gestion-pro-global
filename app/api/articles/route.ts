@@ -107,7 +107,6 @@ export async function POST(request: Request) {
         nr_doc: `INIT-${article.id}`,
         fournisseur_client: "Stock Initial"
       });
-      }
     }
 
     return NextResponse.json({ ok: true, article });

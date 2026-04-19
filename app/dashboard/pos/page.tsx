@@ -37,6 +37,13 @@ import InvoiceModal from "../invoices/InvoiceModal";
    ═══════════════════════════════════════════════════════════════════ */
 
 type Article = {
+  id: string | number;
+  reference: string;
+  code_barre: string | null;
+  designation: string;
+  p_vente_ht: number;
+  p_vente_ttc: number;
+  taxe: number;
   image_path: string | null;
   stock_total: number;
   depot_stocks?: Record<string, number>;
@@ -1114,7 +1121,12 @@ function PosPage() {
       const payload = (await response.json()) as {
         ok?: boolean;
         error?: string;
-        sale?: { numero?: string, alerts?: { designation: string, stock_restant: number }[] };
+        sale?: { 
+          id?: string | number,
+          invoice_id?: string | number,
+          numero?: string, 
+          alerts?: { designation: string, stock_restant: number }[] 
+        };
       };
 
       if (!response.ok || !payload.ok) {
@@ -1143,7 +1155,7 @@ function PosPage() {
       // TRIGGER PRINT PREVIEW
       if (payload.sale?.invoice_id || payload.sale?.id) {
         const invId = payload.sale.invoice_id || payload.sale.id;
-        setPrintInvoiceId(invId);
+        setPrintInvoiceId(invId ?? null);
         localStorage.setItem("last_invoice_id", String(invId));
       } else if (editInvoiceId) {
         setPrintInvoiceId(editInvoiceId);
@@ -1169,10 +1181,14 @@ function PosPage() {
     const tempArticle: Article = {
       id: `QA-${Date.now()}`,
       reference: "QUICK-ADD",
+      code_barre: null,
       designation: designation.trim(),
+      p_vente_ht: parseFloat(price) || 0,
       p_vente_ttc: parseFloat(price) || 0,
-      stock_total: 999,
       taxe: 0,
+      image_path: null,
+      stock_total: 999,
+      depot_stocks: { [selectedDepot]: 999 }
     };
     const qty = parseInt(quantity) || 1;
     for (let i = 0; i < qty; i++) {
@@ -1703,7 +1719,7 @@ function PosPage() {
         <div style={{
           position: "fixed", inset: 0, zIndex: 1000,
           background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)",
-          display: "flex", alignItems: "center", justifyCenter: "center", padding: 20
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 20
         }}>
           <div style={{
             background: "#fff", borderRadius: 24, padding: 32, width: "100%", maxWidth: 450,

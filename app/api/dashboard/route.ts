@@ -55,13 +55,16 @@ export async function GET() {
 
     if (activityError) throw activityError;
 
-    const mappedActivity = recentActivity?.map(act => ({
-      id: act.id,
-      type: act.type,
-      quantite: act.quantite,
-      designation: act.articles?.designation || "Inconnu",
-      date: act.date_mouvement
-    })) || [];
+    const mappedActivity = recentActivity?.map(act => {
+      const artObj = Array.isArray(act.articles) ? act.articles[0] : act.articles;
+      return {
+        id: act.id,
+        type: act.type,
+        quantite: act.quantite,
+        designation: artObj?.designation || "Inconnu",
+        date: act.date_mouvement
+      }
+    }) || [];
 
     // 4. Performance du Stock (Sales over last 7 days)
     const last7Days = Array.from({ length: 7 }, (_, i) => {

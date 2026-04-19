@@ -62,15 +62,17 @@ export async function GET(request: Request) {
     const entries: any[] = [];
 
     pData?.forEach(p => {
+       const fact = Array.isArray(p.factures) ? p.factures[0] : p.factures;
+       const adv = Array.isArray(p.avances_clients) ? p.avances_clients[0] : p.avances_clients;
        entries.push({
           date: p.date_operation,
-          ref: p.factures?.bl_number || p.avances_clients?.reference_paiement || "TRANS",
+          ref: fact?.bl_number || adv?.reference_paiement || "TRANS",
           type: p.montant_regle < 0 ? "Retrait" : "Paiement",
           moyen: p.moyen_reglement,
           entree: p.montant_regle > 0 ? p.montant_regle : 0,
           sortie: p.montant_regle < 0 ? Math.abs(p.montant_regle) : 0,
           user: p.utilisateur,
-          emplacement: p.factures?.emplacement || p.avances_clients?.emplacement || ""
+          emplacement: fact?.emplacement || adv?.emplacement || ""
        });
     });
 
