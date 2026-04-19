@@ -198,7 +198,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
       {/* Paper Component */}
       <div className={`bg-white h-auto overflow-y-auto custom-scrollbar shadow-2xl print:shadow-none print:rounded-none print:w-full print:h-auto print:overflow-visible ${
         printFormat === 'Ticket' ? 'w-[320px] rounded-lg' : 
-        printFormat === 'A5' ? 'w-[135mm] rounded-[24px]' : 
+        printFormat === 'A5' ? 'w-[148mm] rounded-[24px]' : 
         'w-full max-w-[190mm] rounded-[32px]'
       }`}>
         
@@ -255,10 +255,10 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                     </>
                   ) : (
                     <>
-                      <th className="border-r border-black p-1 text-center w-28 font-black">Code Article</th>
+                      <th className="border-r border-black p-1 text-center w-28 font-black">Code Art.</th>
                       <th className="border-r border-black p-1 text-left font-black">Désignation</th>
-                      <th className="border-r border-black p-1 text-center w-24 font-black">Dépôt</th>
-                      <th className="p-1 text-center w-24 font-black">Quantité Livrée</th>
+                      <th className="border-r border-black p-1 text-center w-24 font-black text-[10px]">Dépôt</th>
+                      <th className="p-1 text-center w-24 font-black text-[10px]">Qté Livrée</th>
                     </>
                   )}
                 </tr>
@@ -275,9 +275,9 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                       </>
                     ) : (
                       <>
-                        <td className="border-r border-black p-1 text-center">{item.code_art || "-"}</td>
+                        <td className="border-r border-black p-1 text-center text-[10px]">{item.code_art || "-"}</td>
                         <td className="border-r border-black p-1">{item.description}</td>
-                        <td className="border-r border-black p-1 text-center">{item.depot_origine || "Boutique"}</td>
+                        <td className="border-r border-black p-1 text-center text-[10px]">{item.depot_origine || "Boutique"}</td>
                         <td className="p-1 text-center font-bold">{Number(item.qte).toFixed(2)}</td>
                       </>
                     )}
@@ -299,17 +299,17 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                 
                 return (
                   <div className="flex flex-row w-full mb-4 border border-black min-h-[40px]">
-                    <div className="flex-1 border-r border-black p-1 text-center bg-[#ebebeb] flex flex-col justify-center">
+                    <div className="flex-1 border-r border-black p-1 text-center bg-[#ebebeb] flex flex-col justify-center overflow-hidden">
                       <span className="font-black uppercase text-[9px] leading-none">TOTAL</span>
-                      <span className="text-sm font-[900] mt-0.5">{Number(invoice.total_ttc).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      <span className="text-sm font-[900] mt-0.5 truncate">{Number(invoice.total_ttc).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
-                    <div className="flex-1 border-r border-black p-1 text-center bg-[#f9f9f9] flex flex-col justify-center">
+                    <div className="flex-1 border-r border-black p-1 text-center bg-[#f9f9f9] flex flex-col justify-center overflow-hidden">
                       <span className="font-black uppercase text-[9px] leading-none">MONTANT PAYÉ</span>
-                      <span className="text-sm font-[900] mt-0.5">{actualPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      <span className="text-sm font-[900] mt-0.5 truncate">{actualPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
-                    <div className="flex-1 p-1 text-center bg-white flex flex-col justify-center">
+                    <div className="flex-1 p-1 text-center bg-white flex flex-col justify-center overflow-hidden">
                       <span className="font-black uppercase text-[9px] leading-none">RESTE À PAYER</span>
-                      <span className="text-sm font-[900] mt-0.5">{actualRemaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      <span className="text-sm font-[900] mt-0.5 truncate">{actualRemaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
                   </div>
                 );
@@ -317,15 +317,15 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
 
               <div className="mt-4">
                 <h4 className="font-black uppercase text-xs mb-1 underline">Historique des Versements</h4>
-                <table className="w-full border border-black border-collapse">
+                <table className="w-full border border-black border-collapse text-[10px]">
                   <thead>
-                    <tr className="bg-[#ebebeb] border-b border-black text-[10px]">
+                    <tr className="bg-[#ebebeb] border-b border-black">
                       <th className="border-r border-black p-0.5">Date</th>
                       <th className="border-r border-black p-0.5">Moyen</th>
                       <th className="p-0.5">Versement</th>
                     </tr>
                   </thead>
-                  <tbody className="text-[10px] font-bold">
+                  <tbody className="font-bold">
                     {payments.length > 0 ? (
                       payments.map((p, i) => (
                         <tr key={i} className="border-b border-black last:border-b-0">
@@ -337,18 +337,18 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                         </tr>
                       ))
                     ) : (
-                      <tr className="border-b border-black italic"><td colSpan={3} className="p-2 text-center">Aucun versement</td></tr>
+                      <tr className="border-b border-black italic"><td colSpan={3} className="p-1 text-center">Aucun versement</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
             </>
           ) : (
-            <div className="mt-20 flex justify-between items-start text-[11px] font-black">
-              <div className="text-center w-[200px] border-t border-black pt-2">
+            <div className="mt-16 flex justify-between items-start text-[11px] font-black px-2">
+              <div className="text-center w-[160px] border-t border-black pt-2">
                 Signature du Livreur
               </div>
-              <div className="text-center w-[250px] border-t border-black pt-2 flex flex-col items-center">
+              <div className="text-center w-[200px] border-t border-black pt-2 flex flex-col items-center">
                 <span>Cachet et Signature du Client</span>
                 <span className="italic font-bold mt-1 text-[10px]">(Reçu en bon état)</span>
               </div>
@@ -367,8 +367,8 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
           #printable-invoice, #printable-invoice * { visibility: visible; }
           #printable-invoice {
             position: absolute; left: 0; top: 0; 
-            width: ${printFormat === 'Ticket' ? '80mm' : '210mm'} !important;
-            padding: ${printFormat === 'Ticket' ? '2mm' : '10mm'} !important;
+            width: ${printFormat === 'Ticket' ? '80mm' : printFormat === 'A5' ? '148mm' : '210mm'} !important;
+            padding: ${printFormat === 'Ticket' ? '2mm' : '8mm'} !important;
             margin: 0 !important; border: none !important;
           }
           .ticket-hide { display: ${printFormat === 'Ticket' ? 'none' : 'block'} !important; }
@@ -381,6 +381,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
           #printable-invoice table th, #printable-invoice table td { padding: 2px !important; font-size: 10px !important; }
         ` : ''}
       `}</style>
+
     </div>
   );
 }
