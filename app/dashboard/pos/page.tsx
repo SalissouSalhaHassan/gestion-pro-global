@@ -1440,12 +1440,20 @@ function PosPage() {
                         <td style={{ ...S.ticketTd, textAlign: "center" }}>
                           <input
                             type="number"
-                            className="pos-price-input"
+                            className="pos-qty-input"
                             value={item.quantite}
-                            onChange={(e) => updateQuantity(item.id, parseFloat(e.target.value) || 1)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "") {
+                                // Allow empty string temporarily while typing
+                                updateQuantity(item.id, 0); 
+                              } else {
+                                updateQuantity(item.id, parseInt(val) || 1);
+                              }
+                            }}
                             onClick={(e) => e.stopPropagation()}
                             onFocus={(e) => e.target.select()}
-                            style={S.ticketQtyInput}
+                            style={{ ...S.ticketQtyInput, border: "2px solid #4f46e5" }}
                             min="1"
                           />
                         </td>
