@@ -12,7 +12,9 @@ import {
   MapPin, 
   Phone, 
   Mail,
-  Info
+  Info,
+  Package,
+  ClipboardList
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -29,6 +31,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
   const [items, setItems] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [company, setCompany] = useState<any>(null);
+  const [mode, setMode] = useState<'Invoice' | 'BL'>('Invoice');
   const [printFormat, setPrintFormat] = useState<'A4' | 'A5' | 'Ticket'>('A4');
 
   const numberToWordsFr = (total: number) => {
@@ -119,7 +122,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
         <div className="bg-white p-8 rounded-3xl shadow-xl flex flex-col items-center">
           <Loader2 className="animate-spin text-indigo-600 mb-4" size={40} />
-          <p className="font-bold text-slate-600">Préparation de la facture...</p>
+          <p className="font-bold text-slate-600">Préparation...</p>
         </div>
       </div>
     );
@@ -132,6 +135,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
       
       {/* Action Bar (Hidden on Print) */}
       <div className="absolute top-6 right-6 flex flex-col items-end gap-3 print:hidden z-[110]">
+        {/* Format Selector */}
         <div className="flex items-center gap-2 bg-white/80 backdrop-blur p-2 rounded-2xl shadow-lg border border-white/20">
           {(['A4', 'A5', 'Ticket'] as const).map((fmt) => (
             <button
@@ -146,6 +150,32 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
               {fmt}
             </button>
           ))}
+        </div>
+
+        {/* Mode Selector (Invoice vs BL) */}
+        <div className="flex items-center gap-2 bg-white/80 backdrop-blur p-2 rounded-2xl shadow-lg border border-white/20">
+          <button
+            onClick={() => setMode('Invoice')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+              mode === 'Invoice' 
+              ? 'bg-emerald-600 text-white shadow-md' 
+              : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <FileText size={14} />
+            Facture
+          </button>
+          <button
+            onClick={() => setMode('BL')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+              mode === 'BL' 
+              ? 'bg-orange-600 text-white shadow-md' 
+              : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <ClipboardList size={14} />
+            Bon de Livraison
+          </button>
         </div>
         
         <div className="flex items-center gap-3">
@@ -165,7 +195,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
         </div>
       </div>
 
-      {/* Invoice Paper Component */}
+      {/* Paper Component */}
       <div className={`bg-white h-auto overflow-y-auto custom-scrollbar shadow-2xl print:shadow-none print:rounded-none print:w-full print:h-auto print:overflow-visible ${
         printFormat === 'Ticket' ? 'w-[320px] rounded-lg' : 
         printFormat === 'A5' ? 'w-[135mm] rounded-[24px]' : 
@@ -174,203 +204,181 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
         
         <div id="printable-invoice" className="p-4 md:p-6 text-black font-sans leading-tight">
           
-          {/* REFERENCE DESIGN: TOP LOGO/INFO */}
+          {/* TOP LOGO/INFO */}
           <div className="mb-2">
             <h1 className="text-xl font-black uppercase tracking-tight">{company?.nom_entreprise || "ETS TASSIOU KOMMA"}</h1>
-            <p className="text-xs font-black uppercase mt-0.5">{company?.adresse || "MARADI FACE KAMPALA NIGER KAMPALA"}</p>
+            <p className="text-xs font-black uppercase mt-0.5">{company?.adresse || ""}</p>
             <div className="text-[10px] font-medium mt-0.5">
-              <p>Tél: {company?.telephone || "+227 96 97 75 68 / 94 44 69 09"} | NIF: {company?.nif || "6131/R"} | RC: {company?.rc || "40/01"}</p>
+              <p>Tél: {company?.telephone || ""} | NIF: {company?.nif || ""} | RC: {company?.rc || ""}</p>
             </div>
             <div className="w-full h-[1.5px] bg-black mt-2"></div>
           </div>
 
           {/* SUBTITLE BOX */}
           <div className="bg-[#ebebeb] p-1.5 text-center mb-4 border border-black">
-            <h2 className="text-lg font-black uppercase tracking-[0.2em]">RECU DE VENTE</h2>
+            <h2 className="text-lg font-black uppercase tracking-[0.2em]">{mode === 'Invoice' ? 'RECU DE VENTE' : 'BON DE LIVRAISON'}</h2>
           </div>
 
           {/* TWO COLUMN DETAILS */}
           <div className="flex justify-between items-start mb-4 text-[11px]">
             <div className="w-1/2 pr-2">
-              <h3 className="font-black text-sm mb-1 border-b border-black pb-0.5">Détails de la Vente</h3>
+              <h3 className="font-black text-sm mb-1 border-b border-black pb-0.5">{mode === 'Invoice' ? 'Détails de la Vente' : 'Détails du Bon'}</h3>
               <div className="grid grid-cols-[80px_1fr] gap-x-1 gap-y-0.5">
-                <span className="font-black">Reçu N°:</span> <span>{invoice.bl_number}</span>
-                <span className="font-black">Date:</span> <span>{new Date(invoice.date_facture).toLocaleDateString("fr-FR")}</span>
+                <span className="font-black">{mode === 'Invoice' ? 'Reçu N°:' : 'BL N°:'}</span> <span>{invoice.bl_number}</span>
+                <span className="font-black">{mode === 'Invoice' ? 'Date:' : 'Date BL:'}</span> <span>{new Date(invoice.date_facture).toLocaleDateString("fr-FR")}</span>
                 <span className="font-black">Vendeur:</span> <span>{invoice.vendeur || "Admin"}</span>
-                <span className="font-black">Lieu:</span> <span>{invoice.emplacement || "KAMPALA"}</span>
+                {mode === 'Invoice' && (
+                  <>
+                    <span className="font-black">Lieu:</span> <span>{invoice.emplacement || "KAMPALA"}</span>
+                  </>
+                )}
               </div>
             </div>
             <div className="w-1/2 pl-2">
               <h3 className="font-black text-sm mb-1 border-b border-black pb-0.5">Client</h3>
-              <p className="font-black text-sm">{invoice.client_nom || "Client Comptant"}</p>
+              <p className="font-black text-sm">{invoice.client_nom || "Client Divers"}</p>
               {invoice.client_adresse && <p className="font-medium">{invoice.client_adresse}</p>}
             </div>
           </div>
 
           {/* ITEMS TABLE */}
-          <div className="mb-3 border-collapse">
-            <table className="w-full border border-black">
+          <div className="mb-3">
+            <table className="w-full border border-black border-collapse">
               <thead>
                 <tr className="bg-[#ebebeb] border-b border-black text-[11px]">
-                  <th className="border-r border-black p-1 text-left font-black">Description</th>
-                  <th className="border-r border-black p-1 text-center w-16 font-black">Qté</th>
-                  <th className="border-r border-black p-1 text-right w-24 font-black">PU</th>
-                  <th className="p-1 text-right w-24 font-black">Total</th>
+                  {mode === 'Invoice' ? (
+                    <>
+                      <th className="border-r border-black p-1 text-left font-black">Description</th>
+                      <th className="border-r border-black p-1 text-center w-16 font-black">Qté</th>
+                      <th className="border-r border-black p-1 text-right w-24 font-black">PU</th>
+                      <th className="p-1 text-right w-24 font-black">Total</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="border-r border-black p-1 text-center w-28 font-black">Code Article</th>
+                      <th className="border-r border-black p-1 text-left font-black">Désignation</th>
+                      <th className="border-r border-black p-1 text-center w-24 font-black">Dépôt</th>
+                      <th className="p-1 text-center w-24 font-black">Quantité Livrée</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="font-medium text-[11px]">
                 {items.map((item, i) => (
                   <tr key={i} className="border-b border-black last:border-b-0">
-                    <td className="border-r border-black p-1">{item.description}</td>
-                    <td className="border-r border-black p-1 text-center font-bold">{Number(item.qte).toFixed(2)}</td>
-                    <td className="border-r border-black p-1 text-right">{Number(item.pu_ttc || item.pu_ht).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                    <td className="p-1 text-right font-bold">{Number(item.total_item_ttc).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    {mode === 'Invoice' ? (
+                      <>
+                        <td className="border-r border-black p-1">{item.description}</td>
+                        <td className="border-r border-black p-1 text-center font-bold">{Number(item.qte).toFixed(2)}</td>
+                        <td className="border-r border-black p-1 text-right">{Number(item.pu_ttc || item.pu_ht).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="p-1 text-right font-bold">{Number(item.total_item_ttc).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="border-r border-black p-1 text-center">{item.code_art || "-"}</td>
+                        <td className="border-r border-black p-1">{item.description}</td>
+                        <td className="border-r border-black p-1 text-center">{item.depot_origine || "Boutique"}</td>
+                        <td className="p-1 text-center font-bold">{Number(item.qte).toFixed(2)}</td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          {/* AMOUNT IN WORDS */}
-          <p className="italic mb-3 text-[10px] font-medium">
-            Arrêtée à la somme de : <span className="font-black uppercase">{numberToWordsFr(invoice.total_ttc)}</span> francs CFA.
-          </p>
+          {mode === 'Invoice' ? (
+            <>
+              <p className="italic mb-3 text-[10px] font-medium">
+                Arrêtée à la somme de : <span className="font-black uppercase">{numberToWordsFr(invoice.total_ttc)}</span> francs CFA.
+              </p>
 
-          {/* TOTALS GRID (3 BOXES) - ALWAYS HORIZONTAL */}
-          {/* CALCULATED TOTALS */}
-          {(() => {
-            const actualPaid = payments ? payments.filter(p => {
-              const mode = (p.moyen_reglement || "").toLowerCase();
-              return !mode.includes('redit');
-            }).reduce((acc, curr) => acc + Number(curr.montant_regle), 0) : 0;
-            const actualRemaining = Math.max(0, Number(invoice.total_ttc) - actualPaid);
-            
-            return (
-              <div className="flex flex-row w-full mb-4 border border-black min-h-[40px]">
-                <div className="flex-1 border-r border-black p-1 text-center bg-[#ebebeb] flex flex-col justify-center">
-                  <span className="font-black uppercase text-[9px] leading-none">TOTAL</span>
-                  <span className="text-sm font-[900] mt-0.5 whitespace-nowrap">{Number(invoice.total_ttc).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex-1 border-r border-black p-1 text-center bg-[#f9f9f9] flex flex-col justify-center">
-                  <span className="font-black uppercase text-[9px] leading-none">MONTANT PAYÉ</span>
-                  <span className="text-sm font-[900] mt-0.5 whitespace-nowrap">{actualPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex-1 p-1 text-center bg-white flex flex-col justify-center">
-                  <span className="font-black uppercase text-[9px] leading-none">RESTE À PAYER</span>
-                  <span className="text-sm font-[900] mt-0.5 whitespace-nowrap">{actualRemaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-              </div>
-            );
-          })()}
+              {(() => {
+                const actualPaid = payments ? payments.filter(p => !p.moyen_reglement?.toLowerCase().includes('redit')).reduce((acc, curr) => acc + Number(curr.montant_regle), 0) : 0;
+                const actualRemaining = Math.max(0, Number(invoice.total_ttc) - actualPaid);
+                
+                return (
+                  <div className="flex flex-row w-full mb-4 border border-black min-h-[40px]">
+                    <div className="flex-1 border-r border-black p-1 text-center bg-[#ebebeb] flex flex-col justify-center">
+                      <span className="font-black uppercase text-[9px] leading-none">TOTAL</span>
+                      <span className="text-sm font-[900] mt-0.5">{Number(invoice.total_ttc).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex-1 border-r border-black p-1 text-center bg-[#f9f9f9] flex flex-col justify-center">
+                      <span className="font-black uppercase text-[9px] leading-none">MONTANT PAYÉ</span>
+                      <span className="text-sm font-[900] mt-0.5">{actualPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex-1 p-1 text-center bg-white flex flex-col justify-center">
+                      <span className="font-black uppercase text-[9px] leading-none">RESTE À PAYER</span>
+                      <span className="text-sm font-[900] mt-0.5">{actualRemaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
-          {/* HISTORY SECTION */}
-          <div className="mt-4">
-            <h4 className="font-black uppercase text-xs mb-1">Historique des Versements</h4>
-            <table className="w-full border border-black border-collapse">
-              <thead>
-                <tr className="bg-[#ebebeb] border-b border-black text-[10px]">
-                  <th className="border-r border-black p-0.5">Date</th>
-                  <th className="border-r border-black p-0.5">Moyen</th>
-                  <th className="border-r border-black p-0.5">Référence</th>
-                  <th className="p-0.5">Versement</th>
-                </tr>
-              </thead>
-              <tbody className="text-[10px] font-bold">
-                {payments.length > 0 ? (
-                  payments.map((p, i) => (
-                    <tr key={i} className="border-b border-black last:border-b-0">
-                      <td className="border-r border-black p-0.5 text-center">{new Date(p.date_operation).toLocaleDateString("fr-FR")}</td>
-                      <td className="border-r border-black p-0.5 text-center">{p.moyen_reglement || "Espèce"}</td>
-                      <td className="border-r border-black p-0.5 text-center">{p.reference || ""}</td>
-                      <td className="p-0.5 text-right px-2">
-                        {(() => {
-                          const mode = (p.moyen_reglement || "").toLowerCase();
-                          if (mode.includes('redit')) return "0,00";
-                          return Number(p.montant_regle).toLocaleString(undefined, { minimumFractionDigits: 2 });
-                        })()}
-                      </td>
+              <div className="mt-4">
+                <h4 className="font-black uppercase text-xs mb-1 underline">Historique des Versements</h4>
+                <table className="w-full border border-black border-collapse">
+                  <thead>
+                    <tr className="bg-[#ebebeb] border-b border-black text-[10px]">
+                      <th className="border-r border-black p-0.5">Date</th>
+                      <th className="border-r border-black p-0.5">Moyen</th>
+                      <th className="p-0.5">Versement</th>
                     </tr>
-                  ))
-                ) : (
-                  <tr className="border-b border-black">
-                    <td colSpan={4} className="p-2 text-center text-slate-400 italic">Aucun versement enregistré</td>
-                  </tr>
-                )}
-                <tr className="bg-[#f0f0f0] font-black text-xs border-t border-black">
-                  <td colSpan={3} className="p-0.5 text-right px-2 uppercase">Total Versé</td>
-                  <td className="p-0.5 text-right px-2">{payments.filter(p => {
-                    const mode = (p.moyen_reglement || "").toLowerCase();
-                    return !mode.includes('redit');
-                  }).reduce((acc, curr) => acc + Number(curr.montant_regle), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody className="text-[10px] font-bold">
+                    {payments.length > 0 ? (
+                      payments.map((p, i) => (
+                        <tr key={i} className="border-b border-black last:border-b-0">
+                          <td className="border-r border-black p-0.5 text-center">{new Date(p.date_operation).toLocaleDateString("fr-FR")}</td>
+                          <td className="border-r border-black p-0.5 text-center">{p.moyen_reglement || "Espèce"}</td>
+                          <td className="p-0.5 text-right px-2">
+                            {p.moyen_reglement?.toLowerCase().includes('redit') ? "0,00" : Number(p.montant_regle).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b border-black italic"><td colSpan={3} className="p-2 text-center">Aucun versement</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="mt-20 flex justify-between items-start text-[11px] font-black">
+              <div className="text-center w-[200px] border-t border-black pt-2">
+                Signature du Livreur
+              </div>
+              <div className="text-center w-[250px] border-t border-black pt-2 flex flex-col items-center">
+                <span>Cachet et Signature du Client</span>
+                <span className="italic font-bold mt-1 text-[10px]">(Reçu en bon état)</span>
+              </div>
+            </div>
+          )}
 
-          {/* PAGE FOOTER */}
-          <div className="mt-4 text-center ticket-hide">
+          <div className="mt-8 text-center ticket-hide">
              <p className="text-[9px] font-bold text-slate-400">Page 1/1</p>
           </div>
-
         </div>
-
       </div>
 
       <style jsx global>{`
         @media print {
-          body * {
-            visibility: hidden;
-            background: none !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          #active-modal-overlay { display: none !important; }
-          #printable-invoice, #printable-invoice * {
-            visibility: visible;
-          }
+          body * { visibility: hidden; background: none !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          #printable-invoice, #printable-invoice * { visibility: visible; }
           #printable-invoice {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: ${printFormat === 'Ticket' ? '80mm' : '100%'} !important;
-            padding: ${printFormat === 'Ticket' ? '2mm' : '0'} !important;
-            margin: 0 !important;
-            font-size: ${printFormat === 'Ticket' ? '11px' : 'inherit'} !important;
-            border: none !important;
+            position: absolute; left: 0; top: 0; 
+            width: ${printFormat === 'Ticket' ? '80mm' : '210mm'} !important;
+            padding: ${printFormat === 'Ticket' ? '2mm' : '10mm'} !important;
+            margin: 0 !important; border: none !important;
           }
-          .ticket-hide {
-            display: ${printFormat === 'Ticket' ? 'none' : 'block'} !important;
-          }
-          @page {
-            size: ${printFormat === 'Ticket' ? '80mm auto' : printFormat};
-            margin: 10mm;
-          }
-          /* Ensure backgrounds work on print */
+          .ticket-hide { display: ${printFormat === 'Ticket' ? 'none' : 'block'} !important; }
+          @page { size: ${printFormat === 'Ticket' ? '80mm auto' : printFormat}; margin: 0; }
           .bg-[#ebebeb] { background-color: #ebebeb !important; }
           .bg-[#f9f9f9] { background-color: #f9f9f9 !important; }
-          .bg-[#f0f0f0] { background-color: #f0f0f0 !important; }
         }
-
-        /* Ticket Specific Layout Overrides */
         ${printFormat === 'Ticket' ? `
-          #printable-invoice {
-            max-width: 80mm !important;
-          }
-          #printable-invoice table th, #printable-invoice table td {
-            padding: 2px !important;
-            font-size: 10px !important;
-            border-width: 1px !important;
-          }
-          #printable-invoice .text-3xl { font-size: 1.25rem !important; }
-          #printable-invoice .text-2xl { font-size: 1.1rem !important; }
-          #printable-invoice .text-xl { font-size: 1rem !important; }
-        ` : ''}
-
-        ${printFormat === 'A5' ? `
-          #printable-invoice {
-            max-width: 148mm !important;
-            margin: 0 auto !important;
-          }
+          #printable-invoice { max-width: 80mm !important; }
+          #printable-invoice table th, #printable-invoice table td { padding: 2px !important; font-size: 10px !important; }
         ` : ''}
       `}</style>
     </div>
