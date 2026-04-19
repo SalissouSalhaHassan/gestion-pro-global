@@ -36,6 +36,7 @@ type StockItem = {
   quantite: number;
   unite: string;
   image_path: string | null;
+  stocks?: { quantite: number; depot_nom: string }[];
 };
 
 type AdjustmentModalProps = {
@@ -260,6 +261,11 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
 
   if (!isOpen || !item) return null;
 
+  // Calculate specific stock for the selected source depot
+  const sourceStock = item.stocks?.find(s => 
+    s.depot_nom.toLowerCase() === actualSource.toLowerCase()
+  )?.quantite || 0;
+
   const handleTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -319,7 +325,10 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
                  </div>
               </div>
               <div className="text-right">
-                 <span className="text-sm font-black text-emerald-600">{item.quantite} <span className="opacity-40">{item.unite}</span></span>
+                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Disponible (Transfert)</span>
+                 <span className="text-sm font-black text-emerald-600 italic">
+                    {item.quantite} {item.unite} <span className="text-slate-300 font-normal"> (Projet Total)</span>
+                 </span>
               </div>
            </div>
 
@@ -342,6 +351,11 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
                       {actualSource}
                    </div>
                  )}
+                 <div className="flex justify-center">
+                    <span className={`text-[10px] font-black px-3 py-1 rounded-full ${sourceStock > 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                       Dispo : {sourceStock} {item.unite}
+                    </span>
+                 </div>
               </div>
               <div className="col-span-1 flex justify-center pt-6">
                  <ArrowRightLeft className="w-6 h-6 text-slate-300" />
@@ -357,6 +371,7 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
                   <option value="" disabled>Destination...</option>
                   {depots.filter(d => d !== actualSource).map(d => <option key={d} value={d}>{d}</option>)}
                </select>
+               <div className="h-6" /> {/* Spacer to align with source dispo */}
               </div>
            </div>
 
@@ -382,8 +397,15 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
              </div>
            )}
 
+           {!error && Number(qty) > sourceStock && actualSource && (
+             <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-600 font-bold text-sm">
+                <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                Stock insuffisant au dépôt source (Dispo: {sourceStock})
+             </div>
+           )}
+
            <button 
-             disabled={saving || !qty || !destDepot || !actualSource || destDepot === actualSource || Number(qty) > item.quantite}
+             disabled={saving || !qty || !destDepot || !actualSource || destDepot === actualSource || Number(qty) > sourceStock}
              className="w-full py-4 sm:py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 disabled:from-slate-100 disabled:to-slate-100 disabled:text-slate-400 text-white rounded-full font-black text-xl transition-all shadow-xl shadow-emerald-200 disabled:shadow-none flex items-center justify-center gap-3 uppercase tracking-wider"
            >
              {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : "Confirmer le Transfert"}

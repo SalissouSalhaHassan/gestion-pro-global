@@ -39,10 +39,10 @@ export async function POST(request: Request) {
           const { article_id, qty } = detail;
 
           // Process Destination Stock IN
-          const { data: destStock } = await supabase.from("stocks").select("quantite").eq("article_id", article_id).eq("depot_nom", transit.dest_depot).maybeSingle();
+          const { data: destStock } = await supabase.from("stocks").select("quantite").eq("article_id", article_id).ilike("depot_nom", transit.dest_depot).maybeSingle();
           
           if (destStock) {
-            await supabase.from("stocks").update({ quantite: Number(destStock.quantite) + qty }).eq("article_id", article_id).eq("depot_nom", transit.dest_depot);
+            await supabase.from("stocks").update({ quantite: Number(destStock.quantite) + qty }).eq("article_id", article_id).ilike("depot_nom", transit.dest_depot);
           } else {
             await supabase.from("stocks").insert({ article_id, depot_nom: transit.dest_depot, quantite: qty });
           }
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       .from("stocks")
       .select("quantite")
       .eq("article_id", article_id)
-      .eq("depot_nom", source_depot)
+      .ilike("depot_nom", source_depot)
       .maybeSingle();
 
     const currentSourceQty = sourceStock ? Number(sourceStock.quantite) : 0;
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
       .from("stocks")
       .update({ quantite: currentSourceQty - qty })
       .eq("article_id", article_id)
-      .eq("depot_nom", source_depot);
+      .ilike("depot_nom", source_depot);
 
     if (errSource) throw errSource;
 

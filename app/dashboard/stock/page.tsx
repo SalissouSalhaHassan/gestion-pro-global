@@ -36,6 +36,7 @@ type StockItem = {
   quantite: number;
   is_low: boolean;
   is_out: boolean;
+  stocks?: { quantite: number; depot_nom: string }[];
 };
 
 export default function StockDashboard() {

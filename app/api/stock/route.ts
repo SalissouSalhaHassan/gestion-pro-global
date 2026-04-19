@@ -75,6 +75,7 @@ export async function GET(request: Request) {
       unite: art.unite,
       image_path: art.image_path,
       quantite: quantite,
+      stocks: art.stocks || [],
       is_low: quantite <= Number(art.qte_min || 0) && quantite > 0,
       is_out: quantite <= 0
     };
