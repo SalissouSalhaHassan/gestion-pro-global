@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth_helper";
+import { applyUserScope } from "@/lib/utils/scoping";
 
 export async function GET() {
   try {
@@ -13,28 +14,32 @@ export async function GET() {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // 1. Ventes du jour & Factures émises
-    const { data: salesData, error: salesError } = await supabase
+    // 1. Ventes du jour & Factures émises (Scoped)
+    let invoicesQuery = supabase
       .from("factures")
       .select("total_ttc")
       .eq("date_facture", today)
       .eq("is_deleted", false);
+    
+    invoicesQuery = await applyUserScope(invoicesQuery as any, user, 'factures');
+    const { data: salesData, error: salesError } = await invoicesQuery;
 
     if (salesError) throw salesError;
 
     const todaySales = salesData?.reduce((sum, f) => sum + Number(f.total_ttc || 0), 0) || 0;
     const todayInvoices = salesData?.length || 0;
 
-    // 2. Stock Faible
-    // We join articles with their stock sum across all depots
-    // This is easier via a RPC or manual aggregation due to Supabase query limits on complex joins
-    const { data: stockData, error: stockError } = await supabase
+    // 2. Stock Faible (Scoped)
+    let stockQuery = supabase
       .from("articles")
       .select(`
         id, qte_min,
-        stocks ( quantite )
+        stocks ( quantite, depot_nom )
       `)
       .eq("is_deleted", false);
+    
+    stockQuery = await applyUserScope(stockQuery as any, user, 'stocks');
+    const { data: stockData, error: stockError } = await stockQuery;
 
     if (stockError) throw stockError;
 
@@ -43,8 +48,8 @@ export async function GET() {
       return totalStock < (art.qte_min || 0);
     }).length || 0;
 
-    // 3. Activité Récente (Last 5 movements)
-    const { data: recentActivity, error: activityError } = await supabase
+    // 3. Activité Récente (Scoped)
+    let activityQuery = supabase
       .from("mouvements")
       .select(`
         id, type, quantite, date_mouvement,
@@ -52,6 +57,9 @@ export async function GET() {
       `)
       .order("id", { ascending: false })
       .limit(5);
+
+    activityQuery = await applyUserScope(activityQuery as any, user, 'mouvements');
+    const { data: recentActivity, error: activityError } = await activityQuery;
 
     if (activityError) throw activityError;
 
@@ -66,23 +74,26 @@ export async function GET() {
       }
     }) || [];
 
-    // 4. Performance du Stock (Sales over last 7 days)
+    // 4. Performance du Stock (Sales over last 7 days) (Scoped)
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - i);
       return d.toISOString().split('T')[0];
     }).reverse();
 
-    const { data: performanceRes, error: perfError } = await supabase
+    let performanceQuery = supabase
       .from("mouvements")
       .select("date_mouvement, sortie")
       .in("date_mouvement", last7Days)
-      .filter("type", "ilike", "VENTE%"); // Assuming sales are logged as VENTE in POS
+      .filter("type", "ilike", "VENTE%");
+
+    performanceQuery = await applyUserScope(performanceQuery as any, user, 'mouvements');
+    const { data: performanceRes, error: perfError } = await performanceQuery;
 
     if (perfError) throw perfError;
 
     const chartData = last7Days.map(date => {
-       const dailyVolume = performanceRes?.filter(m => m.date_mouvement === date)
+       const dailyVolume = performanceRes?.filter(m => m.date_mouvement?.toString().split('T')[0] === date)
                                      .reduce((sum, m) => sum + Number(m.sortie || 0), 0) || 0;
        return dailyVolume;
     });

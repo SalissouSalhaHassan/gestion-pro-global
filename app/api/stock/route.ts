@@ -29,16 +29,14 @@ export async function GET(request: Request) {
     `)
     .eq("is_deleted", false);
 
-  // Removed created_by restriction to allow products without a created_by owner to be visible in the stock inventory
+  // Apply Scoping (Warehouse Access Control)
+  const { applyUserScope } = await import("@/lib/utils/scoping");
+  query = await applyUserScope(query as any, user, 'stocks');
 
-  // Filter stocks by user's assigned depots or requested depot
+  // Filter by requested depot if provided
   const requestedDepot = searchParams.get("depot");
-  
   if (requestedDepot && requestedDepot !== "Tous") {
     query = query.filter("stocks.depot_nom", "ilike", requestedDepot);
-  } else if (!isAdmin && primaryDepot) {
-    // If not admin and no specific depot requested, default to primary depot
-    query = query.filter("stocks.depot_nom", "ilike", primaryDepot);
   }
 
   if (search) {

@@ -55,6 +55,16 @@ export async function POST(request: Request) {
     const moyenReglement = body.moyenReglement?.trim() || "Espece";
     const cashVersement = Number(body.versement || 0);
 
+    // ─── SECURITY: WAREHOUSE SCOPING ───
+    const isAdmin = await isAdminOrManager(user);
+    if (!isAdmin && user.emplacement && user.emplacement !== depotName) {
+       return NextResponse.json({ error: `Permission refusée pour le dépôt: ${depotName}` }, { status: 403 });
+    }
+
+    // ─── SYSTEM SETTINGS: STOCK POLICY ───
+    const { data: settings } = await supabase.from("app_settings").select("allow_negative_stock").maybeSingle();
+    const allowNegative = settings?.allow_negative_stock ?? false;
+
     // ─── SELF-HEALING: ENSURE DEFAULT CLIENT AND DEPOT EXIST ───
     if (clientId === 1) {
       const { data: c1 } = await supabase.from("clients").select("id").eq("id", 1).single();
@@ -78,7 +88,6 @@ export async function POST(request: Request) {
     }
 
     // ─── INVENTORY GUARD: PRE-VALIDATION ───
-    const isAdmin = await isAdminOrManager(user);
     const itemIds = items.map(it => it.id);
     
     // Fetch current stock for these items in the specific depot
@@ -107,8 +116,8 @@ export async function POST(request: Request) {
       }
     }
 
-    if (insufficientItems.length > 0 && !isAdmin) {
-      // For normal users, block the sale
+    // Block if stock policy doesn't allow negative balances and insufficient items exist
+    if (insufficientItems.length > 0 && !allowNegative && !isAdmin) {
       return NextResponse.json({
         error: "Stock insuffisant",
         details: insufficientItems.map(it => `Article ID ${it.id}: Requis ${it.requested}, Disponible ${it.available}`).join(", ")

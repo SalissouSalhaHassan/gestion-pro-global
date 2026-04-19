@@ -140,9 +140,17 @@ export default function MouvementsPage() {
         const dateB = new Date(b.date_mouvement).getTime();
         if (dateA !== dateB) return dateA - dateB;
         
-        // Priority to ENTRÉE INITIALE if timestamps are same
-        if (a.type === "ENTRÉE INITIALE" && b.type !== "ENTRÉE INITIALE") return -1;
-        if (b.type === "ENTRÉE INITIALE" && a.type !== "ENTRÉE INITIALE") return 1;
+        // Priority to ENTRÉE INITIALE and achat if timestamps are same
+        const getPriority = (t: string) => {
+           if (t === "ENTRÉE INITIALE") return 1;
+           if (t.toLowerCase().includes("achat")) return 2;
+           if (t.toLowerCase().includes("vente")) return 10;
+           return 5;
+        };
+        
+        const prioA = getPriority(a.type);
+        const prioB = getPriority(b.type);
+        if (prioA !== prioB) return prioA - prioB;
         
         return Number(a.id) - Number(b.id);
     });
@@ -164,26 +172,41 @@ export default function MouvementsPage() {
         return refined;
     });
 
-    // 4. Calculate Stats from the Processed Data (Sync with UI)
+    // 4. Calculate Stats (Sync with filtered UI View)
     const totalIn = processed.reduce((s, m) => s + Number(m.entree || 0), 0);
     const totalOut = processed.reduce((s, m) => s + Number(m.sortie || 0), 0);
+    
+    // Estimate value of movements (simplified)
+    const articlesMap: Record<string, number> = {};
+    processed.forEach(m => {
+       const key = `${m.article_id}`;
+       articlesMap[key] = (m as any).pmp_apres || (m as any).prix || 0;
+    });
+    
+    const valuationVal = Object.entries(contextMap).reduce((sum, [key, stock]) => {
+       const artId = key.split('-')[0];
+       return sum + (stock * (articlesMap[artId] || 0));
+    }, 0);
 
     // 5. Final Display Order (Latest First for the Table)
     const visualOrder = [...processed].reverse();
 
     // 6. Optional Grouping
-    const groups: Record<string, MouvementRecord[]> = {};
+    const groups: Record<string, { items: MouvementRecord[], in: number, out: number, current: number }> = {};
     if (groupByProduct) {
         processed.forEach(m => {
             const name = m.articles?.designation || "Inconnu";
-            if (!groups[name]) groups[name] = [];
-            groups[name].unshift(m); // Latest first in each group
+            if (!groups[name]) groups[name] = { items: [], in: 0, out: 0, current: 0 };
+            groups[name].items.unshift(m); // Latest first in each group
+            groups[name].in += Number(m.entree || 0);
+            groups[name].out += Number(m.sortie || 0);
+            groups[name].current = (m as any).stock_apres; // Last processed is the current for this period
         });
     }
 
     return {
       filteredData: visualOrder,
-      stats: { stockIn: totalIn, stockOut: totalOut, balance: totalIn - totalOut },
+      stats: { stockIn: totalIn, stockOut: totalOut, balance: totalIn - totalOut, valuation: valuationVal },
       groupedData: groups
     };
   }, [data, typeFilter, groupByProduct]);
@@ -235,28 +258,35 @@ export default function MouvementsPage() {
       </div>
 
       {/* ── KPI Widgets ── */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 print:hidden">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 print:hidden">
          <KPICard 
-          title="Entrées de Stock" 
+          title="Entrées" 
           value={stats.stockIn.toFixed(2)} 
-          sub="Cumul Augmentation" 
+          sub="Volume Entrant" 
           color="emerald" 
           icon={ArrowUpRight} 
          />
          <KPICard 
-          title="Sorties de Stock" 
+          title="Sorties" 
           value={stats.stockOut.toFixed(2)} 
-          sub="Cumul Diminution" 
+          sub="Volume Sortant" 
           color="rose" 
           icon={TrendingUp} 
           reverseIcon
          />
          <KPICard 
-          title="Balance Logistique" 
+          title="Variation Nette" 
           value={(stats.balance >= 0 ? "+" : "") + stats.balance.toFixed(2)} 
-          sub="Variation Nette Affichée" 
+          sub="Flux Logistique" 
           color="indigo" 
           icon={ArrowUpDown} 
+         />
+         <KPICard 
+          title="Valeur Stock" 
+          value={stats.valuation.toLocaleString("fr-FR", { minimumFractionDigits: 2 }) + " DH"} 
+          sub="Estimation Financière" 
+          color="slate" 
+          icon={Sparkles} 
          />
       </div>
 
@@ -320,16 +350,35 @@ export default function MouvementsPage() {
         <div className="overflow-x-auto">
           {groupByProduct ? (
              <div className="p-8 space-y-12">
-                {Object.entries(groupedData).map(([product, items]) => (
-                    <div key={product} className="space-y-4">
-                        <div className="flex items-center gap-3 pb-2 border-b border-slate-100">
-                            <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white">
-                                <Package size={20} />
+                {Object.entries(groupedData).map(([product, g]) => (
+                    <div key={product} className="space-y-4 bg-slate-50/30 p-6 rounded-[32px] border border-slate-100">
+                        <div className="flex flex-col md:flex-row md:items-center gap-4 pb-4 border-b border-white">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-white shadow-lg shadow-slate-200">
+                                    <Package size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-800 tracking-tight">{product}</h3>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{g.items[0]?.articles?.reference}</span>
+                                </div>
                             </div>
-                            <h3 className="text-xl font-black text-slate-800 tracking-tight">{product}</h3>
-                            <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-3 py-1 rounded-full uppercase ml-auto">{items.length} mouvements</span>
+                            
+                            <div className="flex items-center gap-2 md:ml-auto">
+                                <div className="px-4 py-2 bg-white rounded-xl border border-slate-100 shadow-sm text-center">
+                                    <span className="block text-[9px] font-black text-slate-400 uppercase">Total Entrées</span>
+                                    <span className="text-sm font-black text-emerald-600">+{g.in.toFixed(2)}</span>
+                                </div>
+                                <div className="px-4 py-2 bg-white rounded-xl border border-slate-100 shadow-sm text-center">
+                                    <span className="block text-[9px] font-black text-slate-400 uppercase">Total Sorties</span>
+                                    <span className="text-sm font-black text-rose-600">-{g.out.toFixed(2)}</span>
+                                </div>
+                                <div className="px-4 py-2 bg-slate-900 rounded-xl shadow-lg text-center min-w-[100px]">
+                                    <span className="block text-[9px] font-black text-slate-400 uppercase">Stock Final</span>
+                                    <span className="text-sm font-black text-white">{g.current.toFixed(2)}</span>
+                                </div>
+                            </div>
                         </div>
-                        <AuditTable items={items} onPrintTransfer={setPrintTransferRef} />
+                        <AuditTable items={g.items} onPrintTransfer={setPrintTransferRef} />
                     </div>
                 ))}
              </div>
@@ -413,9 +462,10 @@ function AuditTable({ items, loading, fetchData, onPrintTransfer }: any) {
 
 function KPICard({ title, value, sub, color, icon: Icon, reverseIcon = false }: any) {
   const colors: any = {
-    emerald: "from-emerald-500 to-teal-600 shadow-emerald-200",
-    rose: "from-rose-500 to-pink-600 shadow-rose-200",
-    indigo: "from-indigo-600 to-blue-700 shadow-indigo-200"
+    emerald: "from-emerald-500 to-teal-600 shadow-emerald-200/50",
+    rose: "from-rose-500 to-pink-600 shadow-rose-200/50",
+    indigo: "from-indigo-600 to-blue-700 shadow-indigo-200/50",
+    slate: "from-slate-700 to-slate-900 shadow-slate-200/50"
   };
 
   return (
