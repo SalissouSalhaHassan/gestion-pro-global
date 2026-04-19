@@ -1109,6 +1109,7 @@ function PosPage() {
           clientId: selectedClientId || 1,
           depotName: selectedDepot || "Boutique",
           moyenReglement: paymentMethod,
+          versement: Number(receivedAmount), // Added versement
           emplacement: editInvoiceId ? "Modification POS" : "Point de vente",
           items: cart.map((item) => ({
             id: item.id,
@@ -1607,24 +1608,31 @@ function PosPage() {
                   <Clock size={22} /> Crédit
                 </button>
 
-                <button
-                  className="pos-action-btn"
-                  onClick={() => setPaymentMethod("Avance")}
-                  disabled={totalAdvanceBalance <= 0}
-                  style={{
-                    ...S.btnPayment(
-                      paymentMethod === "Avance"
-                        ? "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)"
-                        : "linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%)",
-                      paymentMethod === "Avance" ? "#b45309" : "#d97706",
-                      paymentMethod === "Avance"
-                    ),
-                    opacity: totalAdvanceBalance <= 0 ? 0.5 : 1,
-                    cursor: totalAdvanceBalance <= 0 ? "not-allowed" : "pointer"
-                  }}
-                >
-                  <Banknote size={22} /> Dépôt/Avance
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <button
+                    className="pos-action-btn"
+                    onClick={() => setPaymentMethod("Avance")}
+                    disabled={totalAdvanceBalance <= 0}
+                    style={{
+                      ...S.btnPayment(
+                        paymentMethod === "Avance"
+                          ? "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)"
+                          : "linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%)",
+                        paymentMethod === "Avance" ? "#b45309" : "#d97706",
+                        paymentMethod === "Avance"
+                      ),
+                      opacity: totalAdvanceBalance <= 0 ? 0.5 : 1,
+                      cursor: totalAdvanceBalance <= 0 ? "not-allowed" : "pointer"
+                    }}
+                  >
+                    <Banknote size={22} /> Dépôt/Avance
+                  </button>
+                  {paymentMethod === "Avance" && (
+                    <p style={{ fontSize: 11, color: "#6366f1", marginTop: -6, marginLeft: 4 }}>
+                      ℹ️ "Montant Reçu" sera traité comme un versement Cash partiel.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </section>

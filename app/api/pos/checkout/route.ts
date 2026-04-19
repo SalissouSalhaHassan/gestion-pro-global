@@ -28,6 +28,7 @@ export async function POST(request: Request) {
       moyenReglement?: string;
       emplacement?: string;
       items?: CheckoutItem[];
+      versement?: number; // Add versement (cash part)
     };
 
     const items = Array.isArray(body.items)
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
     const clientId = Number(body.clientId ?? 1) || 1;
     const depotName = body.depotName?.trim() || "Boutique";
     const moyenReglement = body.moyenReglement?.trim() || "Espece";
+    const cashVersement = Number(body.versement || 0);
 
     // ─── SELF-HEALING: ENSURE DEFAULT CLIENT AND DEPOT EXIST ───
     if (clientId === 1) {
@@ -136,7 +138,7 @@ export async function POST(request: Request) {
         p_client_id: clientId,
         p_vendeur: user.username ?? "Caisse",
         p_emplacement: body.emplacement ?? null,
-        p_moyen_reglement: moyenReglement === "Avance" ? "Crédit" : moyenReglement,
+        p_moyen_reglement: (moyenReglement === "Avance" || moyenReglement === "Crédit") ? "Crédit" : moyenReglement,
         p_depot_nom: depotName,
         p_items: items,
         p_user_id: user.id,
@@ -158,39 +160,42 @@ export async function POST(request: Request) {
        extractedId = Number(result.id || result.invoice_id);
     }
 
-    // DATA ISOLATION is handled by emplacement/depot filters
-
     // ─── POST-CHECKOUT SETTLEMENT LOGIC ───
 
     if (extractedId && !isNaN(extractedId)) {
-      // 1. CREDIT HANDLING
-      if (moyenReglement === "Crédit") {
-        const { data: fact } = await supabase.from("factures").select("total_ttc").eq("id", extractedId).single();
-        // Update invoice totals
-        await supabase.from("factures").update({ 
-           statut: "Non Payée",
-           mode_paiement: "Crédit",
-           montant_paye: 0,
-           montant_restant: fact?.total_ttc || 0
-        }).eq("id", extractedId);
+      const isDebtMode = moyenReglement === "Crédit" || moyenReglement === "Avance";
+      const { data: fact } = await supabase.from("factures").select("total_ttc").eq("id", extractedId).single();
+      const totalTTC = Number(fact?.total_ttc || 0);
 
-        // Also ensure any 'Crédit' payment record inserted by RPC has 0 amount
+      // 1. CREDIT/AVANCE INITIALIZATION (Ensure the auto-generated credit record is zeroed)
+      if (isDebtMode) {
+        // Prevent double counting: Set auto-generated 'Crédit' payment to 0
         await supabase.from("paiements")
           .update({ montant_regle: 0 })
           .eq("facture_id", extractedId)
           .ilike("moyen_reglement", "crédit");
-      } 
+      }
+
+      // 2. CASH PARTIAL PAYMENT (If any versement provided in debt modes)
+      if (isDebtMode && cashVersement > 0) {
+        await supabase.from("paiements").insert({
+          facture_id: extractedId,
+          date_operation: new Date().toISOString().split('T')[0],
+          montant_regle: cashVersement,
+          moyen_reglement: "Espèce",
+          utilisateur: user.username || "Système",
+          user_id: user.id,
+          regle: true
+        });
+      }
       
-      // 2. ADVANCE (AVANCE) HANDLING - FIFO Logic
-      else if (moyenReglement === "Avance") {
-        const { data: fact } = await supabase.from("factures").select("total_ttc").eq("id", extractedId).single();
-        const totalToSettle = Number(fact?.total_ttc || 0);
+      // 3. ADVANCE (AVANCE) SPECIFIC SETTLEMENT
+      if (moyenReglement === "Avance") {
+        let remainingToSettle = totalTTC - cashVersement;
         
-        if (totalToSettle > 0) {
+        if (remainingToSettle > 0) {
           const advanceService = new AdvanceService(supabase);
           const advances = await advanceService.getActiveAdvancesByClientId(clientId);
-          
-          let remainingToSettle = totalToSettle;
           
           for (const adv of advances) {
             if (remainingToSettle <= 0) break;
@@ -198,7 +203,6 @@ export async function POST(request: Request) {
             const amountFromThisAdvance = Math.min(Number(adv.montant_restant), remainingToSettle);
             
             if (amountFromThisAdvance > 0) {
-              // Deduct from advance
               await advanceService.withdrawAdvance(
                 adv.id, 
                 amountFromThisAdvance, 
@@ -206,7 +210,6 @@ export async function POST(request: Request) {
                 user.username || "Système"
               );
               
-              // Record in paiements table
               await supabase.from("paiements").insert({
                 facture_id: extractedId,
                 date_operation: new Date().toISOString().split('T')[0],
@@ -221,19 +224,24 @@ export async function POST(request: Request) {
               remainingToSettle -= amountFromThisAdvance;
             }
           }
-          
-          // Mark invoice as fully or partially paid based on remainingToSettle
-          const finalMountPaye = totalToSettle - remainingToSettle;
-          await supabase.from("factures").update({
-            statut: remainingToSettle === 0 ? "Payée" : "Partiellement Payée",
-            mode_paiement: "Avance",
-            montant_paye: finalMountPaye,
-            montant_restant: remainingToSettle
-          }).eq("id", extractedId);
         }
+
+        // Finalize invoice totals after Cash + Advance
+        const totalPaid = totalTTC - (remainingToSettle > 0 ? remainingToSettle : 0);
+        await supabase.from("factures").update({
+          statut: totalPaid >= totalTTC ? "Payée" : (totalPaid > 0 ? "Partiellement Payée" : "Non Payée"),
+          montant_paye: totalPaid,
+          montant_restant: Math.max(0, totalTTC - totalPaid)
+        }).eq("id", extractedId);
+      } else if (moyenReglement === "Crédit") {
+        // Just Update with Cash part if any
+        await supabase.from("factures").update({
+          statut: cashVersement >= totalTTC ? "Payée" : (cashVersement > 0 ? "Partiellement Payée" : "Non Payée"),
+          montant_paye: cashVersement,
+          montant_restant: Math.max(0, totalTTC - cashVersement)
+        }).eq("id", extractedId);
       }
     }
-
 
     return NextResponse.json({
       ok: true,
