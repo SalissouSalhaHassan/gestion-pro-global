@@ -281,7 +281,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                 )}
                 <tr className="bg-[#f0f0f0] font-black text-xs border-t border-black">
                   <td colSpan={3} className="p-0.5 text-right px-2 uppercase">Total Versé</td>
-                  <td className="p-0.5 text-right px-2">{payments.reduce((acc, curr) => acc + Number(curr.montant_regle), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                  <td className="p-0.5 text-right px-2">{payments.filter(p => p.moyen_reglement !== 'Crédit').reduce((acc, curr) => acc + Number(curr.montant_regle), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                 </tr>
               </tbody>
             </table>

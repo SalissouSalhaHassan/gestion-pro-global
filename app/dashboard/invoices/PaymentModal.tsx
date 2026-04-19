@@ -62,6 +62,17 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
   const [advanceAmount, setAdvanceAmount] = useState(0);
   const [selectedAdvanceId, setSelectedAdvanceId] = useState<number | null>(null);
 
+  const totalPaid = payments
+    .filter(p => p.moyen_reglement !== 'Crédit')
+    .reduce((acc, curr) => acc + Number(curr.montant_regle), 0);
+  const remainingToPay = (invoice.total_ttc || 0) - totalPaid;
+
+  useEffect(() => {
+    if (!loading) {
+      setNewPayment(prev => ({ ...prev, montant_regle: remainingToPay }));
+    }
+  }, [loading, remainingToPay]);
+
   useEffect(() => {
     fetchData();
   }, [invoice.id]);
@@ -186,7 +197,7 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
             </div>
             <div>
               <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Montant Payé</p>
-              <p className="text-green-600 font-black text-lg">{(invoice.montant_paye || 0).toLocaleString()} <span className="text-xs font-medium text-slate-400 ml-1">FCFA</span></p>
+              <p className="text-green-600 font-black text-lg">{totalPaid.toLocaleString()} <span className="text-xs font-medium text-slate-400 ml-1">FCFA</span></p>
             </div>
           </div>
           <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm flex items-center gap-4 bg-gradient-to-br from-white to-red-50/30">
@@ -195,7 +206,7 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
             </div>
             <div>
               <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Reste à Payer</p>
-              <p className="text-red-600 font-black text-lg">{(invoice.montant_restant || 0).toLocaleString()} <span className="text-xs font-medium text-slate-400 ml-1">FCFA</span></p>
+              <p className="text-red-600 font-black text-lg">{remainingToPay.toLocaleString()} <span className="text-xs font-medium text-slate-400 ml-1">FCFA</span></p>
             </div>
           </div>
         </div>
@@ -299,7 +310,7 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
                   </div>
                   <button 
                     type="submit"
-                    disabled={saving || invoice.montant_restant <= 0 || newPayment.montant_regle <= 0}
+                    disabled={saving || remainingToPay <= 0 || newPayment.montant_regle <= 0}
                     className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-black py-4 rounded-xl transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-2"
                   >
                     {saving ? "Enregistrement..." : (

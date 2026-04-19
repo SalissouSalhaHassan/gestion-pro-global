@@ -103,7 +103,9 @@ export async function POST(
 
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
 
-  const totalPaid = allPayments.reduce((acc, curr) => acc + Number(curr.montant_regle), 0);
+  const totalPaid = allPayments
+    .filter(p => p.moyen_reglement !== 'Crédit')
+    .reduce((acc, curr) => acc + Number(curr.montant_regle), 0);
 
   // Get invoice total_ttc
   const { data: invoice, error: iError } = await supabase
