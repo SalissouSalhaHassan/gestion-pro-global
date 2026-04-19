@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
   const isAdmin = await isAdminOrManager(user);
   const userDepots = await getAllowedDepots(user);
-  const primaryDepot = user.emplacement;
+  const primaryDepot = user.emplacement || "Tous";
 
   // 2. Build Query
   let query = supabase

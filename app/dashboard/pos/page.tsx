@@ -705,7 +705,7 @@ function PosPage() {
   const [parkedCarts, setParkedCarts] = useState<{id: string, time: string, cart: CartItem[], clientId: string | number}[]>([]);
   const [query, setQuery] = useState("");
   const [selectedClientId, setSelectedClientId] = useState<string | number>(1);
-  const [selectedDepot, setSelectedDepot] = useState<string>("Boutique");
+  const [selectedDepot, setSelectedDepot] = useState<string>("");
 
   useEffect(() => {
     // Attempt to read emplacement from session cookie
@@ -1120,7 +1120,7 @@ function PosPage() {
         body: JSON.stringify({
           invoiceId: editInvoiceId,
           clientId: selectedClientId || 1,
-          depotName: selectedDepot || "Boutique",
+          depotName: selectedDepot || "",
           moyenReglement: paymentMethod,
           versement: Number(receivedAmount), // Added versement
           emplacement: editInvoiceId ? "Modification POS" : "Point de vente",

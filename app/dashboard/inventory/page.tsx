@@ -26,7 +26,8 @@ type InventoryItem = {
 
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [selectedDepot, setSelectedDepot] = useState("Principal");
+  const [selectedDepot, setSelectedDepot] = useState("");
+  const [depots, setDepots] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,9 +38,28 @@ export default function InventoryPage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
 
+  useEffect(() => {
+    fetchDepots();
+  }, []);
+
+  const fetchDepots = async () => {
+    try {
+      const res = await fetch("/api/stock/depots");
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setDepots(data);
+        if (data.length > 0 && !selectedDepot) {
+           setSelectedDepot(data[0]);
+        }
+      }
+    } catch (err) {}
+  };
+
   // Fetch stocks when Depot changes
   useEffect(() => {
-    fetchStockForInventory();
+    if (selectedDepot) {
+      fetchStockForInventory();
+    }
   }, [selectedDepot]);
 
   const fetchStockForInventory = async () => {
@@ -206,9 +226,7 @@ export default function InventoryPage() {
              onChange={(e) => setSelectedDepot(e.target.value)}
              className="bg-transparent border-none font-black text-slate-800 text-sm focus:ring-0 cursor-pointer pr-4"
            >
-             <option value="Principal">Dépôt Principal</option>
-             <option value="B NOURA">B NOURA</option>
-             <option value="Boutique">Boutique</option>
+              {depots.map(d => <option key={d} value={d}>{d}</option>)}
            </select>
         </div>
       </div>

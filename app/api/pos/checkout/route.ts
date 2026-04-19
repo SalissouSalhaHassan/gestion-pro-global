@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     const depotName = body.depotName?.trim() || user.emplacement || "";
     
     if (!depotName) {
-      return NextResponse.json({ error: "Aucun dépôt spécifié pour cette vente (Boutique fallback désactivé)." }, { status: 400 });
+      return NextResponse.json({ error: "Aucun dépôt spécifié pour cette vente. Veuillez sélectionner un dépôt valide." }, { status: 400 });
     }
 
     const moyenReglement = body.moyenReglement?.trim() || "Espece";

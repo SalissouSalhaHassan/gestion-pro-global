@@ -860,7 +860,7 @@ export default function SettingsPage() {
                       value={info?.nom_entreprise || ""}
                       onChange={handleChange}
                       className="block w-full text-slate-900 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-bold placeholder:text-slate-300 shadow-sm"
-                      placeholder="Ex: Ma Boutique"
+                      placeholder="Ex: Mon Entreprise"
                       style={{
                         borderRadius: "16px",
                         padding: "16px 16px 16px 48px",
@@ -921,7 +921,7 @@ export default function SettingsPage() {
                         value={info?.email || ""}
                         onChange={handleChange}
                         className="block w-full text-slate-900 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-bold shadow-sm"
-                        placeholder="boutique@exemple.com"
+                        placeholder="contact@exemple.com"
                         style={{
                           borderRadius: "16px",
                           padding: "16px 16px 16px 48px",

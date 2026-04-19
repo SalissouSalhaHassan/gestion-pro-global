@@ -71,6 +71,7 @@ export default function MouvementsPage() {
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [selectedDepot, setSelectedDepot] = useState("Tous");
+  const [depots, setDepots] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState("Tous");
   const [generalSearch, setGeneralSearch] = useState("");
   const [hasMounted, setHasMounted] = useState(false);
@@ -79,7 +80,16 @@ export default function MouvementsPage() {
 
   useEffect(() => {
     setHasMounted(true);
+    fetchDepots();
   }, []);
+
+  const fetchDepots = async () => {
+    try {
+      const res = await fetch("/api/stock/depots");
+      const data = await res.json();
+      if (Array.isArray(data)) setDepots(data);
+    } catch (err) {}
+  };
 
   useEffect(() => {
     const getCompany = async () => {
@@ -336,9 +346,7 @@ export default function MouvementsPage() {
             <FilterField label="Dépôt" icon={MapPin}>
               <select value={selectedDepot} onChange={(e) => setSelectedDepot(e.target.value)} className="w-full bg-transparent outline-none font-bold text-slate-700 appearance-none">
                 <option value="Tous">Tous les Dépôts</option>
-                <option value="Principal">Principal</option>
-                <option value="B NOURA">B NOURA</option>
-                <option value="Boutique">Boutique</option>
+                {depots.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </FilterField>
           </div>

@@ -34,7 +34,20 @@ export default function TransitPage() {
   const [processingId, setProcessingId] = useState<number | null>(null);
 
   const [depotFilter, setDepotFilter] = useState("Tous");
+  const [depots, setDepots] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState("Tous");
+
+  useEffect(() => {
+    fetchDepots();
+  }, []);
+
+  const fetchDepots = async () => {
+    try {
+      const res = await fetch("/api/stock/depots");
+      const data = await res.json();
+      if (Array.isArray(data)) setDepots(data);
+    } catch (err) {}
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -103,9 +116,7 @@ export default function TransitPage() {
             <MapPin size={16} className="text-indigo-500" />
             <select value={depotFilter} onChange={(e) => setDepotFilter(e.target.value)} className="bg-transparent font-bold text-sm text-slate-700 outline-none pr-4 cursor-pointer">
                <option value="Tous">Tous Dépôts</option>
-               <option value="Principal">Principal</option>
-               <option value="B NOURA">B NOURA</option>
-               <option value="Boutique">Boutique</option>
+               {depots.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-2 px-3">

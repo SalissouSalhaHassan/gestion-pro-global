@@ -277,7 +277,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                       <>
                         <td className="border-r border-black p-1 text-center text-[9px] break-all leading-tight">{item.code_art || "-"}</td>
                         <td className="border-r border-black p-1 break-words leading-tight">{item.description}</td>
-                        <td className="border-r border-black p-1 text-center text-[9px] break-words leading-tight">{item.depot_origine || "Boutique"}</td>
+                        <td className="border-r border-black p-1 text-center text-[9px] break-words leading-tight">{item.depot_origine || ""}</td>
                         <td className="p-1 text-center font-bold">{Number(item.qte).toFixed(2)}</td>
                       </>
                     )}
