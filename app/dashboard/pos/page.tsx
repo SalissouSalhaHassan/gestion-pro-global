@@ -100,6 +100,10 @@ function normalizeText(v: string) {
   return v.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+function normalizeDepotName(v: string) {
+  return normalizeText(v).trim().replace(/\s+/g, " ");
+}
+
 function formatAmount(amount: number) {
   return new Intl.NumberFormat("fr-FR", {
     minimumFractionDigits: 2,
@@ -119,7 +123,7 @@ function buildArticle(row: Row): Article {
   const stocksArr = Array.isArray(row.stocks) ? row.stocks : [];
   const depotStocks: Record<string, number> = {};
   stocksArr.forEach((s: any) => {
-    if (s.depot_nom) depotStocks[s.depot_nom] = toNumber(s.quantite);
+    if (s.depot_nom) depotStocks[normalizeDepotName(String(s.depot_nom))] = toNumber(s.quantite);
   });
 
   return {
@@ -895,7 +899,7 @@ function PosPage() {
             id, reference, code_barre, designation, nom,
             p_vente_ht, p_vente_ttc, taxe, image_path,
             is_deleted,
-            stocks ( quantite )
+            stocks ( quantite, depot_nom )
           `)
           .eq("is_deleted", false)
           .order("designation", { ascending: true })
@@ -994,7 +998,7 @@ function PosPage() {
 
   const addItem = useCallback((article: Article) => {
     // Inventory Guard Check
-    const available = article.depot_stocks?.[selectedDepot] || 0;
+    const available = article.depot_stocks?.[normalizeDepotName(selectedDepot)] || 0;
     
     setCart((prev) => {
       const existing = prev.find((item) => item.id === article.id);
@@ -1023,7 +1027,7 @@ function PosPage() {
   const updateQuantity = useCallback((id: string | number, qty: number) => {
     const art = articles.find(a => a.id === id);
     if (art) {
-        const available = art.depot_stocks?.[selectedDepot] || 0;
+        const available = art.depot_stocks?.[normalizeDepotName(selectedDepot)] || 0;
         if (qty > available) {
           setError(`⚠️ Limite de stock atteinte (${available} disponibles)`);
           setTimeout(() => setError(null), 3000);
@@ -1211,7 +1215,7 @@ function PosPage() {
       taxe: 0,
       image_path: null,
       stock_total: 999,
-      depot_stocks: { [selectedDepot]: 999 }
+      depot_stocks: { [normalizeDepotName(selectedDepot)]: 999 }
     };
     const qty = parseInt(quantity) || 1;
     for (let i = 0; i < qty; i++) {

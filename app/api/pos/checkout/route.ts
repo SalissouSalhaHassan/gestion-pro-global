@@ -9,6 +9,26 @@ type CheckoutItem = {
   prix?: number;
 };
 
+type DepotRow = {
+  id: number | string;
+  nom: string | null;
+};
+
+type StockRow = {
+  article_id: number | string;
+  quantite: number | string | null;
+  depot_nom: string | null;
+};
+
+function normalizeDepotName(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -52,6 +72,7 @@ export async function POST(request: Request) {
 
     const clientId = Number(body.clientId ?? 1) || 1;
     const depotName = body.depotName?.trim() || user.emplacement || "";
+    const depotKey = normalizeDepotName(depotName);
     
     if (!depotName) {
       return NextResponse.json({ error: "Aucun dépôt spécifié pour cette vente. Veuillez sélectionner un dépôt valide." }, { status: 400 });
@@ -62,7 +83,7 @@ export async function POST(request: Request) {
 
     // ─── SECURITY: WAREHOUSE SCOPING ───
     const isAdmin = await isAdminOrManager(user);
-    if (!isAdmin && user.emplacement && user.emplacement !== depotName) {
+    if (!isAdmin && user.emplacement && normalizeDepotName(user.emplacement) !== depotKey) {
        return NextResponse.json({ error: `Permission refusée pour le dépôt: ${depotName}` }, { status: 403 });
     }
 
@@ -83,10 +104,19 @@ export async function POST(request: Request) {
       }
     }
     
-    const { data: d1 } = await supabase.from("depots").select("id").eq("nom", depotName).single();
-    if (!d1) {
+    const { data: depotsRows } = await supabase
+      .from("depots")
+      .select("id, nom")
+      .eq("is_active", true);
+
+    const canonicalDepotName =
+      (Array.isArray(depotsRows)
+        ? (depotsRows as DepotRow[]).find((d) => normalizeDepotName(String(d.nom || "")) === depotKey)?.nom
+        : null) || depotName;
+
+    if (!depotsRows || depotsRows.length === 0) {
       await supabase.from("depots").insert({ 
-        nom: depotName, 
+        nom: canonicalDepotName, 
         emplacement: "Point de vente", 
         is_active: true 
       });
@@ -95,17 +125,18 @@ export async function POST(request: Request) {
     // ─── INVENTORY GUARD: PRE-VALIDATION ───
     const itemIds = items.map(it => it.id);
     
-    // Fetch current stock for these items in the specific depot
+    // Fetch current stock for these items and match the depot after normalization.
     const { data: stockLevels, error: stockErr } = await supabase
       .from("stocks")
-      .select("article_id, quantite")
-      .eq("depot_nom", depotName)
+      .select("article_id, quantite, depot_nom")
       .in("article_id", itemIds);
 
     if (stockErr) console.error("Stock check error:", stockErr);
 
-    const stockMap = (stockLevels || []).reduce((acc: any, curr: any) => {
-      acc[curr.article_id] = Number(curr.quantite);
+    const stockMap = (stockLevels as StockRow[] | null | undefined || []).reduce<Record<string, number>>((acc, curr) => {
+      if (normalizeDepotName(String(curr.depot_nom || "")) !== depotKey) return acc;
+      const key = String(curr.article_id);
+      acc[key] = Number(acc[key] || 0) + Number(curr.quantite || 0);
       return acc;
     }, {});
 
@@ -140,7 +171,7 @@ export async function POST(request: Request) {
         p_client_id: clientId,
         p_vendeur: user.username ?? "Caisse",
         p_moyen_reglement: moyenReglement === "Avance" ? "Crédit" : moyenReglement,
-        p_depot_nom: depotName,
+      p_depot_nom: canonicalDepotName,
         p_items: items,
         p_user_id_text: user.id,
       });
@@ -153,7 +184,7 @@ export async function POST(request: Request) {
         p_vendeur: user.username ?? "Caisse",
         p_emplacement: body.emplacement ?? null,
         p_moyen_reglement: (moyenReglement === "Avance" || moyenReglement === "Crédit") ? "Crédit" : moyenReglement,
-        p_depot_nom: depotName,
+        p_depot_nom: canonicalDepotName,
         p_items: items,
         p_user_id: user.id,
       });
