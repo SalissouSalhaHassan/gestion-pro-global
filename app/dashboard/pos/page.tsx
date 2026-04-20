@@ -71,6 +71,15 @@ type CompanyInfo = {
 
 type Row = Record<string, unknown>;
 
+type SessionCookieData = {
+  id?: string | number;
+  username?: string;
+  role?: string | number;
+  admin?: string | boolean;
+  emplacement?: string;
+  depots?: string;
+};
+
 /* ═══════════════════════════════════════════════════════════════════
    CONSTANTS
    ═══════════════════════════════════════════════════════════════════ */
@@ -102,6 +111,46 @@ function normalizeText(v: string) {
 
 function normalizeDepotName(v: string) {
   return normalizeText(v).trim().replace(/\s+/g, " ");
+}
+
+function splitDepotList(...values: Array<string | null | undefined>) {
+  const depots = values
+    .flatMap((value) => String(value ?? "").split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(depots));
+}
+
+function isAdminSession(session: SessionCookieData | null) {
+  if (!session) return false;
+
+  const adminValue = String(session.admin ?? "").toLowerCase();
+  const roleValue = String(session.role ?? "").toLowerCase();
+
+  return (
+    session.admin === true ||
+    adminValue === "oui" ||
+    adminValue === "true" ||
+    adminValue === "yes" ||
+    roleValue === "1" ||
+    roleValue === "admin"
+  );
+}
+
+function readClientSession(): SessionCookieData | null {
+  try {
+    const cookies = document.cookie.split("; ");
+    const sessionCookie = cookies.find((cookie) => cookie.startsWith("gp_session="));
+
+    if (!sessionCookie) return null;
+
+    const decoded = decodeURIComponent(sessionCookie.split("=")[1]);
+    return JSON.parse(decoded) as SessionCookieData;
+  } catch (error) {
+    console.error("Failed to read session data:", error);
+    return null;
+  }
 }
 
 function formatAmount(amount: number) {
@@ -716,23 +765,21 @@ function PosPage() {
 
   useEffect(() => {
     const getSessionData = () => {
-      try {
-        const cookies = document.cookie.split("; ");
-        const session = cookies.find(c => c.startsWith("gp_session="));
-        if (session) {
-          const decoded = decodeURIComponent(session.split("=")[1]);
-          const data = JSON.parse(decoded);
-          if (data.emplacement) {
-            setSelectedDepot(data.emplacement);
-          }
-          if (data.username) {
-            setCashierName(data.username);
-          }
-          setIsAdmin(data.admin === 'oui' || data.admin === true || data.role === 'admin');
-          setUserEmplacement(data.emplacement || "");
-        }
-      } catch (e) {
-        console.error("Failed to read session data:", e);
+      const session = readClientSession();
+      if (!session) return;
+
+      const admin = isAdminSession(session);
+      const scopedDepots = splitDepotList(session.depots, session.emplacement);
+
+      if (session.username) {
+        setCashierName(session.username);
+      }
+
+      setIsAdmin(admin);
+      setUserEmplacement(scopedDepots.join(", "));
+
+      if (scopedDepots.length > 0) {
+        setSelectedDepot((current) => current || scopedDepots[0]);
       }
     };
     getSessionData();
@@ -943,24 +990,30 @@ function PosPage() {
 
         if (!alive) return;
 
-        // Process articles - FILTER BY VENDOR'S DEPOT
+        const selectedDepotKey = normalizeDepotName(selectedDepot);
+        const scopedDepotKeys = splitDepotList(userEmplacement).map(normalizeDepotName);
+
+        // Process articles with the current depot scope.
         if (!artErr && articlesRaw && articlesRaw.length > 0) {
           const mapped = articlesRaw.map((row) => {
             const r = row as Row;
             const stocksArr = Array.isArray(r.stocks) ? r.stocks : [];
             
-            // FILTER: Only include stock for this vendor's depot
-            const vendorDepotStocks = stocksArr.filter(s => {
-              const depotName = String(s.depot_nom || "").toLowerCase().trim();
-              const userDepot = (userEmplacement || "").toLowerCase().trim();
-              return depotName === userDepot;
+            const visibleStocks = stocksArr.filter((stock) => {
+              const depotKey = normalizeDepotName(String(stock?.depot_nom || ""));
+
+              if (isAdmin) {
+                return !selectedDepotKey || depotKey === selectedDepotKey;
+              }
+
+              return scopedDepotKeys.includes(depotKey);
             });
-            
-            const stockTotal = vendorDepotStocks.reduce(
+
+            const stockTotal = visibleStocks.reduce(
               (sum: number, s: Record<string, unknown>) => sum + toNumber(s.quantite),
               0
             );
-            return buildArticle({ ...r, stocks: vendorDepotStocks, stock_total: stockTotal });
+            return buildArticle({ ...r, stocks: visibleStocks, stock_total: stockTotal });
           }).filter((a) => !!a.id && a.id !== 0 && a.stock_total > 0); // Only show articles with stock in vendor's depot
           
           console.log(`✅ Articles fetched: ${mapped.length} (filtered for depot: ${userEmplacement})`);
@@ -1008,7 +1061,7 @@ function PosPage() {
     void loadAll();
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAdmin, selectedDepot, userEmplacement]);
 
   /* ═══════════════════════════════════════════════════════════════════
      CART LOGIC

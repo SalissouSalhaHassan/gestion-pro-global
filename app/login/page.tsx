@@ -187,7 +187,8 @@ export default function LoginPage() {
       username: userRecord.utilisateur,
       role: userRecord.role_id,
       admin: userRecord.admin,
-      emplacement: userRecord.emplacement || ""
+      emplacement: userRecord.emplacement || "",
+      depots: userRecord.depots || ""
     };
     document.cookie = `gp_session=${encodeURIComponent(JSON.stringify(sessionData))}; path=/; max-age=86400; SameSite=Lax`;
 
