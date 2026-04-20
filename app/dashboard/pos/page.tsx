@@ -1172,21 +1172,24 @@ function PosPage() {
       );
 
       clearCart();
+      
+      // TRIGGER PRINT PREVIEW
+      let printId = null;
+      if (payload.sale?.invoice_id || payload.sale?.id) {
+        printId = payload.sale.invoice_id || payload.sale.id;
+        setPrintInvoiceId(printId ?? null);
+        localStorage.setItem("last_invoice_id", String(printId));
+      } else if (editInvoiceId) {
+        printId = editInvoiceId;
+        setPrintInvoiceId(editInvoiceId);
+        localStorage.setItem("last_invoice_id", String(editInvoiceId));
+      }
+      
       setSuccess(
-        `✅ Vente enregistrée${payload.sale?.numero ? ` — N° ${payload.sale.numero}` : ""}`
+        `✅ Vente enregistrée${payload.sale?.numero ? ` — N° ${payload.sale.numero}` : ""}${printId ? " • Aperçu impression" : ""}`
       );
       if (payload.sale?.alerts && payload.sale.alerts.length > 0) {
         setStockAlerts(payload.sale.alerts);
-      }
-      
-      // TRIGGER PRINT PREVIEW
-      if (payload.sale?.invoice_id || payload.sale?.id) {
-        const invId = payload.sale.invoice_id || payload.sale.id;
-        setPrintInvoiceId(invId ?? null);
-        localStorage.setItem("last_invoice_id", String(invId));
-      } else if (editInvoiceId) {
-        setPrintInvoiceId(editInvoiceId);
-        localStorage.setItem("last_invoice_id", String(editInvoiceId));
       }
 
       setTimeout(() => setSuccess(null), 5000);
