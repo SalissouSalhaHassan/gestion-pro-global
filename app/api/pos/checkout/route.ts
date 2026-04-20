@@ -21,6 +21,12 @@ type StockRow = {
   depot_nom: string | null;
 };
 
+type EditInvoiceItemRow = {
+  article_id: number | string;
+  qte: number | string | null;
+  depot_origine: string | null;
+};
+
 function normalizeDepotName(value: string) {
   return value
     .toLowerCase()
@@ -152,11 +158,16 @@ export async function POST(request: Request) {
 
     // ─── SECURITY: WAREHOUSE SCOPING ───
     const isAdmin = await isAdminOrManager(user);
+    const requestedScopeDepots = uniqueNames(splitDepotList(user.depots, user.emplacement));
     if (
       !isAdmin &&
-      user.emplacement &&
-      !findBestDepotMatch(user.emplacement, [depotName]) &&
-      !findBestDepotMatch(depotName, [user.emplacement])
+      requestedScopeDepots.length > 0 &&
+      !requestedScopeDepots.some(
+        (name) =>
+          normalizeDepotName(name) === requestedDepotKey ||
+          !!findBestDepotMatch(name, [depotName]) ||
+          !!findBestDepotMatch(depotName, [name])
+      )
     ) {
        return NextResponse.json({ error: `Permission refusée pour le dépôt: ${depotName}` }, { status: 403 });
     }
@@ -188,6 +199,22 @@ export async function POST(request: Request) {
         ? (depotsRows as DepotRow[]).find((d) => normalizeDepotName(String(d.nom || "")) === requestedDepotKey)?.nom
         : null) || depotName;
 
+    const requestedInvoiceId = body.invoiceId ? Number(body.invoiceId) : null;
+    let originalInvoiceItems: EditInvoiceItemRow[] = [];
+
+    if (requestedInvoiceId) {
+      const { data: invoiceItems, error: invoiceItemsError } = await supabase
+        .from("facture_items")
+        .select("article_id, qte, depot_origine")
+        .eq("facture_id", requestedInvoiceId);
+
+      if (invoiceItemsError) {
+        throw invoiceItemsError;
+      }
+
+      originalInvoiceItems = Array.isArray(invoiceItems) ? (invoiceItems as EditInvoiceItemRow[]) : [];
+    }
+
     if (!depotsRows || depotsRows.length === 0) {
       await supabase.from("depots").insert({ 
         nom: canonicalDepotName, 
@@ -210,18 +237,65 @@ export async function POST(request: Request) {
     const stockDepotNames = uniqueNames(
       ((stockLevels as StockRow[] | null | undefined) || []).map((stock) => stock.depot_nom)
     );
+    const invoiceDepotNames = uniqueNames(
+      originalInvoiceItems.map((item) => item.depot_origine)
+    );
+
+    if (invoiceDepotNames.length > 1) {
+      return NextResponse.json(
+        { error: "Cette facture utilise plusieurs dépôts. La modification POS ne supporte qu'un seul dépôt." },
+        { status: 400 }
+      );
+    }
+
     const resolvedDepotName =
       findBestDepotMatch(canonicalDepotName, stockDepotNames) ||
       findBestDepotMatch(depotName, stockDepotNames) ||
       canonicalDepotName;
-    const resolvedDepotKey = normalizeDepotName(resolvedDepotName);
+    const effectiveDepotName =
+      invoiceDepotNames.length === 1
+        ? (
+            findBestDepotMatch(invoiceDepotNames[0], [
+              resolvedDepotName,
+              canonicalDepotName,
+              depotName,
+              ...stockDepotNames,
+            ]) || invoiceDepotNames[0]
+          )
+        : resolvedDepotName;
+    const effectiveDepotKey = normalizeDepotName(effectiveDepotName);
+
+    const allowedDepotNames = uniqueNames(splitDepotList(user.depots, user.emplacement));
+    if (
+      !isAdmin &&
+      allowedDepotNames.length > 0 &&
+      !allowedDepotNames.some(
+        (name) =>
+          normalizeDepotName(name) === effectiveDepotKey ||
+          !!findBestDepotMatch(name, [effectiveDepotName]) ||
+          !!findBestDepotMatch(effectiveDepotName, [name])
+      )
+    ) {
+      return NextResponse.json({ error: `Permission refusée pour le dépôt: ${effectiveDepotName}` }, { status: 403 });
+    }
 
     const stockMap = (stockLevels as StockRow[] | null | undefined || []).reduce<Record<string, number>>((acc, curr) => {
-      if (normalizeDepotName(String(curr.depot_nom || "")) !== resolvedDepotKey) return acc;
+      if (normalizeDepotName(String(curr.depot_nom || "")) !== effectiveDepotKey) return acc;
       const key = String(curr.article_id);
       acc[key] = Number(acc[key] || 0) + Number(curr.quantite || 0);
       return acc;
     }, {});
+
+    if (requestedInvoiceId && originalInvoiceItems.length > 0) {
+      for (const originalItem of originalInvoiceItems) {
+        if (normalizeDepotName(String(originalItem.depot_origine || "")) !== effectiveDepotKey) {
+          continue;
+        }
+
+        const key = String(originalItem.article_id);
+        stockMap[key] = Number(stockMap[key] || 0) + Number(originalItem.qte || 0);
+      }
+    }
 
     const insufficientItems = [];
     for (const item of items) {
@@ -254,7 +328,7 @@ export async function POST(request: Request) {
         p_client_id: clientId,
         p_vendeur: user.username ?? "Caisse",
         p_moyen_reglement: moyenReglement === "Avance" ? "Crédit" : moyenReglement,
-      p_depot_nom: resolvedDepotName,
+      p_depot_nom: effectiveDepotName,
         p_items: items,
         p_user_id_text: user.id,
       });
@@ -267,7 +341,7 @@ export async function POST(request: Request) {
         p_vendeur: user.username ?? "Caisse",
         p_emplacement: body.emplacement ?? null,
         p_moyen_reglement: (moyenReglement === "Avance" || moyenReglement === "Crédit") ? "Crédit" : moyenReglement,
-        p_depot_nom: resolvedDepotName,
+        p_depot_nom: effectiveDepotName,
         p_items: items,
         p_user_id: user.id,
       });

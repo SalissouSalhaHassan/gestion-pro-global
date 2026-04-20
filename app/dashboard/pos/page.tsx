@@ -49,7 +49,7 @@ type Article = {
   depot_stocks?: Record<string, number>;
 };
 
-type CartItem = Article & { quantite: number };
+type CartItem = Article & { quantite: number; depot_origine?: string | null };
 
 type Client = {
   id: string | number;
@@ -913,6 +913,18 @@ function PosPage() {
       if (itsErr) throw itsErr;
       
       if (its) {
+        const invoiceDepots = uniqueNames(
+          its.map((item) => String(item.depot_origine ?? "").trim())
+        );
+
+        if (invoiceDepots.length > 1) {
+          throw new Error("Cette facture utilise plusieurs dépôts. La modification POS ne supporte qu'un seul dépôt.");
+        }
+
+        if (invoiceDepots.length === 1) {
+          setSelectedDepot(invoiceDepots[0]);
+        }
+
         const cartItems: CartItem[] = its.map(it => ({
           id: it.article_id,
           reference: it.code_art || "",
@@ -923,7 +935,8 @@ function PosPage() {
           taxe: toNumber(it.taux_tva_item),
           image_path: null,
           stock_total: 9999, // Placeholder since we revert stock on save
-          quantite: toNumber(it.qte)
+          quantite: toNumber(it.qte),
+          depot_origine: it.depot_origine || null
         }));
         setCart(cartItems);
       }
@@ -1103,25 +1116,11 @@ function PosPage() {
           
           console.log(`✅ Articles fetched: ${mapped.length} (filtered for depot: ${userEmplacement})`);
           const fallbackDepot = findBestDepotMatch(resolvedSelectedDepot, allStockDepotNames) || allStockDepotNames[0] || "";
-          const fallbackArticles =
-            mapped.length === 0 && isAdmin
-              ? articlesRaw
-                  .map((row) => {
-                    const r = row as Row;
-                    const stocksArr = Array.isArray(r.stocks) ? r.stocks : [];
-                    const stockTotal = stocksArr.reduce(
-                      (sum: number, s: Record<string, unknown>) => sum + toNumber(s.quantite),
-                      0
-                    );
-                    return buildArticle({ ...r, stocks: stocksArr, stock_total: stockTotal });
-                  })
-                  .filter((a) => !!a.id && a.id !== 0 && a.stock_total > 0)
-              : mapped;
 
-          console.log(`POS visible articles: ${fallbackArticles.length} for depot ${resolvedSelectedDepot || userEmplacement || "all"}`);
-          setArticles(fallbackArticles);
+          console.log(`POS visible articles: ${mapped.length} for depot ${resolvedSelectedDepot || userEmplacement || "all"}`);
+          setArticles(mapped);
 
-          if (mapped.length === 0 && isAdmin && fallbackDepot && fallbackDepot !== selectedDepot) {
+          if (mapped.length === 0 && isAdmin && !editInvoiceId && fallbackDepot && fallbackDepot !== selectedDepot) {
             setSelectedDepot(fallbackDepot);
           }
         } else {
@@ -1175,11 +1174,10 @@ function PosPage() {
      ═══════════════════════════════════════════════════════════════════ */
 
   const addItem = useCallback((article: Article) => {
-    // Inventory Guard Check
-    const available = getAvailableArticleStock(article, selectedDepot);
-    
     setCart((prev) => {
       const existing = prev.find((item) => item.id === article.id);
+      const baseAvailable = getAvailableArticleStock(article, selectedDepot);
+      const available = baseAvailable + (editInvoiceId ? existing?.quantite || 0 : 0);
       const newQty = existing ? existing.quantite + 1 : 1;
       
       if (newQty > available) {
@@ -1197,7 +1195,7 @@ function PosPage() {
       }
       return [...prev, { ...article, quantite: 1 }];
     });
-  }, [selectedDepot]);
+  }, [editInvoiceId, selectedDepot]);
 
   const removeItem = useCallback((id: string | number) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
@@ -1205,11 +1203,13 @@ function PosPage() {
 
   const updateQuantity = useCallback((id: string | number, qty: number) => {
     const art = articles.find(a => a.id === id);
+    const existingItem = cart.find((item) => item.id === id);
     if (art) {
-        const available = getAvailableArticleStock(art, selectedDepot);
+        const available = getAvailableArticleStock(art, selectedDepot) + (editInvoiceId ? existingItem?.quantite || 0 : 0);
         if (qty > available) {
           setError(`⚠️ Limite de stock atteinte (${available} disponibles)`);
           setTimeout(() => setError(null), 3000);
+          qty = available;
         }
     }
     setCart((prev) =>
@@ -1217,7 +1217,7 @@ function PosPage() {
         item.id === id ? { ...item, quantite: Math.max(1, qty) } : item
       )
     );
-  }, [articles, selectedDepot]);
+  }, [articles, cart, editInvoiceId, selectedDepot]);
 
   const updatePrice = useCallback((id: string | number, price: number) => {
     setCart((prev) =>
@@ -1554,19 +1554,25 @@ function PosPage() {
               <PackageSearch size={16} color="#fff" />
               <select
                 value={selectedDepot}
-                onChange={(e) => isAdmin && setSelectedDepot(e.target.value)}
-                disabled={!isAdmin}
+                onChange={(e) => isAdmin && !editInvoiceId && setSelectedDepot(e.target.value)}
+                disabled={!isAdmin || !!editInvoiceId}
                 style={{
                   background: "transparent",
                   border: "none",
                   color: "#fff",
                   fontWeight: 700,
                   outline: "none",
-                  cursor: isAdmin ? "pointer" : "not-allowed",
+                  cursor: isAdmin && !editInvoiceId ? "pointer" : "not-allowed",
                   fontSize: 14,
-                  opacity: !isAdmin ? 0.7 : 1,
+                  opacity: !isAdmin || !!editInvoiceId ? 0.7 : 1,
                 }}
-                title={!isAdmin ? `Dépôt spécialisé: ${userEmplacement}` : "Sélectionner le dépôt"}
+                title={
+                  editInvoiceId
+                    ? `Dépôt verrouillé pour la facture #${editInvoiceId}`
+                    : !isAdmin
+                      ? `Dépôt spécialisé: ${userEmplacement}`
+                      : "Sélectionner le dépôt"
+                }
               >
                 {!isAdmin && userEmplacement ? (
                   userEmplacement.split(",").map(dep => dep.trim()).map(dep => (
