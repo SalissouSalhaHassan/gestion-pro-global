@@ -43,6 +43,7 @@ export default function InvoicesPage() {
   const [paymentInvoice, setPaymentInvoice] = useState<any | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Advanced Filters
@@ -63,6 +64,7 @@ export default function InvoicesPage() {
         const decoded = decodeURIComponent(session.split("=")[1]);
         const data = JSON.parse(decoded);
         setCurrentUsername(data.username || null);
+        setCurrentUserId(Number(data.id) || null);
         setIsAdmin(data.admin === 'oui' || data.admin === true || data.role === 'admin');
       }
     } catch (e) {
@@ -137,16 +139,22 @@ export default function InvoicesPage() {
     try {
       setLoading(true);
       // Call the safe delete RPC
-      const { error } = await supabase.rpc('delete_invoice_safe', { p_invoice_id: invoiceId });
+      const { data: result, error } = await supabase.rpc('delete_invoice_safe', { 
+        p_invoice_id: invoiceId,
+        p_user_id: currentUserId,
+        p_username: currentUsername || 'System'
+      });
       
       if (error) {
         // Fallback if RPC isn't defined yet - simple soft delete
-        console.warn("RPC delete_invoice_safe not found, falling back to simple soft delete.");
+        console.warn("RPC delete_invoice_safe failed or not found, falling back to simple soft delete.");
         const { error: softErr } = await supabase
           .from("factures")
           .update({ is_deleted: true, deleted_at: new Date().toISOString() })
           .eq("id", invoiceId);
         if (softErr) throw softErr;
+      } else if (result && result.ok === false) {
+        alert("Erreur: " + (result.error || "Impossible de supprimer cette facture."));
       }
       
       setRefreshKey(prev => prev + 1);
