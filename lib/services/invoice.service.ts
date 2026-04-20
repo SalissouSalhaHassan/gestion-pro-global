@@ -39,7 +39,7 @@ export class InvoiceService {
       .eq('is_deleted', false)
       .order('date_facture', { ascending: false })
       .order('id', { ascending: false })
-      .limit(200);
+      .limit(1000);
 
     if (userId) {
       query = query.eq('user_id', userId);
