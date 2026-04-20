@@ -25,6 +25,7 @@ import Link from "next/link";
    TYPES
    ═══════════════════════════════════════════════════════════════════ */
 import { AdjustmentModal, TransferModal, AddArticleModal } from "./StockModals";
+import StockTransferModal from "../mouvements/StockTransferModal";
 
 type StockItem = {
   id: number;
@@ -52,6 +53,7 @@ export default function StockDashboard() {
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [printTransferRef, setPrintTransferRef] = useState<string | null>(null);
 
   const fetchStock = async () => {
     setLoading(true);
@@ -93,6 +95,13 @@ export default function StockDashboard() {
   const handleTransfer = (item: StockItem) => {
     setSelectedItem(item);
     setIsTransferOpen(true);
+  };
+
+  const handleTransferSuccess = (transferRef?: string) => {
+    fetchStock();
+    if (transferRef) {
+      setPrintTransferRef(transferRef);
+    }
   };
 
   return (
@@ -220,7 +229,7 @@ export default function StockDashboard() {
         onClose={() => setIsTransferOpen(false)}
         item={selectedItem}
         sourceDepot={activeDepot}
-        onSuccess={fetchStock}
+        onSuccess={handleTransferSuccess}
       />
       <AddArticleModal 
         isOpen={isAddOpen}
@@ -228,6 +237,12 @@ export default function StockDashboard() {
         onSuccess={fetchStock}
         currentDepot={activeDepot}
       />
+      {printTransferRef && (
+        <StockTransferModal
+          transferRef={printTransferRef}
+          onClose={() => setPrintTransferRef(null)}
+        />
+      )}
     </div>
   );
 }

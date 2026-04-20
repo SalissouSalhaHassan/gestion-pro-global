@@ -52,7 +52,7 @@ type TransferModalProps = {
   onClose: () => void;
   item: StockItem | null;
   sourceDepot: string;
-  onSuccess: () => void;
+  onSuccess: (transferRef?: string) => void;
 };
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -286,7 +286,7 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Échec du transfert");
 
-      onSuccess();
+      onSuccess(data.reference);
       onClose();
       setQty("");
       setDestDepot("");

@@ -11,6 +11,7 @@ import {
   ArrowRight,
   Clock
 } from "lucide-react";
+import StockTransferModal from "../../mouvements/StockTransferModal";
 
 type Transit = {
   id: number;
@@ -32,6 +33,7 @@ export default function TransitPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [printTransferRef, setPrintTransferRef] = useState<string | null>(null);
 
   const [depotFilter, setDepotFilter] = useState("Tous");
   const [depots, setDepots] = useState<string[]>([]);
@@ -88,6 +90,7 @@ export default function TransitPage() {
       if (!res.ok) throw new Error(result.error || "Erreur lors de la réception");
 
       setSuccess("Marchandise réceptionnée et stock mis à jour !");
+      if (result.reference) setPrintTransferRef(result.reference);
       fetchData();
     } catch (err: any) {
       setError(err.message);
@@ -236,6 +239,13 @@ export default function TransitPage() {
            })
          )}
       </div>
+
+      {printTransferRef && (
+        <StockTransferModal
+          transferRef={printTransferRef}
+          onClose={() => setPrintTransferRef(null)}
+        />
+      )}
 
     </div>
   );

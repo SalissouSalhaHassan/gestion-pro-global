@@ -64,7 +64,11 @@ export async function POST(request: Request) {
           received_by: user.username
        }).eq("id", transit_id);
 
-       return NextResponse.json({ success: true, message: "Bons de réception validés avec succès." });
+       return NextResponse.json({
+         success: true,
+         message: "Bons de réception validés avec succès.",
+         reference: transit.reference
+       });
 
      } catch (err: any) {
         return NextResponse.json({ error: err.message }, { status: 500 });
@@ -131,7 +135,11 @@ export async function POST(request: Request) {
        created_by: user.username
     });
 
-    return NextResponse.json({ success: true, message: "Transfert initié. En attente de réception." });
+    return NextResponse.json({
+      success: true,
+      message: "Transfert initié. En attente de réception.",
+      reference: refTrans
+    });
 
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
