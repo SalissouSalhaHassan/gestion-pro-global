@@ -25,7 +25,7 @@ export type Invoice = {
   montant_paye?: number;
   montant_restant?: number;
   notes?: string;
-  created_by?: number;
+  user_id?: number;
   items?: InvoiceItem[];
 };
 
@@ -39,7 +39,7 @@ export class InvoiceService {
       .order('created_at', { ascending: false });
 
     if (userId) {
-      query = query.eq('created_by', userId);
+      query = query.eq('user_id', userId);
     }
 
     const { data, error } = await query;
@@ -54,7 +54,7 @@ export class InvoiceService {
       .eq('id', id);
     
     if (userId) {
-      query = query.eq('created_by', userId);
+      query = query.eq('user_id', userId);
     }
 
     const { data, error } = await query.single();
@@ -71,7 +71,7 @@ export class InvoiceService {
       .from('factures')
       .insert({
         ...invoiceRow,
-        created_by: userId || invoiceRow.created_by,
+        user_id: userId || invoiceRow.user_id,
         montant_paye: invoiceRow.montant_paye || 0,
         montant_restant: invoiceRow.total_ttc - (invoiceRow.montant_paye || 0),
         statut: invoiceRow.montant_paye === invoiceRow.total_ttc ? 'Payée' : 'Non Payée'

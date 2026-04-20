@@ -65,7 +65,11 @@ export default function InvoicesPage() {
         const data = JSON.parse(decoded);
         setCurrentUsername(data.username || null);
         setCurrentUserId(Number(data.id) || null);
-        setIsAdmin(data.admin === 'oui' || data.admin === true || data.role === 'admin');
+        
+        // Match isAdminOrManager logic from auth_helper.ts
+        const isPrivileged = data.admin === 'Oui' || data.admin === 'oui' || data.admin === true || 
+                            data.role === 1 || data.role === '1' || data.role === 'admin';
+        setIsAdmin(isPrivileged);
       }
     } catch (e) {
       console.error("Failed to read session data:", e);
@@ -89,12 +93,12 @@ export default function InvoicesPage() {
         `)
         .eq("is_deleted", false);
       
-      // FILTER: Only show invoices for this vendor if not admin
-      if (!isAdmin && currentUsername) {
-        query = query.eq("vendeur", currentUsername);
-        console.log(`📋 Filtering invoices for vendor: ${currentUsername}`);
+      // FILTER: Only show invoices for this vendor if not privileged (admin/manager)
+      if (!isAdmin && currentUserId) {
+        query = query.eq("user_id", currentUserId);
+        console.log(`📋 Filtering invoices for user_id: ${currentUserId}`);
       } else if (isAdmin) {
-        console.log("👨‍💼 Admin: Showing all invoices");
+        console.log("👨‍💼 Privileged User (Admin/Manager): Showing all invoices");
       }
       
       const { data, error } = await query
