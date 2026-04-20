@@ -1157,8 +1157,20 @@ function PosPage() {
         invoice_id?: string | number;
       };
 
+      console.log("📊 API Response:", payload);
+
       if (!response.ok || !payload.ok) {
         throw new Error(payload.error || "L'encaissement a échoué.");
+      }
+
+      // Detailed debugging
+      if (payload.debug) {
+        console.table({
+          "extractedId": payload.debug.extractedId,
+          "result": JSON.stringify(payload.debug.result),
+          "invoiceId": payload.debug.invoiceId,
+          "final invoice_id": payload.invoice_id
+        });
       }
 
       // Update local stock after successful sale
@@ -1174,25 +1186,30 @@ function PosPage() {
 
       clearCart();
       
-      // TRIGGER PRINT PREVIEW
-      // Check multiple possible locations for invoice_id (robustness)
-      let printId = payload.invoice_id || payload.sale?.invoice_id || payload.sale?.id;
+      // TRIGGER PRINT PREVIEW - Direct state update (no setTimeout)
+      let printId: string | number | null = null;
       
-      if (printId) {
-        console.log("🖨️ Setting printInvoiceId to:", printId);
-        // Add small delay to ensure state updates properly
-        setTimeout(() => {
-          setPrintInvoiceId(printId);
-          localStorage.setItem("last_invoice_id", String(printId));
-        }, 100);
+      if (payload.invoice_id) {
+        printId = payload.invoice_id;
+        console.log("✅ Using payload.invoice_id:", printId);
+      } else if (payload.sale?.invoice_id) {
+        printId = payload.sale.invoice_id;
+        console.log("✅ Using payload.sale.invoice_id:", printId);
+      } else if (payload.sale?.id) {
+        printId = payload.sale.id;
+        console.log("✅ Using payload.sale.id:", printId);
       } else if (editInvoiceId) {
-        console.log("🖨️ Setting printInvoiceId (edit mode) to:", editInvoiceId);
-        setTimeout(() => {
-          setPrintInvoiceId(editInvoiceId);
-          localStorage.setItem("last_invoice_id", String(editInvoiceId));
-        }, 100);
+        printId = editInvoiceId;
+        console.log("✅ Using editInvoiceId (edit mode):", printId);
       } else {
-        console.warn("⚠️ No invoice_id found in response:", payload);
+        console.warn("⚠️ No invoice_id found anywhere in response:", payload);
+      }
+      
+      // Set print modal IMMEDIATELY (not in setTimeout)
+      if (printId) {
+        console.log("🖨️ SETTING printInvoiceId NOW to:", printId);
+        setPrintInvoiceId(printId);
+        localStorage.setItem("last_invoice_id", String(printId));
       }
       
       setSuccess(
@@ -1200,6 +1217,13 @@ function PosPage() {
       );
       if (payload.sale?.alerts && payload.sale.alerts.length > 0) {
         setStockAlerts(payload.sale.alerts);
+      }
+
+      // If no printId was found, show a warning alert
+      if (!printId) {
+        setTimeout(() => {
+          setError("⚠️ ATTENTION: Aucun ID de facture détecté. Consultez la console pour plus de détails.");
+        }, 500);
       }
 
       setTimeout(() => setSuccess(null), 7000);

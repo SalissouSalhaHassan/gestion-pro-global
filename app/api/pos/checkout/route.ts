@@ -205,6 +205,27 @@ export async function POST(request: Request) {
        extractedId = Number(result.id || result.invoice_id);
     }
 
+    // FALLBACK: If still no ID, fetch the latest invoice for this client and depot
+    if (!extractedId || isNaN(extractedId)) {
+      console.warn("⚠️ Could not extract invoice ID from RPC result. Attempting fallback...", result);
+      const { data: latestInvoice, error: fallbackErr } = await supabase
+        .from("factures")
+        .select("id")
+        .eq("client_id", clientId)
+        .order("id", { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (fallbackErr) {
+        console.warn("⚠️ Fallback query failed:", fallbackErr);
+      } else if (latestInvoice?.id) {
+        console.log("✅ Fallback: Using latest invoice ID:", latestInvoice.id);
+        extractedId = Number(latestInvoice.id);
+      } else {
+        console.error("❌ CRITICAL: Fallback query returned no data");
+      }
+    }
+
     // ─── POST-CHECKOUT SETTLEMENT LOGIC ───
 
     if (extractedId && !isNaN(extractedId)) {
@@ -290,8 +311,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      sale: result,
-      invoice_id: extractedId
+      sale: result || { id: extractedId },
+      invoice_id: extractedId,
+      debug: {
+        extractedId,
+        result,
+        invoiceId
+      }
     });
   } catch (error: any) {
     console.error("Checkout Error:", error);
