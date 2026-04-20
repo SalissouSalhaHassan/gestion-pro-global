@@ -706,10 +706,12 @@ function PosPage() {
   const [query, setQuery] = useState("");
   const [selectedClientId, setSelectedClientId] = useState<string | number>(1);
   const [selectedDepot, setSelectedDepot] = useState<string>("");
+  const [cashierName, setCashierName] = useState("Admin");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userEmplacement, setUserEmplacement] = useState("");
 
   useEffect(() => {
-    // Attempt to read emplacement from session cookie
-    const getSessionDepot = () => {
+    const getSessionData = () => {
       try {
         const cookies = document.cookie.split("; ");
         const session = cookies.find(c => c.startsWith("gp_session="));
@@ -719,12 +721,17 @@ function PosPage() {
           if (data.emplacement) {
             setSelectedDepot(data.emplacement);
           }
+          if (data.username) {
+            setCashierName(data.username);
+          }
+          setIsAdmin(data.admin === 'oui' || data.admin === true || data.role === 'admin');
+          setUserEmplacement(data.emplacement || "");
         }
       } catch (e) {
-        console.error("Failed to read session depot:", e);
+        console.error("Failed to read session data:", e);
       }
     };
-    getSessionDepot();
+    getSessionData();
   }, []);
 
   const [paymentMethod, setPaymentMethod] = useState("Espece");
@@ -908,11 +915,12 @@ function PosPage() {
           .order("nom", { ascending: true })
           .limit(500);
 
-        /* ── 3. Depots (from the stocks table distinct depot_nom) ── */
+        /* ── 3. Depots ── */
         const { data: depotsRaw, error: depErr } = await supabase
-          .from("stocks")
-          .select("depot_nom")
-          .limit(100);
+          .from("depots")
+          .select("id, nom")
+          .eq("is_deleted", false)
+          .eq("is_active", true);
 
         /* ── 4. Company Info ── */
         const { data: companyRaw } = await supabase
@@ -948,12 +956,13 @@ function PosPage() {
           }
         }
 
-        // Process depots (unique names from stocks)
+        // Process depots
         if (!depErr && depotsRaw && depotsRaw.length > 0) {
-          const uniqueNames = [...new Set(depotsRaw.map((d) => String((d as Row).depot_nom)))].filter(Boolean);
+          const uniqueNames = depotsRaw.map((d) => String((d as Row).nom)).filter(Boolean);
           setDepots(uniqueNames.map((name, i) => ({ id: i + 1, nom_depot: name })));
-          if (uniqueNames.length > 0 && !selectedDepot) {
-            setSelectedDepot(uniqueNames[0]);
+          
+          if (!selectedDepot && uniqueNames.length > 0) {
+             setSelectedDepot(uniqueNames[0]);
           }
         }
 
@@ -1308,9 +1317,38 @@ function PosPage() {
               <Clock size={18} />
               <span>{currentTime.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
             </div>
+            
+            {/* Depot Selector */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.1)", padding: "4px 10px", borderRadius: "8px" }}>
+              <PackageSearch size={16} color="#fff" />
+              <select
+                value={selectedDepot}
+                onChange={(e) => setSelectedDepot(e.target.value)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#fff",
+                  fontWeight: 700,
+                  outline: "none",
+                  cursor: "pointer",
+                  fontSize: 14,
+                }}
+              >
+                {!isAdmin && userEmplacement ? (
+                  userEmplacement.split(",").map(dep => dep.trim()).map(dep => (
+                    <option key={dep} value={dep} style={{ color: "#000" }}>{dep}</option>
+                  ))
+                ) : (
+                  depots.map(d => (
+                    <option key={d.id} value={d.nom_depot} style={{ color: "#000" }}>{d.nom_depot}</option>
+                  ))
+                )}
+              </select>
+            </div>
+
             <div style={S.headerCashier}>
               <UserRound size={18} />
-              <span>Caissier: Admin</span>
+              <span>Caissier: {cashierName}</span>
             </div>
           </div>
         </header>

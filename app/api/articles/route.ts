@@ -82,7 +82,10 @@ export async function POST(request: Request) {
     if (!targetDepot) {
        // Fallback to first available depot if user has no assignment
        const { data: d } = await supabase.from("depots").select("nom").eq("is_active", true).limit(1).maybeSingle();
-       targetDepot = d?.nom || "Principal";
+       targetDepot = d?.nom;
+       if (!targetDepot) {
+         return NextResponse.json({ error: "Aucun dépôt actif trouvé. Veuillez en créer un dans Gestion des Dépôts." }, { status: 400 });
+       }
     }
     
     if (Number(initial_stock) > 0) {

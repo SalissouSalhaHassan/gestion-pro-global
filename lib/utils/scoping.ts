@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/server";
  *    - For 'factures': sees only their own sales (by user_id or vendeur name).
  *    - For 'stocks' or 'mouvements': sees only data for their allowed warehouses.
  */
-export async function applyUserScope<T extends PostgrestFilterBuilder<any, any, any>>(
+export async function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, any>>(
   query: T,
   session: CustomSession,
   entityType: 'factures' | 'mouvements' | 'stocks' | 'clients' | 'fournisseurs'
