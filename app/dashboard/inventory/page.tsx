@@ -66,9 +66,12 @@ export default function InventoryPage() {
     setLoading(true);
     setError(null);
     try {
-      // In this system api/stock fetches aggregated data for a depot or all
-      // We will mimic getting all items, and finding their stock in the depot
-      const res = await fetch("/api/stock"); 
+      const url = new URL("/api/stock", window.location.origin);
+      if (selectedDepot) {
+        url.searchParams.set("depot", selectedDepot);
+      }
+
+      const res = await fetch(url.toString());
       const data = await res.json();
       
       if (data.items) {

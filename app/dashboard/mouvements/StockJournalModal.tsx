@@ -14,7 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 const supabase = createClient();
 
 type StockJournalModalProps = {
-  filters: { search: string; startDate: string; endDate: string };
+  filters: { search: string; startDate: string; endDate: string; depot: string; type: string };
   onClose: () => void;
 };
 
@@ -41,6 +41,7 @@ export default function StockJournalModal({ filters, onClose }: StockJournalModa
         if (filters.search) url.searchParams.set("search", filters.search);
         if (filters.startDate) url.searchParams.set("startDate", filters.startDate);
         if (filters.endDate) url.searchParams.set("endDate", filters.endDate);
+        if (filters.depot && filters.depot !== "Tous") url.searchParams.set("depot", filters.depot);
         
         const res = await fetch(url.toString());
         const data = await res.json();
@@ -51,7 +52,12 @@ export default function StockJournalModal({ filters, onClose }: StockJournalModa
           return;
         }
         
-        setMovements(data || []);
+        const normalized = Array.isArray(data) ? data : [];
+        const filtered = filters.type === "Tous"
+          ? normalized
+          : normalized.filter((movement: any) => movement.type === filters.type);
+
+        setMovements(filtered);
 
       } catch (err) {
         console.error("Error fetching stock journal data:", err);
@@ -61,7 +67,7 @@ export default function StockJournalModal({ filters, onClose }: StockJournalModa
     }
 
     fetchData();
-  }, [filters]);
+  }, [filters.search, filters.startDate, filters.endDate, filters.depot, filters.type]);
 
   const handlePrint = () => {
     window.print();

@@ -421,7 +421,7 @@ export default function MouvementsPage() {
       )}
       {showPrintJournal && (
         <StockJournalModal 
-          filters={{ search: generalSearch, startDate, endDate }}
+          filters={{ search: generalSearch, startDate, endDate, depot: selectedDepot, type: typeFilter }}
           onClose={() => setShowPrintJournal(false)}
         />
       )}

@@ -52,7 +52,7 @@ export async function GET(request: Request) {
     query = query.or(`nr_doc.ilike.%${search}%,fournisseur_client.ilike.%${search}%`);
   }
 
-  const { data, error } = await query.limit(100);
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -60,4 +60,3 @@ export async function GET(request: Request) {
 
   return NextResponse.json(data);
 }
-
