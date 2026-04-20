@@ -72,53 +72,49 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
     async function fetchData() {
       try {
         setLoading(true);
-        console.log("🔍 Fetching invoice data for ID:", invoiceId, "Type:", typeof invoiceId);
         
-        // Set a timeout for the fetch
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Délai d'attente dépassé (10s)")), 10000)
-        );
+        // Ensure invoiceId is a valid number
+        const numericId = typeof invoiceId === 'string' ? Number(invoiceId) : invoiceId;
+        console.log("🔍 Fetching invoice data for ID:", numericId, "Type:", typeof numericId, "Original:", invoiceId);
+        
+        if (!numericId || isNaN(numericId)) {
+          throw new Error(`ID de facture invalide: ${invoiceId}`);
+        }
 
-        const fetchPromise = (async () => {
-          // 1. Fetch Company Info
-          const { data: comp } = await supabase
-            .from("informations_entreprise")
-            .select("*")
-            .limit(1)
-            .single();
-          setCompany(comp);
+        // 1. Fetch Company Info
+        const { data: compData } = await supabase
+          .from("informations_entreprise")
+          .select("*")
+          .limit(1);
+        setCompany(compData && compData.length > 0 ? compData[0] : null);
 
-          // 2. Fetch Invoice Header
-          const { data: inv, error: invErr } = await supabase
-            .from("factures")
-            .select("*")
-            .eq("id", invoiceId)
-            .single();
-          
-          if (invErr) throw new Error(`Erreur facture: ${invErr.message}`);
-          if (!inv) throw new Error(`Facture ID ${invoiceId} introuvable`);
-          
-          console.log("✅ Invoice loaded:", inv);
-          setInvoice(inv);
+        // 2. Fetch Invoice Header
+        const { data: invData, error: invErr } = await supabase
+          .from("factures")
+          .select("*")
+          .eq("id", numericId);
+        
+        if (invErr) throw new Error(`Erreur facture: ${invErr.message}`);
+        if (!invData || invData.length === 0) throw new Error(`Facture ID ${numericId} introuvable`);
+        
+        const inv = invData[0];
+        console.log("✅ Invoice loaded:", inv);
+        setInvoice(inv);
 
-          // 3. Fetch Items
-          const { data: its } = await supabase
-            .from("facture_items")
-            .select("*")
-            .eq("facture_id", invoiceId);
-          setItems(its || []);
+        // 3. Fetch Items
+        const { data: its } = await supabase
+          .from("facture_items")
+          .select("*")
+          .eq("facture_id", numericId);
+        setItems(its || []);
 
-          // 4. Fetch Payments
-          const { data: pays } = await supabase
-            .from("paiements")
-            .select("*")
-            .eq("facture_id", invoiceId)
-            .order("date_operation", { ascending: true });
-          setPayments(pays || []);
-        })();
-
-        // Race between fetch and timeout
-        await Promise.race([fetchPromise, timeoutPromise]);
+        // 4. Fetch Payments
+        const { data: pays } = await supabase
+          .from("paiements")
+          .select("*")
+          .eq("facture_id", numericId)
+          .order("date_operation", { ascending: true });
+        setPayments(pays || []);
 
       } catch (err: any) {
         console.error("❌ Error fetching invoice details:", err);
