@@ -12,6 +12,7 @@ type CheckoutItem = {
 type DepotRow = {
   id: number | string;
   nom: string | null;
+  emplacement?: string | null;
 };
 
 type StockRow = {
@@ -27,6 +28,74 @@ function normalizeDepotName(value: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+function splitDepotList(...values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .flatMap((value) => String(value ?? "").split(","))
+        .map((value) => value.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function uniqueNames(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function findBestDepotMatch(target: string, candidates: string[]) {
+  const normalizedTarget = normalizeDepotName(target);
+  const uniqueCandidates = uniqueNames(candidates).map((candidate) => ({
+    raw: candidate,
+    key: normalizeDepotName(candidate),
+  }));
+
+  if (!normalizedTarget || uniqueCandidates.length === 0) return null;
+
+  const exact = uniqueCandidates.find((candidate) => candidate.key === normalizedTarget);
+  if (exact) return exact.raw;
+
+  const targetTokens = normalizedTarget
+    .split(" ")
+    .filter((token) => token.length > 2 && token !== "depot");
+
+  let bestMatch: { raw: string; score: number } | null = null;
+
+  for (const candidate of uniqueCandidates) {
+    let score = 0;
+
+    if (candidate.key.includes(normalizedTarget) || normalizedTarget.includes(candidate.key)) {
+      score += 10;
+    }
+
+    for (const token of targetTokens) {
+      if (candidate.key.includes(token)) {
+        score += 3;
+      }
+    }
+
+    if (normalizedTarget.includes("boutique") && candidate.key.includes("boutique")) score += 6;
+    if (normalizedTarget.includes("principal") && candidate.key.includes("principal")) score += 6;
+    if (normalizedTarget.includes("magasin") && candidate.key.includes("magasin")) score += 6;
+
+    if (!bestMatch || score > bestMatch.score) {
+      bestMatch = { raw: candidate.raw, score };
+    }
+  }
+
+  if (bestMatch && bestMatch.score > 0) {
+    return bestMatch.raw;
+  }
+
+  return uniqueCandidates.length === 1 ? uniqueCandidates[0].raw : null;
 }
 
 export async function POST(request: Request) {
@@ -72,7 +141,6 @@ export async function POST(request: Request) {
 
     const clientId = Number(body.clientId ?? 1) || 1;
     const depotName = body.depotName?.trim() || user.emplacement || "";
-    const depotKey = normalizeDepotName(depotName);
     
     if (!depotName) {
       return NextResponse.json({ error: "Aucun dépôt spécifié pour cette vente. Veuillez sélectionner un dépôt valide." }, { status: 400 });
@@ -80,10 +148,16 @@ export async function POST(request: Request) {
 
     const moyenReglement = body.moyenReglement?.trim() || "Espece";
     const cashVersement = Number(body.versement || 0);
+    const requestedDepotKey = normalizeDepotName(depotName);
 
     // ─── SECURITY: WAREHOUSE SCOPING ───
     const isAdmin = await isAdminOrManager(user);
-    if (!isAdmin && user.emplacement && normalizeDepotName(user.emplacement) !== depotKey) {
+    if (
+      !isAdmin &&
+      user.emplacement &&
+      !findBestDepotMatch(user.emplacement, [depotName]) &&
+      !findBestDepotMatch(depotName, [user.emplacement])
+    ) {
        return NextResponse.json({ error: `Permission refusée pour le dépôt: ${depotName}` }, { status: 403 });
     }
 
@@ -106,12 +180,12 @@ export async function POST(request: Request) {
     
     const { data: depotsRows } = await supabase
       .from("depots")
-      .select("id, nom")
+      .select("id, nom, emplacement")
       .eq("is_active", true);
 
     const canonicalDepotName =
       (Array.isArray(depotsRows)
-        ? (depotsRows as DepotRow[]).find((d) => normalizeDepotName(String(d.nom || "")) === depotKey)?.nom
+        ? (depotsRows as DepotRow[]).find((d) => normalizeDepotName(String(d.nom || "")) === requestedDepotKey)?.nom
         : null) || depotName;
 
     if (!depotsRows || depotsRows.length === 0) {
@@ -133,8 +207,17 @@ export async function POST(request: Request) {
 
     if (stockErr) console.error("Stock check error:", stockErr);
 
+    const stockDepotNames = uniqueNames(
+      ((stockLevels as StockRow[] | null | undefined) || []).map((stock) => stock.depot_nom)
+    );
+    const resolvedDepotName =
+      findBestDepotMatch(canonicalDepotName, stockDepotNames) ||
+      findBestDepotMatch(depotName, stockDepotNames) ||
+      canonicalDepotName;
+    const resolvedDepotKey = normalizeDepotName(resolvedDepotName);
+
     const stockMap = (stockLevels as StockRow[] | null | undefined || []).reduce<Record<string, number>>((acc, curr) => {
-      if (normalizeDepotName(String(curr.depot_nom || "")) !== depotKey) return acc;
+      if (normalizeDepotName(String(curr.depot_nom || "")) !== resolvedDepotKey) return acc;
       const key = String(curr.article_id);
       acc[key] = Number(acc[key] || 0) + Number(curr.quantite || 0);
       return acc;
@@ -171,7 +254,7 @@ export async function POST(request: Request) {
         p_client_id: clientId,
         p_vendeur: user.username ?? "Caisse",
         p_moyen_reglement: moyenReglement === "Avance" ? "Crédit" : moyenReglement,
-      p_depot_nom: canonicalDepotName,
+      p_depot_nom: resolvedDepotName,
         p_items: items,
         p_user_id_text: user.id,
       });
@@ -184,7 +267,7 @@ export async function POST(request: Request) {
         p_vendeur: user.username ?? "Caisse",
         p_emplacement: body.emplacement ?? null,
         p_moyen_reglement: (moyenReglement === "Avance" || moyenReglement === "Crédit") ? "Crédit" : moyenReglement,
-        p_depot_nom: canonicalDepotName,
+        p_depot_nom: resolvedDepotName,
         p_items: items,
         p_user_id: user.id,
       });

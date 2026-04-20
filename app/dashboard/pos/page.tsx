@@ -122,6 +122,71 @@ function splitDepotList(...values: Array<string | null | undefined>) {
   return Array.from(new Set(depots));
 }
 
+function uniqueNames(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function findBestDepotMatch(target: string, candidates: string[]) {
+  const normalizedTarget = normalizeDepotName(target);
+  const uniqueCandidates = uniqueNames(candidates).map((candidate) => ({
+    raw: candidate,
+    key: normalizeDepotName(candidate),
+  }));
+
+  if (!normalizedTarget || uniqueCandidates.length === 0) return null;
+
+  const exact = uniqueCandidates.find((candidate) => candidate.key === normalizedTarget);
+  if (exact) return exact.raw;
+
+  const targetTokens = normalizedTarget
+    .split(" ")
+    .filter((token) => token.length > 2 && token !== "depot");
+
+  let bestMatch: { raw: string; score: number } | null = null;
+
+  for (const candidate of uniqueCandidates) {
+    let score = 0;
+
+    if (candidate.key.includes(normalizedTarget) || normalizedTarget.includes(candidate.key)) {
+      score += 10;
+    }
+
+    for (const token of targetTokens) {
+      if (candidate.key.includes(token)) {
+        score += 3;
+      }
+    }
+
+    if (normalizedTarget.includes("boutique") && candidate.key.includes("boutique")) score += 6;
+    if (normalizedTarget.includes("principal") && candidate.key.includes("principal")) score += 6;
+    if (normalizedTarget.includes("magasin") && candidate.key.includes("magasin")) score += 6;
+
+    if (!bestMatch || score > bestMatch.score) {
+      bestMatch = { raw: candidate.raw, score };
+    }
+  }
+
+  if (bestMatch && bestMatch.score > 0) {
+    return bestMatch.raw;
+  }
+
+  return uniqueCandidates.length === 1 ? uniqueCandidates[0].raw : null;
+}
+
+function getAvailableArticleStock(article: Article, depotName: string) {
+  const depotStocks = article.depot_stocks || {};
+  const depotKeys = Object.keys(depotStocks);
+  const matchedDepot = findBestDepotMatch(depotName, depotKeys);
+  const lookupKey = normalizeDepotName(matchedDepot || depotName);
+  return depotStocks[lookupKey] || 0;
+}
+
 function isAdminSession(session: SessionCookieData | null) {
   if (!session) return false;
 
@@ -977,7 +1042,7 @@ function PosPage() {
         /* ── 3. Depots ── */
         const { data: depotsRaw, error: depErr } = await supabase
           .from("depots")
-          .select("id, nom")
+          .select("id, nom, emplacement")
           .eq("is_deleted", false)
           .eq("is_active", true);
 
@@ -990,8 +1055,28 @@ function PosPage() {
 
         if (!alive) return;
 
-        const selectedDepotKey = normalizeDepotName(selectedDepot);
-        const scopedDepotKeys = splitDepotList(userEmplacement).map(normalizeDepotName);
+        const allStockDepotNames = uniqueNames(
+          (articlesRaw || []).flatMap((row) => {
+            const stocksArr = Array.isArray((row as Row).stocks) ? ((row as Row).stocks as Row[]) : [];
+            return stocksArr.map((stock) => String(stock.depot_nom ?? "").trim());
+          })
+        );
+
+        const depotNames = uniqueNames([
+          ...(Array.isArray(depotsRaw)
+            ? depotsRaw.flatMap((depot) => [
+                String((depot as Row).nom ?? ""),
+                String((depot as Row).emplacement ?? ""),
+              ])
+            : []),
+          ...allStockDepotNames,
+        ]);
+
+        const resolvedSelectedDepot = findBestDepotMatch(selectedDepot, depotNames) || selectedDepot;
+        const selectedDepotKey = normalizeDepotName(resolvedSelectedDepot);
+        const scopedDepotKeys = uniqueNames(
+          splitDepotList(userEmplacement).map((depot) => findBestDepotMatch(depot, depotNames) || depot)
+        ).map(normalizeDepotName);
 
         // Process articles with the current depot scope.
         if (!artErr && articlesRaw && articlesRaw.length > 0) {
@@ -1017,7 +1102,28 @@ function PosPage() {
           }).filter((a) => !!a.id && a.id !== 0 && a.stock_total > 0); // Only show articles with stock in vendor's depot
           
           console.log(`✅ Articles fetched: ${mapped.length} (filtered for depot: ${userEmplacement})`);
-          setArticles(mapped);
+          const fallbackDepot = findBestDepotMatch(resolvedSelectedDepot, allStockDepotNames) || allStockDepotNames[0] || "";
+          const fallbackArticles =
+            mapped.length === 0 && isAdmin
+              ? articlesRaw
+                  .map((row) => {
+                    const r = row as Row;
+                    const stocksArr = Array.isArray(r.stocks) ? r.stocks : [];
+                    const stockTotal = stocksArr.reduce(
+                      (sum: number, s: Record<string, unknown>) => sum + toNumber(s.quantite),
+                      0
+                    );
+                    return buildArticle({ ...r, stocks: stocksArr, stock_total: stockTotal });
+                  })
+                  .filter((a) => !!a.id && a.id !== 0 && a.stock_total > 0)
+              : mapped;
+
+          console.log(`POS visible articles: ${fallbackArticles.length} for depot ${resolvedSelectedDepot || userEmplacement || "all"}`);
+          setArticles(fallbackArticles);
+
+          if (mapped.length === 0 && isAdmin && fallbackDepot && fallbackDepot !== selectedDepot) {
+            setSelectedDepot(fallbackDepot);
+          }
         } else {
           setArticles([]);
           if (artErr) console.warn("Articles load error:", artErr.message);
@@ -1032,12 +1138,13 @@ function PosPage() {
         }
 
         // Process depots
-        if (!depErr && depotsRaw && depotsRaw.length > 0) {
-          const uniqueNames = depotsRaw.map((d) => String((d as Row).nom)).filter(Boolean);
-          setDepots(uniqueNames.map((name, i) => ({ id: i + 1, nom_depot: name })));
+        if (!depErr && depotNames.length > 0) {
+          setDepots(depotNames.map((name, i) => ({ id: i + 1, nom_depot: name })));
           
-          if (!selectedDepot && uniqueNames.length > 0) {
-             setSelectedDepot(uniqueNames[0]);
+          if (!selectedDepot && depotNames.length > 0) {
+             setSelectedDepot(depotNames[0]);
+          } else if (resolvedSelectedDepot && resolvedSelectedDepot !== selectedDepot) {
+             setSelectedDepot(resolvedSelectedDepot);
           }
         }
 
@@ -1069,7 +1176,7 @@ function PosPage() {
 
   const addItem = useCallback((article: Article) => {
     // Inventory Guard Check
-    const available = article.depot_stocks?.[normalizeDepotName(selectedDepot)] || 0;
+    const available = getAvailableArticleStock(article, selectedDepot);
     
     setCart((prev) => {
       const existing = prev.find((item) => item.id === article.id);
@@ -1078,6 +1185,7 @@ function PosPage() {
       if (newQty > available) {
         setError(`⚠️ Stock insuffisant pour "${article.designation}" (Disponible: ${available})`);
         setTimeout(() => setError(null), 3000);
+        return prev;
       }
 
       if (existing) {
@@ -1098,7 +1206,7 @@ function PosPage() {
   const updateQuantity = useCallback((id: string | number, qty: number) => {
     const art = articles.find(a => a.id === id);
     if (art) {
-        const available = art.depot_stocks?.[normalizeDepotName(selectedDepot)] || 0;
+        const available = getAvailableArticleStock(art, selectedDepot);
         if (qty > available) {
           setError(`⚠️ Limite de stock atteinte (${available} disponibles)`);
           setTimeout(() => setError(null), 3000);
