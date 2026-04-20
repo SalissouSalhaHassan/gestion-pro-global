@@ -1154,6 +1154,7 @@ function PosPage() {
           numero?: string, 
           alerts?: { designation: string, stock_restant: number }[] 
         };
+        invoice_id?: string | number;
       };
 
       if (!response.ok || !payload.ok) {
@@ -1174,15 +1175,24 @@ function PosPage() {
       clearCart();
       
       // TRIGGER PRINT PREVIEW
-      let printId = null;
-      if (payload.sale?.invoice_id || payload.sale?.id) {
-        printId = payload.sale.invoice_id || payload.sale.id;
-        setPrintInvoiceId(printId ?? null);
-        localStorage.setItem("last_invoice_id", String(printId));
+      // Check multiple possible locations for invoice_id (robustness)
+      let printId = payload.invoice_id || payload.sale?.invoice_id || payload.sale?.id;
+      
+      if (printId) {
+        console.log("🖨️ Setting printInvoiceId to:", printId);
+        // Add small delay to ensure state updates properly
+        setTimeout(() => {
+          setPrintInvoiceId(printId);
+          localStorage.setItem("last_invoice_id", String(printId));
+        }, 100);
       } else if (editInvoiceId) {
-        printId = editInvoiceId;
-        setPrintInvoiceId(editInvoiceId);
-        localStorage.setItem("last_invoice_id", String(editInvoiceId));
+        console.log("🖨️ Setting printInvoiceId (edit mode) to:", editInvoiceId);
+        setTimeout(() => {
+          setPrintInvoiceId(editInvoiceId);
+          localStorage.setItem("last_invoice_id", String(editInvoiceId));
+        }, 100);
+      } else {
+        console.warn("⚠️ No invoice_id found in response:", payload);
       }
       
       setSuccess(
@@ -1192,7 +1202,7 @@ function PosPage() {
         setStockAlerts(payload.sale.alerts);
       }
 
-      setTimeout(() => setSuccess(null), 5000);
+      setTimeout(() => setSuccess(null), 7000);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Erreur pendant l'encaissement."
@@ -1794,6 +1804,7 @@ function PosPage() {
 
       {printInvoiceId && (
         <InvoiceModal 
+          key={`invoice-${printInvoiceId}`}
           invoiceId={printInvoiceId} 
           onClose={() => setPrintInvoiceId(null)} 
         />

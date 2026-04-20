@@ -33,6 +33,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
   const [company, setCompany] = useState<any>(null);
   const [mode, setMode] = useState<'Invoice' | 'BL'>('Invoice');
   const [printFormat, setPrintFormat] = useState<'A4' | 'A5' | 'Ticket'>('A4');
+  const [error, setError] = useState<string | null>(null);
 
   const numberToWordsFr = (total: number) => {
     if (total === 0) return "zéro";
@@ -71,6 +72,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
     async function fetchData() {
       try {
         setLoading(true);
+        console.log("🔍 Fetching invoice data for ID:", invoiceId);
         
         // 1. Fetch Company Info
         const { data: comp } = await supabase
@@ -81,11 +83,16 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
         setCompany(comp);
 
         // 2. Fetch Invoice Header
-        const { data: inv } = await supabase
+        const { data: inv, error: invErr } = await supabase
           .from("factures")
           .select("*")
           .eq("id", invoiceId)
           .single();
+        
+        if (invErr) throw new Error(`Erreur facture: ${invErr.message}`);
+        if (!inv) throw new Error(`Facture ID ${invoiceId} introuvable`);
+        
+        console.log("✅ Invoice loaded:", inv);
         setInvoice(inv);
 
         // 3. Fetch Items
@@ -103,8 +110,9 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
           .order("date_operation", { ascending: true });
         setPayments(pays || []);
 
-      } catch (err) {
-        console.error("Error fetching invoice details:", err);
+      } catch (err: any) {
+        console.error("❌ Error fetching invoice details:", err);
+        setError(err.message || "Erreur lors du chargement de la facture");
       } finally {
         setLoading(false);
       }
@@ -123,6 +131,23 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
         <div className="bg-white p-8 rounded-3xl shadow-xl flex flex-col items-center">
           <Loader2 className="animate-spin text-indigo-600 mb-4" size={40} />
           <p className="font-bold text-slate-600">Préparation...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+        <div className="bg-white p-8 rounded-3xl shadow-xl flex flex-col items-center max-w-md">
+          <X className="text-red-500 mb-4" size={40} />
+          <p className="font-bold text-slate-800 text-center mb-4">{error}</p>
+          <button 
+            onClick={onClose}
+            className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-all"
+          >
+            Fermer
+          </button>
         </div>
       </div>
     );
