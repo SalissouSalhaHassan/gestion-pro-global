@@ -80,32 +80,16 @@ export default function InvoicesPage() {
     if (currentUsername !== null && typeof currentUsername !== 'undefined') {
       loadInvoices();
     }
-  }, [refreshKey, currentUsername, isAdmin]);
+  }, [refreshKey, currentUsername, currentUserId, isAdmin]);
 
   const loadInvoices = async () => {
     try {
       setLoading(true);
-      let query = supabase
-        .from("factures")
-        .select(`
-          id, bl_number, date_facture, total_ttc, montant_paye, mode_paiement, client_id, vendeur,
-          clients ( nom )
-        `)
-        .eq("is_deleted", false);
       
-      // FILTER: Only show invoices for this vendor if not privileged (admin/manager)
-      if (!isAdmin && currentUserId) {
-        query = query.eq("user_id", currentUserId);
-        console.log(`📋 Filtering invoices for user_id: ${currentUserId}`);
-      } else if (isAdmin) {
-        console.log("👨‍💼 Privileged User (Admin/Manager): Showing all invoices");
-      }
+      const response = await fetch('/api/invoices');
+      if (!response.ok) throw new Error('Erreur lors du chargement des factures');
       
-      const { data, error } = await query
-        .order("date_facture", { ascending: false })
-        .limit(200);
-
-      if (error) throw error;
+      const data = await response.json();
 
       if (data) {
         const mapped: Invoice[] = data.map((r: any) => ({
@@ -122,7 +106,7 @@ export default function InvoicesPage() {
           emplacement: r.emplacement || "N/A"
         }));
         setInvoices(mapped);
-        console.log(`✅ Loaded ${mapped.length} invoices`);
+        console.log(`✅ Loaded ${mapped.length} invoices via API`);
         
         // Extract unique vendors and depots for filters
         const vendors = [...new Set(mapped.map(inv => inv.vendeur).filter(Boolean))] as string[];

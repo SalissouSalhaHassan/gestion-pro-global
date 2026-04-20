@@ -36,7 +36,10 @@ export class InvoiceService {
     let query = this.supabase
       .from('factures')
       .select('*, clients(nom)')
-      .order('created_at', { ascending: false });
+      .eq('is_deleted', false)
+      .order('date_facture', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(200);
 
     if (userId) {
       query = query.eq('user_id', userId);
