@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileText, Search, Plus, ArrowUpDown, Banknote, Calendar, BadgeCheck, Loader2, Eye, Printer as PrintIcon, Edit3, Trash2, CreditCard, BarChart3 } from "lucide-react";
+import { FileText, Search, Plus, ArrowUpDown, Banknote, Calendar, BadgeCheck, Loader2, Eye, Printer as PrintIcon, Edit3, Trash2, CreditCard, BarChart3, MapPin } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import InvoiceModal from "./InvoiceModal";
@@ -523,6 +523,14 @@ export default function InvoicesPage() {
                 </th>
                 <th 
                   className="cursor-pointer px-6 py-5 hover:bg-slate-200/50 transition-colors whitespace-nowrap"
+                  onClick={() => toggleSort("emplacement")}
+                >
+                  <div className="flex items-center gap-2">
+                    Emplacement <ArrowUpDown size={14} className="text-slate-400" />
+                  </div>
+                </th>
+                <th 
+                  className="cursor-pointer px-6 py-5 hover:bg-slate-200/50 transition-colors whitespace-nowrap"
                   onClick={() => toggleSort("client_nom")}
                 >
                   <div className="flex items-center gap-2">
@@ -549,6 +557,7 @@ export default function InvoicesPage() {
                   <tr key={i} className="border-b border-slate-100 animate-pulse">
                     <td className="px-6 py-6"><div className="h-4 w-20 bg-slate-200 rounded"></div></td>
                     <td className="px-6 py-6"><div className="h-4 w-24 bg-slate-200 rounded"></div></td>
+                    <td className="px-6 py-6"><div className="h-4 w-24 bg-slate-200 rounded"></div></td>
                     <td className="px-6 py-6"><div className="h-4 w-32 bg-slate-200 rounded"></div></td>
                     <td className="px-6 py-6"><div className="h-6 w-20 bg-slate-200 rounded-full mx-auto"></div></td>
                     <td className="px-6 py-6"><div className="h-4 w-24 bg-slate-200 rounded ml-auto"></div></td>
@@ -558,7 +567,7 @@ export default function InvoicesPage() {
                 ))
               ) : filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-24 text-center">
+                  <td colSpan={8} className="py-24 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-400 max-w-sm mx-auto">
                       <div className="h-16 w-16 bg-slate-50 flex items-center justify-center rounded-2xl border border-slate-100 mb-4">
                         <FileText className="h-8 w-8 text-slate-400" />
@@ -594,6 +603,12 @@ export default function InvoicesPage() {
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap text-slate-500 font-medium">
                         {formatDate(inv.date_facture)}
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap text-slate-600 font-bold">
+                        <div className="flex items-center gap-1.5">
+                          <MapPin size={14} className="text-slate-400" />
+                          {inv.emplacement || "N/A"}
+                        </div>
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap font-bold text-slate-700">
                         {inv.client_nom}

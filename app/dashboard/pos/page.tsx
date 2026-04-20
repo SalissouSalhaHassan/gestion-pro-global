@@ -1323,7 +1323,7 @@ function PosPage() {
           depotName: selectedDepot || "",
           moyenReglement: paymentMethod,
           versement: Number(receivedAmount), // Added versement
-          emplacement: editInvoiceId ? "Modification POS" : "Point de vente",
+          emplacement: selectedDepot || "Point de vente",
           items: cart.map((item) => ({
             id: item.id,
             quantite: item.quantite,

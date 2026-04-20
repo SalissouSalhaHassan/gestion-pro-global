@@ -260,7 +260,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                 <span className="font-black">Vendeur:</span> <span>{invoice.vendeur || "Admin"}</span>
                 {mode === 'Invoice' && (
                   <>
-                    <span className="font-black">Lieu:</span> <span>{invoice.emplacement || "Point de vente"}</span>
+                    <span className="font-black">Point de Vente:</span> <span>{invoice.emplacement || "N/A"}</span>
                   </>
                 )}
               </div>
