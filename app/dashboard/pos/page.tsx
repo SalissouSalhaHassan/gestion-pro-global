@@ -758,6 +758,14 @@ function PosPage() {
   const [editInvoiceId, setEditInvoiceId] = useState<string | number | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(false);
 
+  // Monitor printInvoiceId changes
+  useEffect(() => {
+    console.log("📢 printInvoiceId state changed to:", printInvoiceId, "Type:", typeof printInvoiceId);
+    if (printInvoiceId) {
+      console.log("✅ InvoiceModal SHOULD BE VISIBLE NOW with ID:", printInvoiceId);
+    }
+  }, [printInvoiceId]);
+
   // Load Invoice Data if edit mode
   useEffect(() => {
     const invId = searchParams.get("invoiceId");
@@ -935,17 +943,27 @@ function PosPage() {
 
         if (!alive) return;
 
-        // Process articles
+        // Process articles - FILTER BY VENDOR'S DEPOT
         if (!artErr && articlesRaw && articlesRaw.length > 0) {
           const mapped = articlesRaw.map((row) => {
             const r = row as Row;
             const stocksArr = Array.isArray(r.stocks) ? r.stocks : [];
-            const stockTotal = stocksArr.reduce(
+            
+            // FILTER: Only include stock for this vendor's depot
+            const vendorDepotStocks = stocksArr.filter(s => {
+              const depotName = String(s.depot_nom || "").toLowerCase().trim();
+              const userDepot = (userEmplacement || "").toLowerCase().trim();
+              return depotName === userDepot;
+            });
+            
+            const stockTotal = vendorDepotStocks.reduce(
               (sum: number, s: Record<string, unknown>) => sum + toNumber(s.quantite),
               0
             );
-            return buildArticle({ ...r, stocks: stocksArr, stock_total: stockTotal });
-          }).filter((a) => !!a.id && a.id !== 0);
+            return buildArticle({ ...r, stocks: vendorDepotStocks, stock_total: stockTotal });
+          }).filter((a) => !!a.id && a.id !== 0 && a.stock_total > 0); // Only show articles with stock in vendor's depot
+          
+          console.log(`✅ Articles fetched: ${mapped.length} (filtered for depot: ${userEmplacement})`);
           setArticles(mapped);
         } else {
           setArticles([]);
@@ -1375,16 +1393,19 @@ function PosPage() {
               <PackageSearch size={16} color="#fff" />
               <select
                 value={selectedDepot}
-                onChange={(e) => setSelectedDepot(e.target.value)}
+                onChange={(e) => isAdmin && setSelectedDepot(e.target.value)}
+                disabled={!isAdmin}
                 style={{
                   background: "transparent",
                   border: "none",
                   color: "#fff",
                   fontWeight: 700,
                   outline: "none",
-                  cursor: "pointer",
+                  cursor: isAdmin ? "pointer" : "not-allowed",
                   fontSize: 14,
+                  opacity: !isAdmin ? 0.7 : 1,
                 }}
+                title={!isAdmin ? `Dépôt spécialisé: ${userEmplacement}` : "Sélectionner le dépôt"}
               >
                 {!isAdmin && userEmplacement ? (
                   userEmplacement.split(",").map(dep => dep.trim()).map(dep => (
@@ -1401,6 +1422,11 @@ function PosPage() {
             <div style={S.headerCashier}>
               <UserRound size={18} />
               <span>Caissier: {cashierName}</span>
+              {!isAdmin && userEmplacement && (
+                <span style={{ marginLeft: "12px", fontSize: "12px", opacity: 0.8 }}>
+                  • Dépôt: <strong>{userEmplacement}</strong> ({articles.length} articles)
+                </span>
+              )}
             </div>
           </div>
         </header>

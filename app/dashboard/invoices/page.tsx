@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileText, Search, Plus, ArrowUpDown, Banknote, Calendar, BadgeCheck, Loader2, Eye, Printer as PrintIcon, Edit3, Trash2, CreditCard } from "lucide-react";
+import { FileText, Search, Plus, ArrowUpDown, Banknote, Calendar, BadgeCheck, Loader2, Eye, Printer as PrintIcon, Edit3, Trash2, CreditCard, BarChart3 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import InvoiceModal from "./InvoiceModal";
@@ -19,6 +19,8 @@ type Invoice = {
   moyen_reglement: string | null;
   montant_restant: number;
   client_id?: number | string | null;
+  vendeur?: string;
+  emplacement?: string;
 };
 
 const supabase = createClient();
@@ -35,26 +37,65 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [sortField, setSortField] = useState<keyof Invoice>("date_facture");
-  const [sortAsc, setSortAsc] = useState(false); // default desc for dates
+  const [sortAsc, setSortAsc] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | number | null>(null);
   const [editInvoiceId, setEditInvoiceId] = useState<string | number | null>(null);
   const [paymentInvoice, setPaymentInvoice] = useState<any | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [currentUsername, setCurrentUsername] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Advanced Filters
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [filterVendor, setFilterVendor] = useState<string | null>(null);
+  const [filterDepot, setFilterDepot] = useState<string | null>(null);
+  const [filterDateStart, setFilterDateStart] = useState<string>("");
+  const [filterDateEnd, setFilterDateEnd] = useState<string>("");
+  const [vendorsList, setVendorsList] = useState<string[]>([]);
+  const [depotsList, setDepotsList] = useState<string[]>([]);
+
+  // Load session data to get current user
+  useEffect(() => {
+    try {
+      const cookies = document.cookie.split("; ");
+      const session = cookies.find(c => c.startsWith("gp_session="));
+      if (session) {
+        const decoded = decodeURIComponent(session.split("=")[1]);
+        const data = JSON.parse(decoded);
+        setCurrentUsername(data.username || null);
+        setIsAdmin(data.admin === 'oui' || data.admin === true || data.role === 'admin');
+      }
+    } catch (e) {
+      console.error("Failed to read session data:", e);
+    }
+  }, []);
 
   useEffect(() => {
-    loadInvoices();
-  }, [refreshKey]);
+    if (currentUsername !== null && typeof currentUsername !== 'undefined') {
+      loadInvoices();
+    }
+  }, [refreshKey, currentUsername, isAdmin]);
 
   const loadInvoices = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from("factures")
         .select(`
-          id, bl_number, date_facture, total_ttc, montant_paye, mode_paiement, client_id,
+          id, bl_number, date_facture, total_ttc, montant_paye, mode_paiement, client_id, vendeur,
           clients ( nom )
         `)
-        .eq("is_deleted", false)
+        .eq("is_deleted", false);
+      
+      // FILTER: Only show invoices for this vendor if not admin
+      if (!isAdmin && currentUsername) {
+        query = query.eq("vendeur", currentUsername);
+        console.log(`📋 Filtering invoices for vendor: ${currentUsername}`);
+      } else if (isAdmin) {
+        console.log("👨‍💼 Admin: Showing all invoices");
+      }
+      
+      const { data, error } = await query
         .order("date_facture", { ascending: false })
         .limit(200);
 
@@ -71,8 +112,17 @@ export default function InvoicesPage() {
           moyen_reglement: r.mode_paiement || null,
           montant_restant: Math.max(0, (Number(r.total_ttc) || 0) - (Number(r.montant_paye) || 0)),
           client_id: r.client_id,
+          vendeur: r.vendeur || "N/A",
+          emplacement: r.emplacement || "N/A"
         }));
         setInvoices(mapped);
+        console.log(`✅ Loaded ${mapped.length} invoices`);
+        
+        // Extract unique vendors and depots for filters
+        const vendors = [...new Set(mapped.map(inv => inv.vendeur).filter(Boolean))] as string[];
+        const depots = [...new Set(mapped.map(inv => inv.emplacement).filter(Boolean))] as string[];
+        setVendorsList(vendors);
+        setDepotsList(depots);
       }
     } catch (err) {
       console.error("Failed to load invoices", err);
@@ -110,6 +160,8 @@ export default function InvoicesPage() {
 
   const { filteredInvoices, totalRevenue, pendingRevenue } = useMemo(() => {
     let filtered = invoices;
+    
+    // Text Search Filter
     if (query) {
       const q = query.toLowerCase();
       filtered = invoices.filter(
@@ -118,6 +170,23 @@ export default function InvoicesPage() {
           i.client_nom.toLowerCase().includes(q) ||
           (i.moyen_reglement && i.moyen_reglement.toLowerCase().includes(q))
       );
+    }
+    
+    // Advanced Filters
+    if (filterVendor) {
+      filtered = filtered.filter(i => i.vendeur === filterVendor);
+    }
+    if (filterDepot) {
+      filtered = filtered.filter(i => i.emplacement === filterDepot);
+    }
+    if (filterDateStart) {
+      const startDate = new Date(filterDateStart);
+      filtered = filtered.filter(i => new Date(i.date_facture) >= startDate);
+    }
+    if (filterDateEnd) {
+      const endDate = new Date(filterDateEnd);
+      endDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(i => new Date(i.date_facture) <= endDate);
     }
 
     filtered.sort((a, b) => {
@@ -205,6 +274,128 @@ export default function InvoicesPage() {
         ))}
       </div>
 
+      {/* Vendor Reports Section */}
+      {isAdmin && (
+        <div className="mt-12 p-8 rounded-[32px] border border-purple-200/40 bg-gradient-to-br from-purple-50/40 via-pink-50/20 to-transparent backdrop-blur-2xl">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-3 rounded-2xl bg-purple-600 text-white">
+              <BarChart3 size={24} />
+            </div>
+            <h2 className="text-2xl font-black text-slate-800">📊 Rapport par Vendeur</h2>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-purple-100/50 border-b-2 border-purple-200">
+                <tr>
+                  <th className="px-6 py-3 text-left font-black text-slate-700">Vendeur</th>
+                  <th className="px-6 py-3 text-center font-black text-slate-700">Factures</th>
+                  <th className="px-6 py-3 text-right font-black text-slate-700">CA Total</th>
+                  <th className="px-6 py-3 text-right font-black text-slate-700">Collecté</th>
+                  <th className="px-6 py-3 text-right font-black text-slate-700">En Attente</th>
+                  <th className="px-6 py-3 text-center font-black text-slate-700">Taux %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vendorsList.map(vendor => {
+                  const vendorInvoices = invoices.filter(inv => inv.vendeur === vendor);
+                  const vendorTotal = vendorInvoices.reduce((sum, inv) => sum + inv.total_ttc, 0);
+                  const vendorPaid = vendorInvoices.reduce((sum, inv) => sum + inv.montant_paye, 0);
+                  const vendorPending = vendorInvoices.reduce((sum, inv) => sum + inv.montant_restant, 0);
+                  const collectionRate = vendorTotal > 0 ? ((vendorPaid / vendorTotal) * 100).toFixed(1) : 0;
+
+                  return (
+                    <tr key={vendor} className="border-b border-slate-100 hover:bg-purple-50/50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-slate-800">{vendor}</td>
+                      <td className="px-6 py-4 text-center font-bold text-indigo-600 bg-indigo-50/50">{vendorInvoices.length}</td>
+                      <td className="px-6 py-4 text-right font-bold text-slate-700">
+                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0 }).format(vendorTotal)} F CFA
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold text-green-600 bg-green-50/50">
+                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0 }).format(vendorPaid)} F CFA
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold text-orange-600 bg-orange-50/50">
+                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0 }).format(vendorPending)} F CFA
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`px-3 py-1 rounded-full text-xs font-black text-white ${
+                          Number(collectionRate) >= 80 ? 'bg-green-500' : 
+                          Number(collectionRate) >= 50 ? 'bg-yellow-500' : 
+                          'bg-red-500'
+                        }`}>
+                          {collectionRate}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Depot Reports Section */}
+      {isAdmin && (
+        <div className="mt-8 p-8 rounded-[32px] border border-blue-200/40 bg-gradient-to-br from-blue-50/40 via-cyan-50/20 to-transparent backdrop-blur-2xl">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-3 rounded-2xl bg-blue-600 text-white">
+              <BarChart3 size={24} />
+            </div>
+            <h2 className="text-2xl font-black text-slate-800">📦 Rapport par Dépôt</h2>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-blue-100/50 border-b-2 border-blue-200">
+                <tr>
+                  <th className="px-6 py-3 text-left font-black text-slate-700">Dépôt</th>
+                  <th className="px-6 py-3 text-center font-black text-slate-700">Factures</th>
+                  <th className="px-6 py-3 text-right font-black text-slate-700">CA Total</th>
+                  <th className="px-6 py-3 text-right font-black text-slate-700">Collecté</th>
+                  <th className="px-6 py-3 text-right font-black text-slate-700">En Attente</th>
+                  <th className="px-6 py-3 text-center font-black text-slate-700">Taux %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {depotsList.map(depot => {
+                  const depotInvoices = invoices.filter(inv => inv.emplacement === depot);
+                  const depotTotal = depotInvoices.reduce((sum, inv) => sum + inv.total_ttc, 0);
+                  const depotPaid = depotInvoices.reduce((sum, inv) => sum + inv.montant_paye, 0);
+                  const depotPending = depotInvoices.reduce((sum, inv) => sum + inv.montant_restant, 0);
+                  const depotCollectionRate = depotTotal > 0 ? ((depotPaid / depotTotal) * 100).toFixed(1) : 0;
+
+                  return (
+                    <tr key={depot} className="border-b border-slate-100 hover:bg-blue-50/50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-slate-800">{depot}</td>
+                      <td className="px-6 py-4 text-center font-bold text-cyan-600 bg-cyan-50/50">{depotInvoices.length}</td>
+                      <td className="px-6 py-4 text-right font-bold text-slate-700">
+                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0 }).format(depotTotal)} F CFA
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold text-green-600 bg-green-50/50">
+                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0 }).format(depotPaid)} F CFA
+                      </td>
+                      <td className="px-6 py-4 text-right font-bold text-orange-600 bg-orange-50/50">
+                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0 }).format(depotPending)} F CFA
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`px-3 py-1 rounded-full text-xs font-black text-white ${
+                          Number(depotCollectionRate) >= 80 ? 'bg-green-500' : 
+                          Number(depotCollectionRate) >= 50 ? 'bg-yellow-500' : 
+                          'bg-red-500'
+                        }`}>
+                          {depotCollectionRate}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Toolbar (Search & Counters) */}
       <div className="p-2 rounded-[28px] shadow-xl shadow-slate-200/50 flex flex-col sm:flex-row justify-between items-center gap-4 border border-white/60 bg-white/40 backdrop-blur-xl">
         <div className="relative w-full">
@@ -222,8 +413,95 @@ export default function InvoicesPage() {
         
         <div className="hidden sm:flex items-center gap-2 px-6 flex-shrink-0 text-sm font-black text-indigo-600 bg-indigo-500/5 rounded-2xl py-4 border border-indigo-500/10 whitespace-nowrap">
           <span>{filteredInvoices.length} facture(s) affichée(s)</span>
+          {!isAdmin && currentUsername && (
+            <span className="ml-2 text-xs font-medium text-slate-500">
+              • Vendeur: <span className="font-bold text-indigo-700">{currentUsername}</span>
+            </span>
+          )}
+          <button
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            className="ml-4 px-4 py-1 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-200"
+          >
+            {showAdvancedFilters ? "Masquer" : "Filtres avancés"}
+          </button>
         </div>
       </div>
+
+      {/* Advanced Filters */}
+      {showAdvancedFilters && (
+        <div className="p-4 rounded-[28px] shadow-xl shadow-slate-200/50 border border-indigo-200 bg-indigo-50/40 backdrop-blur-xl grid grid-cols-1 sm:grid-cols-4 gap-4">
+          {/* Vendor Filter */}
+          {isAdmin && (
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-2">Vendeur</label>
+              <select
+                value={filterVendor || ""}
+                onChange={(e) => setFilterVendor(e.target.value || null)}
+                className="w-full px-3 py-2 border border-indigo-200 rounded-xl bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              >
+                <option value="">Tous les vendeurs</option>
+                {vendorsList.map(vendor => (
+                  <option key={vendor} value={vendor}>{vendor}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Depot Filter */}
+          {isAdmin && (
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-2">Dépôt</label>
+              <select
+                value={filterDepot || ""}
+                onChange={(e) => setFilterDepot(e.target.value || null)}
+                className="w-full px-3 py-2 border border-indigo-200 rounded-xl bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              >
+                <option value="">Tous les dépôts</option>
+                {depotsList.map(depot => (
+                  <option key={depot} value={depot}>{depot}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Date Start Filter */}
+          <div>
+            <label className="block text-xs font-bold text-slate-600 mb-2">Du</label>
+            <input
+              type="date"
+              value={filterDateStart}
+              onChange={(e) => setFilterDateStart(e.target.value)}
+              className="w-full px-3 py-2 border border-indigo-200 rounded-xl bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+          </div>
+          
+          {/* Date End Filter */}
+          <div>
+            <label className="block text-xs font-bold text-slate-600 mb-2">Au</label>
+            <input
+              type="date"
+              value={filterDateEnd}
+              onChange={(e) => setFilterDateEnd(e.target.value)}
+              className="w-full px-3 py-2 border border-indigo-200 rounded-xl bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+          </div>
+          
+          {/* Clear Filters Button */}
+          <div className="flex items-end">
+            <button
+              onClick={() => {
+                setFilterVendor(null);
+                setFilterDepot(null);
+                setFilterDateStart("");
+                setFilterDateEnd("");
+              }}
+              className="w-full px-4 py-2 bg-red-500 text-white text-xs font-bold rounded-xl hover:bg-red-600 transition-colors"
+            >
+              Réinitialiser
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Table Card */}
       <div className="rounded-[48px] border border-white/80 bg-white/60 backdrop-blur-3xl shadow-2xl shadow-indigo-100/40 flex flex-col overflow-hidden transition-all duration-300">
