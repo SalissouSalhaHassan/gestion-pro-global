@@ -18,11 +18,14 @@ import {
   PackageSearch,
   Plus,
   Printer,
+  Save,
   Search,
   Smartphone,
   ShoppingCart,
   Trash2,
   UserRound,
+  UserPlus,
+  UserCircle2,
   X,
   Loader2,
   ArrowLeft,
@@ -863,6 +866,11 @@ function PosPage() {
   const [printInvoiceId, setPrintInvoiceId] = useState<string | number | null>(null);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickAddForm, setQuickAddForm] = useState({ designation: "", price: "", quantity: "1" });
+  
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+  const [clientSaving, setClientSaving] = useState(false);
+  const [clientFormData, setClientFormData] = useState({ nom: "", tel: "", ref_client: "" });
+
   const [clientAdvances, setClientAdvances] = useState<any[]>([]);
   const [totalAdvanceBalance, setTotalAdvanceBalance] = useState(0);
 
@@ -1454,6 +1462,53 @@ function PosPage() {
     setTimeout(() => setSuccess(null), 2000);
   };
 
+  const handleAddClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clientFormData.nom) return;
+    setClientSaving(true);
+    try {
+      let finalRef = clientFormData.ref_client;
+      if (!finalRef) {
+        const year = new Date().getFullYear();
+        const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+        finalRef = `CL-${year}-${randomPart}`;
+      }
+
+      const { data, error } = await supabase
+        .from("clients")
+        .insert({
+          nom: clientFormData.nom,
+          tel: clientFormData.tel || null,
+          ref_client: finalRef,
+          credit_facture: 0,
+          is_deleted: false
+        })
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      if (data) {
+        const newClient = buildClient(data);
+        setClients(prev => [newClient, ...prev]);
+        setSelectedClientId(newClient.id);
+      }
+      
+      setSuccess("✅ Client ajouté avec succès !");
+      setIsClientModalOpen(false);
+      setClientFormData({ nom: "", tel: "", ref_client: "" });
+    } catch (err) {
+      console.error(err);
+      setError("❌ Erreur lors de l'ajout du client.");
+    } finally {
+      setClientSaving(false);
+      setTimeout(() => {
+        setSuccess(null);
+        setError(null);
+      }, 3000);
+    }
+  };
+
   const handleFermerCaisse = () => {
     if (cart.length > 0) {
       if (!confirm("Il y a des articles dans le panier. Voulez-vous vraiment fermer la caisse ?")) {
@@ -1852,18 +1907,40 @@ function PosPage() {
                     </div>
                   )}
                 </div>
-                <select 
-                  style={S.customerSelect}
-                  value={selectedClientId}
-                  onChange={(e) => setSelectedClientId(e.target.value)}
-                >
-                  <option value="">Sélectionner un client...</option>
-                  {clients.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.nom} {c.tel ? `(${c.tel})` : ""}
-                    </option>
-                  ))}
-                </select>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select 
+                    style={{ ...S.customerSelect, flex: 1 }}
+                    value={selectedClientId}
+                    onChange={(e) => setSelectedClientId(e.target.value)}
+                  >
+                    <option value="">Sélectionner un client...</option>
+                    {clients.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.nom} {c.tel ? `(${c.tel})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button 
+                    onClick={() => setIsClientModalOpen(true)}
+                    style={{
+                      background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 12,
+                      width: 42,
+                      height: 42,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      boxShadow: "0 4px 12px rgba(79, 70, 229, 0.2)",
+                      flexShrink: 0
+                    }}
+                    title="Ajouter un nouveau client"
+                  >
+                    <UserPlus size={20} />
+                  </button>
+                </div>
               </div>
 
               <div style={{ height: 1, background: "#dce1e7", margin: "4px 0" }} />
@@ -2036,6 +2113,85 @@ function PosPage() {
           invoiceId={printInvoiceId} 
           onClose={() => setPrintInvoiceId(null)} 
         />
+      )}
+
+      {/* ── New Client Modal ── */}
+      {isClientModalOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsClientModalOpen(false)}></div>
+          <div className="relative bg-white rounded-[24px] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="border-b border-slate-100 bg-[#F8FAFC] px-6 py-5 flex items-center justify-between">
+              <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-3">
+                <span className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                  <UserCircle2 size={24} strokeWidth={2.5} />
+                </span>
+                Nouveau Client
+              </h2>
+              <button onClick={() => setIsClientModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
+                <X size={20} className="stroke-2" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddClient} className="p-6 space-y-5">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Nom du Client <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  required
+                  value={clientFormData.nom}
+                  onChange={(e) => setClientFormData({...clientFormData, nom: e.target.value})}
+                  className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                  style={{ background: "#F9FAFB", borderRadius: "12px", padding: "14px 16px", border: "1px solid transparent" }}
+                  placeholder="Ex: Entreprise ABC"
+                />
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">Téléphone</label>
+                  <input
+                    type="text"
+                    value={clientFormData.tel}
+                    onChange={(e) => setClientFormData({...clientFormData, tel: e.target.value})}
+                    className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                    style={{ background: "#F9FAFB", borderRadius: "12px", padding: "14px 16px", border: "1px solid transparent" }}
+                    placeholder="Ex: 0555..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">Référence</label>
+                  <input
+                    type="text"
+                    value={clientFormData.ref_client}
+                    onChange={(e) => setClientFormData({...clientFormData, ref_client: e.target.value})}
+                    className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                    style={{ background: "#F9FAFB", borderRadius: "12px", padding: "14px 16px", border: "1px solid transparent" }}
+                    placeholder="Auto-générée si vide"
+                  />
+                </div>
+              </div>
+              
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setIsClientModalOpen(false)}
+                  className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={clientSaving}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-70 disabled:hover:-translate-y-0"
+                  style={{ background: "linear-gradient(135deg, #2563EB, #1D4ED8)" }}
+                >
+                  {clientSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} strokeWidth={2.5} />}
+                  {clientSaving ? "Ajout..." : "Ajouter Client"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* ── Quick Add Modal ── */}
