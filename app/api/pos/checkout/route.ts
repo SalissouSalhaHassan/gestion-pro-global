@@ -327,8 +327,9 @@ export async function POST(request: Request) {
         p_invoice_id: Number(body.invoiceId),
         p_client_id: clientId,
         p_vendeur: user.username ?? "Caisse",
+        p_emplacement: body.emplacement ?? null,
         p_moyen_reglement: moyenReglement === "Avance" ? "Crédit" : moyenReglement,
-      p_depot_nom: effectiveDepotName,
+        p_depot_nom: effectiveDepotName,
         p_items: items,
         p_user_id_text: user.id,
       });
