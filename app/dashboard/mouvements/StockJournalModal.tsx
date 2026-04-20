@@ -22,11 +22,13 @@ export default function StockJournalModal({ filters, onClose }: StockJournalModa
   const [loading, setLoading] = useState(true);
   const [movements, setMovements] = useState<any[]>([]);
   const [company, setCompany] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
+        setError(null);
         
         // 1. Fetch Company Info
         const { data: comp } = await supabase
@@ -45,11 +47,13 @@ export default function StockJournalModal({ filters, onClose }: StockJournalModa
         
         const res = await fetch(url.toString());
         const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error || "Erreur de chargement du journal.");
+        }
         
         if (data && !Array.isArray(data)) {
           console.error("Modal Stock Movements API Error:", data);
-          setMovements([]);
-          return;
+          throw new Error(data?.error || "Erreur de chargement du journal.");
         }
         
         const normalized = Array.isArray(data) ? data : [];
@@ -61,6 +65,7 @@ export default function StockJournalModal({ filters, onClose }: StockJournalModa
 
       } catch (err) {
         console.error("Error fetching stock journal data:", err);
+        setError(err instanceof Error ? err.message : "Erreur de chargement du journal.");
       } finally {
         setLoading(false);
       }
@@ -108,6 +113,11 @@ export default function StockJournalModal({ filters, onClose }: StockJournalModa
       <div className="bg-white h-auto overflow-y-auto custom-scrollbar shadow-2xl print:shadow-none print:rounded-none print:w-full print:h-auto print:overflow-visible max-w-[280mm] w-full rounded-[32px]">
         
         <div id="printable-stock-journal" className="p-10 text-black font-outfit leading-tight border-[16px] border-slate-50 print:border-none">
+          {error && (
+            <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700 font-bold print:hidden">
+              {error}
+            </div>
+          )}
           
           {/* HEADER */}
           <div className="flex justify-between items-start border-b-2 border-slate-900 pb-8 mb-10">

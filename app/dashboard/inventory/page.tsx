@@ -73,6 +73,9 @@ export default function InventoryPage() {
 
       const res = await fetch(url.toString());
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Erreur de chargement du stock.");
+      }
       
       if (data.items) {
         const mappedItems: InventoryItem[] = data.items.map((i: any) => ({

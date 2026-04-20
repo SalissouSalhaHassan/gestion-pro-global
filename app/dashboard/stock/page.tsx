@@ -45,6 +45,7 @@ export default function StockDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeDepot, setActiveDepot] = useState("Tous");
   const [stats, setStats] = useState({ total: 0, low: 0, out: 0 });
+  const [error, setError] = useState<string | null>(null);
 
   // Modal States
   const [selectedItem, setSelectedItem] = useState<StockItem | null>(null);
@@ -54,20 +55,26 @@ export default function StockDashboard() {
 
   const fetchStock = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/stock?search=${searchTerm}`);
       const data = await res.json();
-      if (data.items) {
+      if (!res.ok) {
+        throw new Error(data?.error || "Erreur de chargement du stock.");
+      }
+      if (Array.isArray(data.items)) {
         setItems(data.items);
         setActiveDepot(data.depot);
         
-        // Calculate Stats
         const low = data.items.filter((i: any) => i.is_low).length;
         const out = data.items.filter((i: any) => i.is_out).length;
         setStats({ total: data.items.length, low, out });
       }
     } catch (error) {
       console.error("Error fetching stock:", error);
+      setError(error instanceof Error ? error.message : "Erreur de chargement du stock.");
+      setItems([]);
+      setStats({ total: 0, low: 0, out: 0 });
     } finally {
       setLoading(false);
     }
@@ -120,6 +127,12 @@ export default function StockDashboard() {
       </div>
 
       {/* ── STATS CARDS ── */}
+      {error && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700 font-semibold">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard 
           label="Total Articles" 

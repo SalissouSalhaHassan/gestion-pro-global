@@ -2,15 +2,30 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { getServerSession, isAdminOrManager, getAllowedDepots } from "@/lib/auth_helper";
 
+type StockRow = {
+  quantite?: number | string | null;
+  depot_nom?: string | null;
+};
+
+type ArticleRow = {
+  id: number;
+  reference: string;
+  designation: string;
+  qte_min: number | string | null;
+  unite: string | null;
+  image_path: string | null;
+  stocks?: StockRow[] | null;
+};
+
 export async function GET(request: Request) {
   const supabase = await createClient();
   const { searchParams } = new URL(request.url);
-  
+
   const search = searchParams.get("search");
   const categoryId = searchParams.get("categoryId");
   const lowStockOnly = searchParams.get("lowStock") === "true";
+  const requestedDepot = searchParams.get("depot");
 
-  // 1. Get current Authenticated User from custom session
   const user = await getServerSession();
   if (!user) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
@@ -19,8 +34,24 @@ export async function GET(request: Request) {
   const isAdmin = await isAdminOrManager(user);
   const userDepots = await getAllowedDepots(user);
   const primaryDepot = user.emplacement || "Tous";
+  const scopeDepots = isAdmin
+    ? []
+    : userDepots.length > 0
+      ? userDepots
+      : primaryDepot && primaryDepot !== "Tous"
+        ? [primaryDepot]
+        : [];
 
-  // 2. Build Query
+  if (
+    requestedDepot &&
+    requestedDepot !== "Tous" &&
+    !isAdmin &&
+    scopeDepots.length > 0 &&
+    !scopeDepots.some((depot) => depot.toLowerCase() === requestedDepot.toLowerCase())
+  ) {
+    return NextResponse.json({ error: "Non autorise pour ce depot" }, { status: 403 });
+  }
+
   let query = supabase
     .from("articles")
     .select(`
@@ -28,16 +59,6 @@ export async function GET(request: Request) {
       stocks!left ( quantite, depot_nom )
     `)
     .eq("is_deleted", false);
-
-  // Apply Scoping (Warehouse Access Control)
-  const { applyUserScope } = await import("@/lib/utils/scoping");
-  query = await applyUserScope(query as any, user, 'stocks');
-
-  // Filter by requested depot if provided
-  const requestedDepot = searchParams.get("depot");
-  if (requestedDepot && requestedDepot !== "Tous") {
-    query = query.filter("stocks.depot_nom", "ilike", requestedDepot);
-  }
 
   if (search) {
     query = query.or(`reference.ilike.%${search}%,designation.ilike.%${search}%`);
@@ -48,25 +69,34 @@ export async function GET(request: Request) {
   }
 
   const { data, error } = await query.order("designation");
-
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // 3. Post-process
-  let results = data.map((art: any) => {
-    let quantite = 0;
-    const targetDepot = requestedDepot || (isAdmin ? "Tous" : primaryDepot);
-    
-    if (targetDepot && targetDepot !== "Tous") {
-      const stockRecord = art.stocks?.find((s: any) => 
-        s.depot_nom?.toLowerCase() === targetDepot.toLowerCase()
-      );
-      quantite = stockRecord ? Number(stockRecord.quantite) : 0;
-    } else {
-      quantite = art.stocks?.reduce((sum: number, s: any) => sum + Number(s.quantite || 0), 0) || 0;
-    }
-    
+  const rows = Array.isArray(data) ? (data as ArticleRow[]) : [];
+
+  const results = rows.map((art) => {
+    const allStocks = Array.isArray(art.stocks) ? art.stocks : [];
+
+    const visibleStocks =
+      requestedDepot && requestedDepot !== "Tous"
+        ? allStocks.filter(
+            (stock) =>
+              stock.depot_nom?.toLowerCase() === requestedDepot.toLowerCase()
+          )
+        : !isAdmin && scopeDepots.length > 0
+          ? allStocks.filter((stock) =>
+              scopeDepots.some(
+                (depot) => depot.toLowerCase() === String(stock.depot_nom || "").toLowerCase()
+              )
+            )
+          : allStocks;
+
+    const quantite = visibleStocks.reduce(
+      (sum, stock) => sum + Number(stock.quantite || 0),
+      0
+    );
+
     return {
       id: art.id,
       reference: art.reference,
@@ -74,20 +104,20 @@ export async function GET(request: Request) {
       qte_min: Number(art.qte_min || 0),
       unite: art.unite,
       image_path: art.image_path,
-      quantite: quantite,
-      stocks: art.stocks || [],
+      quantite,
+      stocks: visibleStocks,
       is_low: quantite <= Number(art.qte_min || 0) && quantite > 0,
-      is_out: quantite <= 0
+      is_out: quantite <= 0,
     };
   });
 
+  let filteredResults = results;
   if (lowStockOnly) {
-    results = results.filter((r: any) => r.is_low || r.is_out);
+    filteredResults = results.filter((row) => row.is_low || row.is_out);
   }
 
   return NextResponse.json({
-    depot: requestedDepot || primaryDepot || "Tous",
-    items: results
+    depot: requestedDepot || (scopeDepots[0] || primaryDepot) || "Tous",
+    items: filteredResults,
   });
 }
-

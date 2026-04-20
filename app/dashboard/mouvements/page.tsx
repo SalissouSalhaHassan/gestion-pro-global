@@ -64,12 +64,8 @@ export default function MouvementsPage() {
   const [groupByProduct, setGroupByProduct] = useState(false);
 
   // Advanced Filters
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 1);
-    return d.toISOString().split("T")[0];
-  });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [selectedDepot, setSelectedDepot] = useState("Tous");
   const [depots, setDepots] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState("Tous");
