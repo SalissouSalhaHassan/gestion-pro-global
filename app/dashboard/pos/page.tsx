@@ -1155,9 +1155,13 @@ function PosPage() {
           alerts?: { designation: string, stock_restant: number }[] 
         };
         invoice_id?: string | number;
+        debug?: any;
       };
 
       console.log("📊 API Response:", payload);
+      console.log("📋 Response Status:", response.status, response.ok);
+      console.log("🔍 invoice_id in payload:", payload.invoice_id, "Type:", typeof payload.invoice_id);
+      console.log("🔍 sale object:", payload.sale);
 
       if (!response.ok || !payload.ok) {
         throw new Error(payload.error || "L'encaissement a échoué.");
@@ -1202,14 +1206,19 @@ function PosPage() {
         printId = editInvoiceId;
         console.log("✅ Using editInvoiceId (edit mode):", printId);
       } else {
-        console.warn("⚠️ No invoice_id found anywhere in response:", payload);
+        console.error("❌ NO invoice_id found anywhere in response:", payload);
+        console.error("❌ Entire payload:", JSON.stringify(payload));
       }
       
       // Set print modal IMMEDIATELY (not in setTimeout)
       if (printId) {
-        console.log("🖨️ SETTING printInvoiceId NOW to:", printId);
-        setPrintInvoiceId(printId);
-        localStorage.setItem("last_invoice_id", String(printId));
+        const numPrintId = typeof printId === 'string' ? Number(printId) : printId;
+        console.log("🖨️ SETTING printInvoiceId NOW to:", numPrintId, "Type:", typeof numPrintId);
+        setPrintInvoiceId(numPrintId);
+        localStorage.setItem("last_invoice_id", String(numPrintId));
+        console.log("✅ localStorage.last_invoice_id set to:", numPrintId);
+      } else {
+        console.error("❌ printId is null or empty, not setting print state");
       }
       
       setSuccess(
@@ -1221,13 +1230,15 @@ function PosPage() {
 
       // If no printId was found, show a warning alert
       if (!printId) {
+        console.error("❌ CRITICAL: No printId extracted. Full API response:", JSON.stringify(payload, null, 2));
         setTimeout(() => {
-          setError("⚠️ ATTENTION: Aucun ID de facture détecté. Consultez la console pour plus de détails.");
+          setError("❌ ERREUR: Aucun ID de facture détecté. Vérifiez la console pour les détails.");
         }, 500);
       }
 
       setTimeout(() => setSuccess(null), 7000);
     } catch (err) {
+      console.error("❌ Checkout exception:", err);
       setError(
         err instanceof Error ? err.message : "Erreur pendant l'encaissement."
       );

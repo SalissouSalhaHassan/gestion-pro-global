@@ -208,19 +208,18 @@ export async function POST(request: Request) {
     // FALLBACK: If still no ID, fetch the latest invoice for this client and depot
     if (!extractedId || isNaN(extractedId)) {
       console.warn("⚠️ Could not extract invoice ID from RPC result. Attempting fallback...", result);
-      const { data: latestInvoice, error: fallbackErr } = await supabase
+      const { data: invoices, error: fallbackErr } = await supabase
         .from("factures")
         .select("id")
         .eq("client_id", clientId)
         .order("id", { ascending: false })
-        .limit(1)
-        .single();
+        .limit(1);
       
       if (fallbackErr) {
         console.warn("⚠️ Fallback query failed:", fallbackErr);
-      } else if (latestInvoice?.id) {
-        console.log("✅ Fallback: Using latest invoice ID:", latestInvoice.id);
-        extractedId = Number(latestInvoice.id);
+      } else if (invoices && invoices.length > 0) {
+        console.log("✅ Fallback: Using latest invoice ID:", invoices[0].id);
+        extractedId = Number(invoices[0].id);
       } else {
         console.error("❌ CRITICAL: Fallback query returned no data");
       }
