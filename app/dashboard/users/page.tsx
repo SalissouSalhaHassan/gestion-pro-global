@@ -46,6 +46,7 @@ type UserRecord = {
   langue: string;
   ref_per: string;
   depots: string;
+  depot_ids: number[];
   created_at: string;
 };
 
@@ -71,10 +72,10 @@ export default function UserManagementPage() {
     admin: "Non",
     langue: "FR",
     ref_per: "",
-    depots: [] as string[]
+    depots: [] as number[]
   });
 
-  const [availableDepots, setAvailableDepots] = useState<string[]>([]);
+  const [availableDepotsData, setAvailableDepotsData] = useState<{ id: number; nom: string }[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [isDepotDropdownOpen, setIsDepotDropdownOpen] = useState(false);
 
@@ -95,18 +96,18 @@ export default function UserManagementPage() {
         setRoles(rolesData);
       }
 
-      // 1.1 Fetch available depots
+      // 1.1 Fetch available depots with IDs
       const { data: depotsData, error: depotsErr } = await supabase
         .from("depots")
-        .select("nom")
-        .eq("is_active", true)
+        .select("id, nom")
+        .eq("is_deleted", false)
         .order("nom");
       
       if (!depotsErr && depotsData) {
-        setAvailableDepots(depotsData.map(d => d.nom));
+        setAvailableDepotsData(depotsData);
       }
 
-      // 2. Fetch Users
+      // 2. Fetch Users with their assigned warehouses
       const { data, error } = await supabase
         .from("users")
         .select(`
@@ -120,6 +121,12 @@ export default function UserManagementPage() {
           created_at,
           roles!fk_users_role_id (
             role_name
+          ),
+          user_warehouses (
+            depot_id,
+            depots (
+              nom
+            )
           )
         `)
         .order("created_at", { ascending: false });
@@ -136,7 +143,8 @@ export default function UserManagementPage() {
           admin: u.admin || "Non",
           langue: u.langue || "FR",
           ref_per: u.ref_per || "-",
-          depots: "", // Temporairement vidé car la colonne manque en base
+          depots: u.user_warehouses?.map((uw: any) => uw.depots?.nom).filter(Boolean).join(", ") || "",
+          depot_ids: u.user_warehouses?.map((uw: any) => uw.depot_id) || [],
           created_at: u.created_at ? new Date(u.created_at).toLocaleString("fr-FR") : "-",
         }));
         setUsers(mappedData);
@@ -166,7 +174,6 @@ export default function UserManagementPage() {
         admin: newUser.admin,
         langue: newUser.langue,
         ref_per: newUser.ref_per
-        // depots: newUser.depots.join(", ") // Désactivé temporairement
       };
 
       // Only update password if provided during edit, or required during create
@@ -174,17 +181,38 @@ export default function UserManagementPage() {
         userData.mot_de_passe = newUser.mot_de_passe;
       }
 
-      if (isEditing && newUser.id) {
+      let userId = newUser.id;
+
+      if (isEditing && userId) {
         const { error } = await supabase
           .from("users")
           .update(userData)
-          .eq("id", newUser.id);
+          .eq("id", userId);
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from("users")
-          .insert([userData]);
+          .insert([userData])
+          .select("id")
+          .single();
         if (error) throw error;
+        userId = data.id;
+      }
+
+      // --- Sync User Warehouses ---
+      if (userId) {
+        // 1. Clear existing
+        await supabase.from("user_warehouses").delete().eq("user_id", userId);
+
+        // 2. Add new ones
+        if (newUser.depots.length > 0) {
+          const warehouseEntries = newUser.depots.map(depotId => ({
+            user_id: userId,
+            depot_id: depotId
+          }));
+          const { error: uwErr } = await supabase.from("user_warehouses").insert(warehouseEntries);
+          if (uwErr) throw uwErr;
+        }
       }
 
       // Reset form and reload
@@ -200,7 +228,6 @@ export default function UserManagementPage() {
 
   const handleEditUser = (user: UserRecord) => {
     const roleId = roles.find(r => r.role_name === user.role_name)?.id?.toString() || "";
-    const userDepots = user.depots ? user.depots.split(", ").filter(d => d) : [];
 
     setNewUser({
       id: user.id,
@@ -212,7 +239,7 @@ export default function UserManagementPage() {
       admin: user.admin,
       langue: user.langue,
       ref_per: user.ref_per !== "-" ? user.ref_per : "",
-      depots: userDepots
+      depots: user.depot_ids
     });
     setIsEditing(true);
     setIsModalOpen(true);
@@ -240,13 +267,13 @@ export default function UserManagementPage() {
     setIsDepotDropdownOpen(false);
   };
 
-  const toggleDepot = (depot: string) => {
+  const toggleDepot = (depotId: number) => {
     setNewUser(prev => {
-      const exists = prev.depots.includes(depot);
+      const exists = prev.depots.includes(depotId);
       if (exists) {
-        return { ...prev, depots: prev.depots.filter(d => d !== depot) };
+        return { ...prev, depots: prev.depots.filter(id => id !== depotId) };
       } else {
-        return { ...prev, depots: [...prev.depots, depot] };
+        return { ...prev, depots: [...prev.depots, depotId] };
       }
     });
   };
@@ -589,17 +616,17 @@ export default function UserManagementPage() {
                   
                   {isDepotDropdownOpen && (
                     <div className="absolute z-10 mt-2 w-full bg-white border border-slate-200 rounded-xl shadow-xl p-2 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-2">
-                      {availableDepots.length === 0 ? (
+                      {availableDepotsData.length === 0 ? (
                         <p className="text-center py-4 text-xs font-bold text-slate-400 italic">Aucun dépôt trouvé</p>
                       ) : (
-                        availableDepots.map(depot => (
+                        availableDepotsData.map(depot => (
                           <div 
-                            key={depot}
-                            onClick={() => toggleDepot(depot)}
+                            key={depot.id}
+                            onClick={() => toggleDepot(depot.id)}
                             className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
                           >
-                            <span className="text-sm font-bold text-slate-700">{depot}</span>
-                            {newUser.depots.includes(depot) && <Check size={16} className="text-blue-600" />}
+                            <span className="text-sm font-bold text-slate-700">{depot.nom}</span>
+                            {newUser.depots.includes(depot.id) && <Check size={16} className="text-blue-600" />}
                           </div>
                         ))
                       )}

@@ -7,7 +7,7 @@ export async function GET() {
   // Use the dedicated 'depots' table as the primary source of truth.
   const { data, error } = await supabase
     .from("depots")
-    .select("nom")
+    .select("id, nom")
     .eq("is_active", true)
     .order("nom");
 
@@ -15,8 +15,5 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Extract names
-  const depotNames = data?.map(d => d.nom) || [];
-
-  return NextResponse.json(depotNames);
+  return NextResponse.json(data || []);
 }

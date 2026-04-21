@@ -17,7 +17,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   RefreshCw,
-  Box
+  Box,
+  ClipboardCheck
 } from "lucide-react";
 import Link from "next/link";
 
@@ -37,14 +38,15 @@ type StockItem = {
   quantite: number;
   is_low: boolean;
   is_out: boolean;
-  stocks?: { quantite: number; depot_nom: string }[];
+  stocks?: { quantite: number; depot_id: number; depot_nom: string }[];
 };
 
 export default function StockDashboard() {
   const [items, setItems] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeDepot, setActiveDepot] = useState("Tous");
+  const [activeDepotId, setActiveDepotId] = useState<number | null>(null);
+  const [activeDepotNom, setActiveDepotNom] = useState("Tous");
   const [stats, setStats] = useState({ total: 0, low: 0, out: 0 });
   const [error, setError] = useState<string | null>(null);
 
@@ -66,7 +68,8 @@ export default function StockDashboard() {
       }
       if (Array.isArray(data.items)) {
         setItems(data.items);
-        setActiveDepot(data.depot);
+        setActiveDepotId(data.depot_id || null);
+        setActiveDepotNom(data.depot_nom || "Tous");
         
         const low = data.items.filter((i: any) => i.is_low).length;
         const out = data.items.filter((i: any) => i.is_out).length;
@@ -117,11 +120,15 @@ export default function StockDashboard() {
             Gestion du Stock
           </h1>
           <p className="text-slate-500 mt-1 font-medium italic">
-            Suivi en temps réel pour le dépôt : <span className="text-emerald-600 font-bold underline">{activeDepot}</span>
+            Suivi en temps réel pour le dépôt : <span className="text-emerald-600 font-bold underline">{activeDepotNom}</span>
           </p>
         </div>
 
         <div className="flex items-center gap-3">
+           <Link href="/dashboard/stock/reconciliation" className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all font-bold shadow-lg shadow-indigo-200">
+             <ClipboardCheck className="w-5 h-5" />
+             Jerd الدوري
+           </Link>
            <Link href="/dashboard/mouvements" className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl hover:bg-slate-50 transition-all font-bold shadow-sm">
              <History className="w-5 h-5 text-slate-400" />
              Journal d'Audit
@@ -221,21 +228,24 @@ export default function StockDashboard() {
         isOpen={isAdjustOpen}
         onClose={() => setIsAdjustOpen(false)}
         item={selectedItem}
-        depot={activeDepot}
+        depotId={activeDepotId}
+        depotNom={activeDepotNom}
         onSuccess={fetchStock}
       />
       <TransferModal 
         isOpen={isTransferOpen}
         onClose={() => setIsTransferOpen(false)}
         item={selectedItem}
-        sourceDepot={activeDepot}
+        sourceDepotId={activeDepotId}
+        sourceDepotNom={activeDepotNom}
         onSuccess={handleTransferSuccess}
       />
       <AddArticleModal 
         isOpen={isAddOpen}
         onClose={() => setIsAddOpen(false)}
         onSuccess={fetchStock}
-        currentDepot={activeDepot}
+        currentDepotId={activeDepotId}
+        currentDepotNom={activeDepotNom}
       />
       {printTransferRef && (
         <StockTransferModal

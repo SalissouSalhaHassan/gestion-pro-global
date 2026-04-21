@@ -39,11 +39,14 @@ type StockItem = {
   stocks?: { quantite: number; depot_nom: string }[];
 };
 
+type DepotObject = { id: number; nom: string };
+
 type AdjustmentModalProps = {
   isOpen: boolean;
   onClose: () => void;
   item: StockItem | null;
-  depot: string;
+  depotId: number | null;
+  depotNom: string;
   onSuccess: () => void;
 };
 
@@ -51,7 +54,8 @@ type TransferModalProps = {
   isOpen: boolean;
   onClose: () => void;
   item: StockItem | null;
-  sourceDepot: string;
+  sourceDepotId: number | null;
+  sourceDepotNom: string;
   onSuccess: (transferRef?: string) => void;
 };
 
@@ -59,22 +63,20 @@ type TransferModalProps = {
    ADJUSTMENT MODAL
    ═══════════════════════════════════════════════════════════════════ */
 
-export function AdjustmentModal({ isOpen, onClose, item, depot, onSuccess }: AdjustmentModalProps) {
+export function AdjustmentModal({ isOpen, onClose, item, depotId, depotNom, onSuccess }: AdjustmentModalProps) {
   const [qtyAdj, setQtyAdj] = useState<string>("");
   const [notes, setNotes] = useState("");
-  const [selectedDepot, setSelectedDepot] = useState(depot === "Tous" ? "" : depot);
-  const [depotsList, setDepotsList] = useState<string[]>([]);
+  const [selectedDepotId, setSelectedDepotId] = useState<string>(depotId ? depotId.toString() : "");
+  const [depotsList, setDepotsList] = useState<DepotObject[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      setSelectedDepot(depot === "Tous" ? "" : depot);
-      if (depot === "Tous") {
-        fetchDepots();
-      }
+      setSelectedDepotId(depotId ? depotId.toString() : "");
+      fetchDepots();
     }
-  }, [isOpen, depot]);
+  }, [isOpen, depotId]);
 
   const fetchDepots = async () => {
     try {
@@ -98,7 +100,7 @@ export function AdjustmentModal({ isOpen, onClose, item, depot, onSuccess }: Adj
         body: JSON.stringify({
           article_id: item.id,
           qty_adj: Number(qtyAdj),
-          depot_nom: selectedDepot,
+          depot_id: Number(selectedDepotId), // Switched to ID
           notes
         })
       });
@@ -129,8 +131,8 @@ export function AdjustmentModal({ isOpen, onClose, item, depot, onSuccess }: Adj
               <X className="w-6 h-6" />
            </button>
            <h3 className="text-2xl font-black tracking-tight">Ajustement Manuel</h3>
-           {depot !== "Tous" && (
-             <p className="text-indigo-100 font-medium italic mt-1 opacity-80">Régularisation du stock pour : {depot}</p>
+           {depotId && (
+             <p className="text-indigo-100 font-medium italic mt-1 opacity-80">Régularisation du stock pour : {depotNom}</p>
            )}
         </div>
 
@@ -155,17 +157,17 @@ export function AdjustmentModal({ isOpen, onClose, item, depot, onSuccess }: Adj
            </div>
 
            {/* Adjustment Input */}
-           {depot === "Tous" && (
+           {!depotId && (
              <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Dépôt Cible</label>
                 <select 
                   className="w-full p-4 bg-slate-50 border-2 border-indigo-100 focus:border-indigo-300 rounded-2xl outline-none font-black text-indigo-700 appearance-none text-center cursor-pointer"
-                  value={selectedDepot}
-                  onChange={(e) => setSelectedDepot(e.target.value)}
+                  value={selectedDepotId}
+                  onChange={(e) => setSelectedDepotId(e.target.value)}
                   required
                 >
                    <option value="" disabled>Sélectionner le dépôt à ajuster...</option>
-                   {depotsList.map(d => <option key={d} value={d}>{d}</option>)}
+                   {depotsList.map(d => <option key={d.id} value={d.id}>{d.nom}</option>)}
                 </select>
              </div>
            )}
@@ -215,7 +217,7 @@ export function AdjustmentModal({ isOpen, onClose, item, depot, onSuccess }: Adj
            )}
 
            <button 
-             disabled={saving || !qtyAdj || Number(qtyAdj) === 0 || newQty < 0 || !selectedDepot}
+             disabled={saving || !qtyAdj || Number(qtyAdj) === 0 || newQty < 0 || !selectedDepotId}
              className="w-full py-4 sm:py-5 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 disabled:from-slate-100 disabled:to-slate-100 disabled:text-slate-400 text-white rounded-full font-black text-lg transition-all shadow-xl shadow-indigo-200 disabled:shadow-none flex items-center justify-center gap-3"
            >
              {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : "Valider l'Ajustement"}
@@ -232,20 +234,20 @@ export function AdjustmentModal({ isOpen, onClose, item, depot, onSuccess }: Adj
    TRANSFER MODAL
    ═══════════════════════════════════════════════════════════════════ */
 
-export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }: TransferModalProps) {
+export function TransferModal({ isOpen, onClose, item, sourceDepotId, sourceDepotNom, onSuccess }: TransferModalProps) {
   const [qty, setQty] = useState<string>("");
-  const [actualSource, setActualSource] = useState(sourceDepot === "Tous" ? "" : sourceDepot);
-  const [destDepot, setDestDepot] = useState("");
-  const [depots, setDepots] = useState<string[]>([]);
+  const [actualSourceId, setActualSourceId] = useState<string>(sourceDepotId ? sourceDepotId.toString() : "");
+  const [destDepotId, setDestDepotId] = useState<string>("");
+  const [depots, setDepots] = useState<DepotObject[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      setActualSource(sourceDepot === "Tous" ? "" : sourceDepot);
+      setActualSourceId(sourceDepotId ? sourceDepotId.toString() : "");
       fetchDepots();
     }
-  }, [isOpen, sourceDepot]);
+  }, [isOpen, sourceDepotId]);
 
   const fetchDepots = async () => {
     try {
@@ -263,7 +265,7 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
 
   // Calculate specific stock for the selected source depot
   const sourceStock = item.stocks?.find(s => 
-    s.depot_nom.toLowerCase() === actualSource.toLowerCase()
+    s.depot_id === Number(actualSourceId)
   )?.quantite || 0;
 
   const handleTransfer = async (e: React.FormEvent) => {
@@ -278,8 +280,8 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
         body: JSON.stringify({
           article_id: item.id,
           qty: Number(qty),
-          source_depot: actualSource,
-          dest_depot: destDepot
+          source_depot_id: Number(actualSourceId),
+          dest_depot_id: Number(destDepotId)
         })
       });
 
@@ -289,7 +291,7 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
       onSuccess(data.reference);
       onClose();
       setQty("");
-      setDestDepot("");
+      setDestDepotId("");
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -336,19 +338,19 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
            <div className="grid grid-cols-11 items-center gap-2">
               <div className="col-span-5 space-y-2">
                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Départ (Source)</label>
-                 {sourceDepot === "Tous" ? (
+                 {!sourceDepotId ? (
                    <select 
                      className="w-full p-4 bg-slate-50 border-2 border-slate-200 focus:border-emerald-300 rounded-2xl outline-none font-black text-slate-700 appearance-none text-center cursor-pointer"
-                     value={actualSource}
-                     onChange={(e) => setActualSource(e.target.value)}
+                     value={actualSourceId}
+                     onChange={(e) => setActualSourceId(e.target.value)}
                      required
                    >
                       <option value="" disabled>Origine...</option>
-                      {depots.filter(d => d !== destDepot).map(d => <option key={d} value={d}>{d}</option>)}
+                      {depots.filter(d => d.id !== Number(destDepotId)).map(d => <option key={d.id} value={d.id}>{d.nom}</option>)}
                    </select>
                  ) : (
                    <div className="p-4 bg-slate-100 border border-slate-200 rounded-2xl font-bold text-slate-500 text-center">
-                      {actualSource}
+                      {sourceDepotNom}
                    </div>
                  )}
                  <div className="flex justify-center">
@@ -364,12 +366,12 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Arrivée (Cible)</label>
                  <select 
                    className="w-full p-4 bg-emerald-50 border-2 border-emerald-100 focus:border-emerald-300 rounded-2xl outline-none font-black text-emerald-700 appearance-none text-center cursor-pointer"
-                   value={destDepot}
-                   onChange={(e) => setDestDepot(e.target.value)}
+                   value={destDepotId}
+                   onChange={(e) => setDestDepotId(e.target.value)}
                    required
                  >
                   <option value="" disabled>Destination...</option>
-                  {depots.filter(d => d !== actualSource).map(d => <option key={d} value={d}>{d}</option>)}
+                  {depots.filter(d => d.id !== Number(actualSourceId)).map(d => <option key={d.id} value={d.id}>{d.nom}</option>)}
                </select>
                <div className="h-6" /> {/* Spacer to align with source dispo */}
               </div>
@@ -397,7 +399,7 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
              </div>
            )}
 
-           {!error && Number(qty) > sourceStock && actualSource && (
+           {!error && Number(qty) > sourceStock && actualSourceId && (
              <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-600 font-bold text-sm">
                 <AlertTriangle className="w-5 h-5 flex-shrink-0" />
                 Stock insuffisant au dépôt source (Dispo: {sourceStock})
@@ -405,7 +407,7 @@ export function TransferModal({ isOpen, onClose, item, sourceDepot, onSuccess }:
            )}
 
            <button 
-             disabled={saving || !qty || !destDepot || !actualSource || destDepot === actualSource || Number(qty) > sourceStock}
+             disabled={saving || !qty || !destDepotId || !actualSourceId || Number(destDepotId) === Number(actualSourceId) || Number(qty) > sourceStock}
              className="w-full py-4 sm:py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 disabled:from-slate-100 disabled:to-slate-100 disabled:text-slate-400 text-white rounded-full font-black text-xl transition-all shadow-xl shadow-emerald-200 disabled:shadow-none flex items-center justify-center gap-3 uppercase tracking-wider"
            >
              {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : "Confirmer le Transfert"}
@@ -426,10 +428,11 @@ type AddArticleModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  currentDepot: string;
+  currentDepotId: number | null;
+  currentDepotNom: string;
 };
 
-export function AddArticleModal({ isOpen, onClose, onSuccess, currentDepot }: AddArticleModalProps) {
+export function AddArticleModal({ isOpen, onClose, onSuccess, currentDepotId, currentDepotNom }: AddArticleModalProps) {
   const [formData, setFormData] = useState({
     reference: "",
     designation: "",
@@ -491,7 +494,7 @@ export function AddArticleModal({ isOpen, onClose, onSuccess, currentDepot }: Ad
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          depot_nom: currentDepot
+          depot_id: currentDepotId // Switched to ID
         })
       });
 
@@ -562,7 +565,7 @@ export function AddArticleModal({ isOpen, onClose, onSuccess, currentDepot }: Ad
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex justify-between">
-                    Code Barre <span>(Auto-généré)</span>
+                    Code Barre <span>(Auto-جénéré)</span>
                   </label>
                   <div className="relative group">
                     <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-slate-900 transition-colors" />
@@ -664,7 +667,7 @@ export function AddArticleModal({ isOpen, onClose, onSuccess, currentDepot }: Ad
                  </div>
                  <div className="flex items-center gap-4">
                     <div className="flex-1">
-                       <label className="text-[9px] font-black text-emerald-600/60 uppercase ml-1">Quantité Initiale dans : <b>{currentDepot}</b></label>
+                       <label className="text-[9px] font-black text-emerald-600/60 uppercase ml-1">Quantité Initiale dans : <b>{currentDepotNom}</b></label>
                        <input 
                         type="number" 
                         className="w-full bg-white border border-emerald-200 p-3 rounded-xl font-black text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-500/20"
