@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ContractFormDialog from "@/components/loyers/ContractFormDialog";
 import PaymentFormDialog from "@/components/loyers/PaymentFormDialog";
+import LoyerReportModal from "@/components/loyers/LoyerReportModal";
 import type { Contract } from "@/lib/services/loyer.service";
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
@@ -33,6 +34,7 @@ export default function LoyersPage() {
   const [showContractForm, setShowContractForm] = useState(false);
   const [editContractId, setEditContractId] = useState<number | null>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const [toast, setToast] = useState("");
@@ -177,7 +179,7 @@ export default function LoyersPage() {
         </Button>
 
         <Button
-          onClick={() => window.open("/api/loyers/print/report", "_blank")}
+          onClick={() => setShowReportModal(true)}
           className="rounded-xl h-11 px-5 font-black bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50 shadow-sm"
           variant="outline"
         >
@@ -287,6 +289,10 @@ export default function LoyersPage() {
           onSaved={() => { fetchContracts(); showToast("Paiement enregistré."); }}
           contract={selected}
         />
+      )}
+
+      {showReportModal && (
+        <LoyerReportModal onClose={() => setShowReportModal(false)} />
       )}
     </div>
   );

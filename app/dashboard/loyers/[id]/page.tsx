@@ -6,6 +6,7 @@ import {
   ArrowLeft, User, Home, Wallet, Loader2, Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import LoyerReceiptModal from "@/components/loyers/LoyerReceiptModal";
 import type { Contract, Payment } from "@/lib/services/loyer.service";
 
 function fmt(n: number) {
@@ -36,6 +37,7 @@ export default function TenantDashboardPage({ params }: { params: Promise<{ id: 
   const [contract, setContract] = useState<Contract | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [receiptPaymentId, setReceiptPaymentId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -184,7 +186,7 @@ export default function TenantDashboardPage({ params }: { params: Promise<{ id: 
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10 text-slate-400">
-                {["ID", "Date Paiement", "Période Payée", "Qté Mois", "Montant (F)", "Mode"].map((h) => (
+                {["ID", "Date Paiement", "Période Payée", "Qté Mois", "Montant (F)", "Mode", "Actions"].map((h) => (
                   <th key={h} className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-[0.15em]">{h}</th>
                 ))}
               </tr>
@@ -205,6 +207,15 @@ export default function TenantDashboardPage({ params }: { params: Promise<{ id: 
                     <td className="px-5 py-3.5 text-slate-300 font-bold text-center">{p.qte_mois || "—"}</td>
                     <td className="px-5 py-3.5 text-emerald-400 font-black text-right">{fmt(p.montant)} F</td>
                     <td className={`px-5 py-3.5 font-bold ${MODE_COLORS[p.mode_paiement] || "text-slate-300"}`}>{p.mode_paiement}</td>
+                    <td className="px-5 py-3.5 text-right flex items-center justify-end">
+                      <button
+                        onClick={() => setReceiptPaymentId(p.id)}
+                        className="p-2 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-xl transition-colors"
+                        title="Imprimer le Reçu"
+                      >
+                        <Wallet size={16} />
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -212,6 +223,14 @@ export default function TenantDashboardPage({ params }: { params: Promise<{ id: 
           </table>
         </div>
       </div>
+
+      {/* Print Receipt Modal */}
+      {receiptPaymentId && (
+        <LoyerReceiptModal
+          paymentId={receiptPaymentId}
+          onClose={() => setReceiptPaymentId(null)}
+        />
+      )}
     </div>
   );
 }

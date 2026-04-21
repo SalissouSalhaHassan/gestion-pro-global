@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import PaymentFormDialog from "@/components/loyers/PaymentFormDialog";
+import LoyerReceiptModal from "@/components/loyers/LoyerReceiptModal";
 import type { Payment, Contract } from "@/lib/services/loyer.service";
 
 function fmt(n: number) {
@@ -51,6 +52,8 @@ export default function PaymentsListPage() {
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [editPaymentId, setEditPaymentId] = useState<number | null>(null);
   const [dialogContract, setDialogContract] = useState<Contract | null>(null);
+
+  const [receiptPaymentId, setReceiptPaymentId] = useState<number | null>(null);
 
   const [toast, setToast] = useState("");
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
@@ -253,8 +256,8 @@ export default function PaymentsListPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10 text-slate-400">
-                {["ID", "Référence", "Date", "Locataire", "Mois", "Début", "Fin", "Qté", "Montant (F)", "Mode"].map((h) => (
-                  <th key={h} className="px-4 py-4 text-left text-[10px] font-black uppercase tracking-[0.12em]">{h}</th>
+                {["ID", "Date Paiement", "Locataire", "Mois", "Période", "Montant (F)", "Mode", "Actions"].map((h) => (
+                  <th key={h} className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-[0.15em]">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -286,18 +289,24 @@ export default function PaymentsListPage() {
                       }`}
                     >
                       <td className="px-4 py-3.5 text-slate-400 font-mono text-xs">{p.id}</td>
-                      <td className="px-4 py-3.5 text-indigo-400 font-bold text-xs">{p.ref_locataire || "—"}</td>
                       <td className="px-4 py-3.5 text-white font-bold">{fmtDate(p.date_paiement)}</td>
                       <td className="px-4 py-3.5 text-white font-black">{p.locataire_nom_complet || "—"}</td>
                       <td className="px-4 py-3.5 text-slate-300 font-medium max-w-[180px] truncate">{p.nom_de_mois || "—"}</td>
-                      <td className="px-4 py-3.5 text-slate-300 font-medium">{fmtDate(p.periode_debut)}</td>
-                      <td className="px-4 py-3.5 text-slate-300 font-medium">{fmtDate(p.periode_fin)}</td>
-                      <td className="px-4 py-3.5 text-slate-300 font-bold text-center">{p.qte_mois || "—"}</td>
-                      <td className="px-4 py-3.5 text-emerald-400 font-black text-right">{fmt(p.montant)} F</td>
-                      <td className="px-4 py-3.5">
+                      <td className="px-4 py-3.5 text-slate-300 font-medium">{fmtDate(p.periode_debut)} - {fmtDate(p.periode_fin)}</td>
+                      <td className="px-5 py-3.5 text-emerald-400 font-black text-right">{fmt(p.montant)} F</td>
+                      <td className={`px-5 py-3.5 font-bold ${MODE_COLORS[p.mode_paiement] ? "" : "text-slate-300"}`}>
                         <span className={`inline-block px-2.5 py-1 rounded-lg text-[10px] font-black ${modeStyle.bg} ${modeStyle.text}`}>
                           {p.mode_paiement}
                         </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-right flex items-center justify-end gap-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setReceiptPaymentId(p.id); }}
+                          className="p-2 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 rounded-xl transition-colors"
+                          title="Imprimer le Reçu"
+                        >
+                          <Printer size={16} />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -308,14 +317,25 @@ export default function PaymentsListPage() {
         </div>
       </div>
 
-      {/* Payment Dialog */}
-      {dialogContract && (
+      {/* Dialogs */}
+      {selected && dialogContract && (
         <PaymentFormDialog
           open={showPaymentDialog}
-          onClose={() => { setShowPaymentDialog(false); setDialogContract(null); setEditPaymentId(null); }}
-          onSaved={() => { fetchPayments(); showToast(editPaymentId ? "Paiement mis à jour." : "Paiement enregistré."); }}
+          onClose={() => setShowPaymentDialog(false)}
+          onSaved={() => {
+            fetchPayments();
+            showToast("Paiement mis à jour.");
+          }}
           contract={dialogContract}
-          paymentId={editPaymentId}
+          paymentId={editPaymentId || undefined}
+        />
+      )}
+
+      {/* Print Receipt Modal */}
+      {receiptPaymentId && (
+        <LoyerReceiptModal
+          paymentId={receiptPaymentId}
+          onClose={() => setReceiptPaymentId(null)}
         />
       )}
     </div>
