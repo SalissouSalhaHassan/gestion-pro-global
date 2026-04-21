@@ -870,6 +870,7 @@ function PosPage() {
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [clientSaving, setClientSaving] = useState(false);
   const [clientFormData, setClientFormData] = useState({ nom: "", tel: "", ref_client: "" });
+  const [clientQuery, setClientQuery] = useState("");
 
   const [clientAdvances, setClientAdvances] = useState<any[]>([]);
   const [totalAdvanceBalance, setTotalAdvanceBalance] = useState(0);
@@ -1907,14 +1908,54 @@ function PosPage() {
                     </div>
                   )}
                 </div>
+                {/* Client Search Input */}
+                <div style={{ display: "flex", alignItems: "center", border: "2px solid #e2e8f0", borderRadius: 12, background: "#fff", padding: "2px 10px", marginBottom: 6, transition: "border-color 0.2s" }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = "#4f46e5")}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = "#e2e8f0")}
+                >
+                  <Search size={14} style={{ color: "#94a3b8", flexShrink: 0 }} />
+                  <input
+                    id="pos-client-search"
+                    type="text"
+                    value={clientQuery}
+                    onChange={(e) => setClientQuery(e.target.value)}
+                    placeholder="Rechercher un client..."
+                    style={{
+                      flex: 1,
+                      border: "none",
+                      outline: "none",
+                      padding: "7px 8px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "#0f172a",
+                      background: "transparent",
+                    }}
+                  />
+                  {clientQuery && (
+                    <button
+                      onClick={() => setClientQuery("")}
+                      style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "#94a3b8", display: "flex", alignItems: "center" }}
+                      title="Effacer la recherche"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <select 
                     style={{ ...S.customerSelect, flex: 1 }}
                     value={selectedClientId}
-                    onChange={(e) => setSelectedClientId(e.target.value)}
+                    onChange={(e) => { setSelectedClientId(e.target.value); setClientQuery(""); }}
+                    size={clientQuery ? Math.min(clients.filter(c => normalizeText(c.nom).includes(normalizeText(clientQuery)) || (c.tel ?? "").includes(clientQuery)).length + 1, 6) : 1}
                   >
                     <option value="">Sélectionner un client...</option>
-                    {clients.map(c => (
+                    {(clientQuery
+                      ? clients.filter(c =>
+                          normalizeText(c.nom).includes(normalizeText(clientQuery)) ||
+                          (c.tel ?? "").includes(clientQuery)
+                        )
+                      : clients
+                    ).map(c => (
                       <option key={c.id} value={c.id}>
                         {c.nom} {c.tel ? `(${c.tel})` : ""}
                       </option>
