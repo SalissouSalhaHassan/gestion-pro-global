@@ -241,25 +241,25 @@ export default function LoyerReceiptModal({ paymentId, onClose }: LoyerReceiptMo
         </div>
       </div>
 
-      <style jsx global>{\`
+      <style jsx global>{`
         @media print {
           body * { visibility: hidden; background: none !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           #printable-receipt, #printable-receipt * { visibility: visible; }
           #printable-receipt {
             position: absolute; left: 0; top: 0; 
             width: 100% !important;
-            padding: \${printFormat === 'Ticket' ? '0' : '5mm'} !important;
+            padding: ${printFormat === 'Ticket' ? '0' : '5mm'} !important;
             margin: 0 !important; border: none !important;
           }
-          .ticket-hide { display: \${printFormat === 'Ticket' ? 'none' : 'block'} !important; }
+          .ticket-hide { display: ${printFormat === 'Ticket' ? 'none' : 'block'} !important; }
           @page { 
-            size: \${printFormat === 'Ticket' ? '80mm auto' : printFormat === 'A5' ? 'A5 portrait' : 'A4 portrait'}; 
+            size: ${printFormat === 'Ticket' ? '80mm auto' : printFormat === 'A5' ? 'A5 portrait' : 'A4 portrait'}; 
             margin: 0; 
           }
           .bg-[#ebebeb] { background-color: #ebebeb !important; }
           .bg-[#f9f9f9] { background-color: #f9f9f9 !important; }
         }
-      \`}</style>
+      `}</style>
     </div>
   );
 }

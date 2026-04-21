@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       <tr>
         <td><strong>#${payment.id}</strong></td>
         <td>${formatDate(payment.date_paiement)}</td>
-        <td><strong>${payment.contrats?.locataire_nom_complet || '—'}</strong></td>
+        <td><strong>${(payment as any).contrats?.locataire_nom_complet || '—'}</strong></td>
         <td>${payment.periode_debut ? `${formatDate(payment.periode_debut)} au ${formatDate(payment.periode_fin)}` : '—'}</td>
         <td class="text-center">${payment.qte_mois ? `${payment.qte_mois}` : '—'}</td>
         <td class="text-right"><strong>${fmt(payment.montant)}</strong></td>
@@ -245,7 +245,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(html, {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
-        'Content-Disposition': \`inline; filename="rapport_paiements_loyers_${today.getTime()}.html"\`,
+        'Content-Disposition': `inline; filename="rapport_paiements_loyers_${today.getTime()}.html"`,
       },
     });
   } catch (error: any) {

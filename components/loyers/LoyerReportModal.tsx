@@ -159,7 +159,7 @@ export default function LoyerReportModal({ onClose }: LoyerReportModalProps) {
         </div>
       </div>
 
-      <style jsx global>{\`
+      <style jsx global>{`
         @media print {
           body * { visibility: hidden; background: none !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           #printable-report, #printable-report * { visibility: visible; }
@@ -170,13 +170,13 @@ export default function LoyerReportModal({ onClose }: LoyerReportModalProps) {
             margin: 0 !important; border: none !important;
           }
           @page { 
-            size: \${printFormat === 'A5' ? 'A5 portrait' : 'A4 portrait'}; 
+            size: ${printFormat === 'A5' ? 'A5 portrait' : 'A4 portrait'}; 
             margin: 0; 
           }
           .bg-[#ebebeb] { background-color: #ebebeb !important; }
           .bg-[#f9f9f9] { background-color: #f9f9f9 !important; }
         }
-      \`}</style>
+      `}</style>
     </div>
   );
 }
