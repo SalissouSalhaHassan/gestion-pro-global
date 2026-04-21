@@ -12,13 +12,13 @@ function fmt(n: number) {
   return new Intl.NumberFormat("fr-FR").format(n);
 }
 
-function fmtDate(d: string) {
+function fmtDate(d?: string | null) {
   if (!d) return "—";
   try {
     const dt = new Date(d);
     return dt.toLocaleDateString("fr-FR");
   } catch {
-    return d;
+    return String(d);
   }
 }
 

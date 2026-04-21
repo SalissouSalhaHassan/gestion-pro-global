@@ -36,7 +36,7 @@ type StockItem = {
   quantite: number;
   unite: string;
   image_path: string | null;
-  stocks?: { quantite: number; depot_nom: string }[];
+  stocks?: { quantite: number; depot_nom: string; depot_id?: number }[];
 };
 
 type DepotObject = { id: number; nom: string };

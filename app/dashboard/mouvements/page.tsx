@@ -126,7 +126,7 @@ export default function MouvementsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [startDate, endDate, selectedDepot, generalSearch]);
+  }, [startDate, endDate, selectedDepotId, generalSearch]);
 
   useEffect(() => {
     fetchData();
@@ -418,7 +418,7 @@ export default function MouvementsPage() {
       )}
       {showPrintJournal && (
         <StockJournalModal 
-          filters={{ search: generalSearch, startDate, endDate, depot: selectedDepot, type: typeFilter }}
+          filters={{ search: generalSearch, startDate, endDate, depot: selectedDepotId?.toString() || "", type: typeFilter }}
           onClose={() => setShowPrintJournal(false)}
         />
       )}

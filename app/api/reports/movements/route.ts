@@ -51,11 +51,11 @@ export async function GET(request: Request) {
     }
 
     // Process large data chunks efficiently on the Edge
-    const processedData = (data || []).map(m => ({
+    const processedData = (data || []).map((m: any) => ({
       ...m,
-      designation: m.articles?.designation,
-      reference: m.articles?.reference,
-      depot: m.depots?.nom
+      designation: Array.isArray(m.articles) ? m.articles[0]?.designation : m.articles?.designation,
+      reference: Array.isArray(m.articles) ? m.articles[0]?.reference : m.articles?.reference,
+      depot: Array.isArray(m.depots) ? m.depots[0]?.nom : m.depots?.nom
     }));
 
     return NextResponse.json({

@@ -24,7 +24,8 @@ type StockRow = {
 type EditInvoiceItemRow = {
   article_id: number | string;
   qte: number | string | null;
-  depot_origine: string | null;
+  depot_id?: number | string | null;
+  depot_origine?: string | null;
 };
 
 function normalizeDepotName(value: string) {
