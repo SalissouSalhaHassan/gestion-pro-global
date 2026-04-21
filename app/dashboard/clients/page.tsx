@@ -10,6 +10,8 @@ type Client = {
   nom: string;
   tel: string | null;
   credit_facture: number;
+  credit_bl: number;
+  credit: number;
 };
 
 const supabase = createClient();
@@ -70,7 +72,9 @@ export default function ClientsPage() {
           ref_client: data.ref_client,
           nom: data.nom,
           tel: data.tel,
-          credit_facture: 0
+          credit_facture: 0,
+          credit_bl: 0,
+          credit: 0
         }, ...prev]);
       }
       
@@ -91,7 +95,7 @@ export default function ClientsPage() {
       try {
         const { data, error } = await supabase
           .from("clients")
-          .select("id, ref_client, nom, tel, credit_facture")
+          .select("id, ref_client, nom, tel, credit_facture, credit_bl")
           .eq("is_deleted", false);
 
         if (error) {
@@ -101,13 +105,19 @@ export default function ClientsPage() {
         }
 
         if (!error && data) {
-          const mapped: Client[] = data.map((r: any) => ({
-            id: r.id,
-            ref_client: r.ref_client || null,
-            nom: String(r.nom || `Client ${r.id}`),
-            tel: r.tel || "-",
-            credit_facture: Number(r.credit_facture) || 0,
-          }));
+          const mapped: Client[] = data.map((r: any) => {
+            const cf = Number(r.credit_facture) || 0;
+            const cb = Number(r.credit_bl) || 0;
+            return {
+              id: r.id,
+              ref_client: r.ref_client || null,
+              nom: String(r.nom || `Client ${r.id}`),
+              tel: r.tel || "-",
+              credit_facture: cf,
+              credit_bl: cb,
+              credit: cf + cb,
+            };
+          });
           setClients(mapped);
         }
       } catch (err) {
@@ -166,8 +176,8 @@ export default function ClientsPage() {
       return 0;
     });
 
-    const credit = clients.reduce((acc, curr) => acc + curr.credit_facture, 0);
-    const inDebtCount = clients.filter((c) => c.credit_facture > 0).length;
+    const credit = clients.reduce((acc, curr) => acc + curr.credit, 0);
+    const inDebtCount = clients.filter((c) => c.credit > 0).length;
 
     return { filteredClients: filtered, totalCredit: credit, clientsInDebt: inDebtCount };
   }, [clients, query, sortField, sortAsc]);
@@ -283,10 +293,10 @@ export default function ClientsPage() {
                 <th className="px-6 py-5 font-semibold">Téléphone</th>
                 <th 
                   className="cursor-pointer px-6 py-5 text-right hover:bg-slate-200/50 transition-colors whitespace-nowrap"
-                  onClick={() => toggleSort("credit_facture")}
+                  onClick={() => toggleSort("credit")}
                 >
                   <div className="flex items-center justify-end gap-2">
-                    Crédit Facture <ArrowUpDown size={14} className="text-slate-400" />
+                    Crédit <ArrowUpDown size={14} className="text-slate-400" />
                   </div>
                 </th>
                 <th className="px-6 py-5 text-right whitespace-nowrap">Actions</th>
@@ -328,7 +338,7 @@ export default function ClientsPage() {
                 </tr>
               ) : (
                 filteredClients.map((client) => {
-                  const hasDebt = client.credit_facture > 0;
+                  const hasDebt = client.credit > 0;
                   return (
                     <tr 
                       key={client.id} 
@@ -359,7 +369,7 @@ export default function ClientsPage() {
                             title="Cliquez لفتح تفاصيل الديون"
                           >
                             <ShieldAlert size={14} />
-                            {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(client.credit_facture)} F CFA
+                            {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(client.credit)} F CFA
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-emerald-700 bg-emerald-50 text-xs font-bold border border-emerald-100">
@@ -419,12 +429,12 @@ export default function ClientsPage() {
             <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar">
               <div className="mb-8 p-6 rounded-3xl bg-indigo-50 border border-indigo-100 flex items-center justify-between">
                 <div>
-                  <p className="text-indigo-600 text-xs font-black uppercase tracking-widest mb-1">Solde Actuel (Crédit)</p>
-                  <p className={`text-3xl font-black tracking-tight ${selectedClientForDebt.credit_facture > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                    {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(selectedClientForDebt.credit_facture)} F CFA
+                  <p className="text-indigo-600 text-xs font-black uppercase tracking-widest mb-1">Solde Actuel (Crédit Total)</p>
+                  <p className={`text-3xl font-black tracking-tight ${selectedClientForDebt.credit > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                    {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(selectedClientForDebt.credit)} F CFA
                   </p>
                 </div>
-                <div className={`h-14 w-14 rounded-2xl flex items-center justify-center text-white shadow-lg ${selectedClientForDebt.credit_facture > 0 ? "bg-rose-500 shadow-rose-200" : "bg-emerald-500 shadow-emerald-200"}`}>
+                <div className={`h-14 w-14 rounded-2xl flex items-center justify-center text-white shadow-lg ${selectedClientForDebt.credit > 0 ? "bg-rose-500 shadow-rose-200" : "bg-emerald-500 shadow-emerald-200"}`}>
                   <FileText size={28} />
                 </div>
               </div>
