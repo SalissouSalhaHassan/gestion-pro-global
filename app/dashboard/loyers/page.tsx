@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, Pencil, Trash2, BarChart3, Wallet, ListChecks,
-  Loader2, Search, Home, Users, FileText
+  Loader2, Search, Home, Users, FileText, Printer
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -174,6 +174,14 @@ export default function LoyersPage() {
           variant="outline"
         >
           <ListChecks size={16} className="mr-2" /> Liste Paiements
+        </Button>
+
+        <Button
+          onClick={() => window.open("/api/loyers/print/report", "_blank")}
+          className="rounded-xl h-11 px-5 font-black bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50 shadow-sm"
+          variant="outline"
+        >
+          <Printer size={16} className="mr-2" /> Imprimer Rapport
         </Button>
 
         {/* Search */}

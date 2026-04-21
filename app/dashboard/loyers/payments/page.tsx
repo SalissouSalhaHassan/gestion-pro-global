@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Search, Loader2, Pencil, Trash2, Plus, Filter, X
+  ArrowLeft, Search, Loader2, Pencil, Trash2, Plus, Filter, X, Printer
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -229,6 +229,14 @@ export default function PaymentsListPage() {
           className="rounded-xl h-10 px-5 font-black bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-700 hover:to-rose-600 shadow-lg shadow-rose-500/30 disabled:opacity-40"
         >
           {deleting ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Trash2 size={16} className="mr-2" />} Supprimer
+        </Button>
+        <Button
+          disabled={!selected}
+          onClick={() => selected && window.open(`/api/loyers/print/receipt/${selected.id}`, "_blank")}
+          className="rounded-xl h-10 px-5 font-black bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50 shadow-sm disabled:opacity-40"
+          variant="outline"
+        >
+          <Printer size={16} className="mr-2" /> Imprimer Reçu
         </Button>
 
         {/* Summary */}
