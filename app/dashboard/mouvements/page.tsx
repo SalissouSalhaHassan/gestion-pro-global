@@ -38,7 +38,8 @@ type MouvementRecord = {
   type: string;
   nr_doc: string;
   fournisseur_client: string;
-  depot: string;
+  depot_id: number | null;
+  depot?: string; // For display
   utilisateur: string;
   stock_avant: number;
   quantite: number;
@@ -66,8 +67,8 @@ export default function MouvementsPage() {
   // Advanced Filters
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [selectedDepot, setSelectedDepot] = useState("Tous");
-  const [depots, setDepots] = useState<string[]>([]);
+  const [selectedDepotId, setSelectedDepotId] = useState<number | null>(null);
+  const [depots, setDepots] = useState<{id: number, nom: string}[]>([]);
   const [typeFilter, setTypeFilter] = useState("Tous");
   const [generalSearch, setGeneralSearch] = useState("");
   const [hasMounted, setHasMounted] = useState(false);
@@ -106,7 +107,7 @@ export default function MouvementsPage() {
       const url = new URL("/api/stock/mouvements", window.location.origin);
       if (startDate) url.searchParams.set("startDate", startDate);
       if (endDate) url.searchParams.set("endDate", endDate);
-      if (selectedDepot !== "Tous") url.searchParams.set("depot", selectedDepot);
+      if (selectedDepotId) url.searchParams.set("depotId", selectedDepotId.toString());
       if (generalSearch) url.searchParams.set("search", generalSearch);
 
       const res = await fetch(url.toString());
@@ -164,7 +165,7 @@ export default function MouvementsPage() {
     // 3. Recalculate Running Balance per Article & Depot
     const contextMap: Record<string, number> = {};
     const processed = raw.map(m => {
-        const key = `${m.article_id}-${m.depot}`;
+        const key = `${m.article_id}-${m.depot_id}`;
         const previousApres = contextMap[key] || 0;
         const delta = Number(m.entree || 0) - Number(m.sortie || 0);
         
@@ -340,9 +341,9 @@ export default function MouvementsPage() {
               </select>
             </FilterField>
             <FilterField label="Dépôt" icon={MapPin}>
-              <select value={selectedDepot} onChange={(e) => setSelectedDepot(e.target.value)} className="w-full bg-transparent outline-none font-bold text-slate-700 appearance-none">
-                <option value="Tous">Tous les Dépôts</option>
-                {depots.map(d => <option key={d} value={d}>{d}</option>)}
+              <select value={selectedDepotId || ""} onChange={(e) => setSelectedDepotId(e.target.value ? Number(e.target.value) : null)} className="w-full bg-transparent outline-none font-bold text-slate-700 appearance-none">
+                <option value="">Tous les Dépôts</option>
+                {depots.map(d => <option key={d.id} value={d.id}>{d.nom}</option>)}
               </select>
             </FilterField>
           </div>
