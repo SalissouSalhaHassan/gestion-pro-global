@@ -298,6 +298,54 @@ export default function LoyerReceiptModal({ paymentId, onClose }: LoyerReceiptMo
             </div>
           </div>
 
+          {/* 12-Month Status Grid */}
+          <div className="mb-10 border-2 border-slate-900 p-5 rounded-2xl bg-slate-50">
+            <h3 className="text-[14px] font-black uppercase mb-4 text-slate-900 border-b-2 border-slate-900 pb-2">
+              📊 État de Paiement Annuel ({new Date(payment.date_paiement).getFullYear()})
+            </h3>
+            
+            <table className="w-full border-collapse">
+              <tbody>
+                {[0, 1].map(rowIdx => (
+                  <tr key={rowIdx}>
+                    {["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
+                      .slice(rowIdx * 6, (rowIdx + 1) * 6)
+                      .map((month, subIdx) => {
+                        const idx = rowIdx * 6 + subIdx;
+                        const year = new Date(payment.date_paiement).getFullYear();
+                        const isPaid = (allYearPayments || []).some(p => {
+                          if (p.nom_de_mois && p.nom_de_mois.includes(`${month} ${year}`)) return true;
+                          if (p.periode_debut && p.periode_fin) {
+                            const start = new Date(p.periode_debut);
+                            const end = new Date(p.periode_fin);
+                            const targetStart = new Date(year, idx, 1);
+                            const targetEnd = new Date(year, idx + 1, 0);
+                            return start <= targetEnd && end >= targetStart;
+                          }
+                          return false;
+                        });
+
+                        return (
+                          <td key={month} className="p-1 w-1/6">
+                            <div className={`border-2 p-2 rounded-xl text-center ${
+                              isPaid ? "border-emerald-500 bg-emerald-50" : "border-slate-300 bg-white"
+                            }`}>
+                              <p className="text-[9px] font-black uppercase text-slate-500 mb-1">{month}</p>
+                              <span className={`text-[10px] font-black ${
+                                isPaid ? "text-emerald-700" : "text-rose-600"
+                              }`}>
+                                {isPaid ? "PAYÉ" : "IMPAYÉ"}
+                              </span>
+                            </div>
+                          </td>
+                        );
+                      })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
           {/* History Table */}
           {history.length > 0 && (
             <div className="mb-12">
@@ -324,43 +372,6 @@ export default function LoyerReceiptModal({ paymentId, onClose }: LoyerReceiptMo
               </table>
             </div>
           )}
-
-          {/* 12-Month Status Grid */}
-          <div className="mb-12 border-2 border-slate-900 p-4 rounded-2xl bg-slate-50/50">
-            <h3 className="text-[11px] font-black uppercase mb-4 text-slate-900 flex items-center gap-2">
-              <ClipboardList size={14} className="text-indigo-600" />
-              État de Paiement Annuel ({new Date(payment.date_paiement).getFullYear()})
-            </h3>
-            <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
-              {["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"].map((month, idx) => {
-                const year = new Date(payment.date_paiement).getFullYear();
-                const isPaid = (allYearPayments || []).some(p => {
-                  if (p.nom_de_mois && p.nom_de_mois.includes(`${month} ${year}`)) return true;
-                  if (p.periode_debut && p.periode_fin) {
-                    const start = new Date(p.periode_debut);
-                    const end = new Date(p.periode_fin);
-                    const targetStart = new Date(year, idx, 1);
-                    const targetEnd = new Date(year, idx + 1, 0);
-                    return start <= targetEnd && end >= targetStart;
-                  }
-                  return false;
-                });
-
-                return (
-                  <div key={month} className={`border p-2 rounded-xl text-center transition-all ${
-                    isPaid ? "border-emerald-500 bg-emerald-50" : "border-rose-200 bg-rose-50"
-                  }`}>
-                    <p className="text-[9px] font-black uppercase text-slate-500 mb-1">{month}</p>
-                    <span className={`text-[10px] font-black px-1 py-0.5 rounded-full ${
-                      isPaid ? "text-emerald-700" : "text-rose-700"
-                    }`}>
-                      {isPaid ? "PAYÉ" : "IMPAYÉ"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
 
           {/* Signatures */}
           <div className="mt-auto grid grid-cols-2 gap-20 pt-10 px-4">

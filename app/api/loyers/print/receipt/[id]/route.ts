@@ -52,7 +52,7 @@ export async function GET(
 
     const contract = (payment as any).contrats;
     const paymentDate = new Date(payment.date_paiement);
-    const today = new Date();
+    const payYear = paymentDate.getFullYear();
 
     const formatDate = (value: string | null | undefined) => {
       if (!value) return '—';
@@ -62,8 +62,7 @@ export async function GET(
         return String(value);
       }
     };
-    // Fetch All Payments for the Year to show status
-    const payYear = paymentDate.getFullYear();
+
     const { data: allYearPayments } = await supabase
       .from('contrat_paiements')
       .select('*')
@@ -71,35 +70,79 @@ export async function GET(
       .or(`periode_debut.gte.${payYear}-01-01,periode_fin.lte.${payYear}-12-31,nom_de_mois.ilike.%${payYear}%`);
 
     const monthsFr = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
-    
+
+    const { data: history } = await supabase
+      .from('contrat_paiements')
+      .select('*')
+      .eq('contrat_id', payment.contrat_id)
+      .order('date_paiement', { ascending: false })
+      .limit(5);
+
+    let historyHtml = '';
+    if (history && history.length > 0) {
+        historyHtml = `
+        <div style="margin-bottom: 35px;">
+            <h3 style="font-size: 13px; font-weight: 900; text-transform: uppercase; border-bottom: 2px solid #0f172a; padding-bottom: 5px; margin-bottom: 12px;">Historique des Versements</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 0;">
+                <thead>
+                    <tr style="background: #f1f5f9;">
+                        <th style="border: 2px solid #0f172a; padding: 8px; font-size: 10px; text-align: left;">Date</th>
+                        <th style="border: 2px solid #0f172a; padding: 8px; font-size: 10px; text-align: center;">Moyen</th>
+                        <th style="border: 2px solid #0f172a; padding: 8px; font-size: 10px; text-align: left;">Référence / Mois</th>
+                        <th style="border: 2px solid #0f172a; padding: 8px; font-size: 10px; text-align: right;">Versement</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${history.map(h => `
+                        <tr>
+                            <td style="border: 2px solid #0f172a; padding: 8px; font-size: 11px; font-weight: 700;">${formatDate(h.date_paiement)}</td>
+                            <td style="border: 2px solid #0f172a; padding: 8px; font-size: 11px; font-weight: 700; text-align: center;">${h.mode_paiement}</td>
+                            <td style="border: 2px solid #0f172a; padding: 8px; font-size: 11px; font-weight: 700;">${h.nom_de_mois || 'Paiement direct'}</td>
+                            <td style="border: 2px solid #0f172a; padding: 8px; font-size: 11px; font-weight: 900; text-align: right;">${Number(h.montant).toLocaleString('fr-FR')} F</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+        `;
+    }
+
     let statusHtml = `
-    <div style="margin-bottom: 35px;">
-        <h3 style="font-size: 13px; font-weight: 900; text-transform: uppercase; border-bottom: 2px solid #0f172a; padding-bottom: 5px; margin-bottom: 15px;">État de Paiement Annuel (${payYear})</h3>
-        <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;">
+    <div style="margin-bottom: 35px; border: 2px solid #0f172a; padding: 20px; border-radius: 15px; background: #f8fafc;">
+        <h3 style="font-size: 14px; font-weight: 900; text-transform: uppercase; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 20px;">📊 État de Paiement Annuel (${payYear})</h3>
+        <table style="width: 100%; border-collapse: separate; border-spacing: 8px;">
     `;
 
-    monthsFr.forEach((month, idx) => {
-        const isPaid = (allYearPayments || []).some(p => {
-            if (p.nom_de_mois && p.nom_de_mois.includes(`${month} ${payYear}`)) return true;
-            if (p.periode_debut && p.periode_fin) {
-                const start = new Date(p.periode_debut);
-                const end = new Date(p.periode_fin);
-                const targetStart = new Date(payYear, idx, 1);
-                const targetEnd = new Date(payYear, idx + 1, 0);
-                return start <= targetEnd && end >= targetStart;
-            }
-            return false;
-        });
+    for (let r = 0; r < 2; r++) {
+        statusHtml += '<tr>';
+        for (let c = 0; c < 6; c++) {
+            const idx = r * 6 + c;
+            const month = monthsFr[idx];
+            const isPaid = (allYearPayments || []).some(p => {
+                if (p.nom_de_mois && p.nom_de_mois.includes(`${month} ${payYear}`)) return true;
+                if (p.periode_debut && p.periode_fin) {
+                    const start = new Date(p.periode_debut);
+                    const end = new Date(p.periode_fin);
+                    const targetStart = new Date(payYear, idx, 1);
+                    const targetEnd = new Date(payYear, idx + 1, 0);
+                    return start <= targetEnd && end >= targetStart;
+                }
+                return false;
+            });
 
-        statusHtml += `
-            <div style="border: 1px solid ${isPaid ? '#10b981' : '#e2e8f0'}; background: ${isPaid ? '#f0fdf4' : '#fff1f2'}; padding: 8px; border-radius: 8px; text-align: center;">
-                <div style="font-size: 8px; font-weight: 900; color: #64748b; text-transform: uppercase; margin-bottom: 3px;">${month}</div>
-                <div style="font-size: 9px; font-weight: 900; color: ${isPaid ? '#15803d' : '#be123c'};">${isPaid ? 'PAYÉ' : 'IMPAYÉ'}</div>
-            </div>
-        `;
-    });
+            statusHtml += `
+                <td style="width: 16.6%; padding: 0;">
+                    <div style="border: 2px solid ${isPaid ? '#10b981' : '#cbd5e1'}; background: ${isPaid ? '#f0fdf4' : '#ffffff'}; padding: 10px; border-radius: 10px; text-align: center;">
+                        <div style="font-size: 8px; font-weight: 900; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">${month}</div>
+                        <div style="font-size: 10px; font-weight: 900; color: ${isPaid ? '#15803d' : '#e11d48'};">${isPaid ? 'PAYÉ' : 'IMPAYÉ'}</div>
+                    </div>
+                </td>
+            `;
+        }
+        statusHtml += '</tr>';
+    }
 
-    statusHtml += `</div></div>`;
+    statusHtml += `</table></div>`;
 
     // Fetch Company Info
     const { data: company } = await supabase.from('informations_entreprise').select('*').limit(1).single();
