@@ -35,16 +35,19 @@ export async function GET(request: NextRequest) {
       }
     };
 
+    // Fetch Company Info
+    const { data: company } = await supabase.from('informations_entreprise').select('*').limit(1).single();
+
     // Build the rows
     const rowsHtml = payments.map((payment) => `
       <tr>
-        <td><strong>#${payment.id}</strong></td>
+        <td class="font-bold">#${payment.id.toString().padStart(6, '0')}</td>
         <td>${formatDate(payment.date_paiement)}</td>
-        <td><strong>${(payment as any).contrats?.locataire_nom_complet || '—'}</strong></td>
-        <td>${payment.periode_debut ? `${formatDate(payment.periode_debut)} au ${formatDate(payment.periode_fin)}` : '—'}</td>
-        <td class="text-center">${payment.qte_mois ? `${payment.qte_mois}` : '—'}</td>
-        <td class="text-right"><strong>${fmt(payment.montant)}</strong></td>
-        <td>${payment.mode_paiement}</td>
+        <td class="font-bold">${(payment as any).contrats?.locataire_nom_complet || '—'}</td>
+        <td class="text-slate-500">${payment.periode_debut ? `${formatDate(payment.periode_debut)} au ${formatDate(payment.periode_fin)}` : (payment.nom_de_mois || '—')}</td>
+        <td class="text-center font-bold">${payment.qte_mois || 1}</td>
+        <td class="text-right font-black text-slate-900">${Number(payment.montant).toLocaleString('fr-FR')} F</td>
+        <td class="text-xs uppercase font-bold text-slate-400">${payment.mode_paiement}</td>
       </tr>
     `).join('');
 
@@ -55,188 +58,217 @@ export async function GET(request: NextRequest) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rapport des Paiements - Gestion des Loyers</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f5f5;
-            padding: 20px;
-            color: #333;
+            font-family: 'Inter', sans-serif;
+            background: #f1f5f9;
+            padding: 40px 20px;
+            color: #0f172a;
         }
         .report {
             width: 100%;
-            max-width: 1000px;
+            max-width: 297mm; /* A4 Landscape if needed, but let's keep it flexible */
             margin: 0 auto;
             background: white;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            page-break-after: always;
+            padding: 50px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
         }
         .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 25px;
+        }
+        .company-info h1 {
+            font-size: 24px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -1px;
+        }
+        .company-info p {
+            font-size: 12px;
+            font-weight: 700;
+            color: #475569;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+        .divider {
+            height: 2px;
+            background: #0f172a;
+            width: 100%;
+            margin-bottom: 25px;
+        }
+        .title-box {
+            border: 2px solid #0f172a;
+            background: #f8fafc;
+            padding: 15px;
             text-align: center;
-            border-bottom: 3px solid #4f46e5;
-            padding-bottom: 20px;
             margin-bottom: 30px;
         }
-        .header h1 {
-            color: #4f46e5;
-            font-size: 28px;
-            margin-bottom: 5px;
-        }
-        .header p {
-            color: #666;
-            font-size: 14px;
+        .title-box h2 {
+            font-size: 18px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
         }
         .filters-section {
-            background: #f8f9fa;
+            background: #f1f5f9;
             padding: 15px;
-            border-radius: 6px;
             margin-bottom: 30px;
-            font-size: 13px;
+            border-left: 4px solid #0f172a;
+            font-size: 11px;
+            font-weight: 700;
+            color: #475569;
         }
         .filters-title {
-            font-weight: bold;
-            color: #4f46e5;
-            margin-bottom: 10px;
+            font-weight: 900;
+            color: #0f172a;
             text-transform: uppercase;
+            margin-bottom: 5px;
+            font-size: 10px;
         }
-        .details-table {
+        table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 30px;
-            font-size: 13px;
+            margin-bottom: 40px;
         }
-        .details-table thead {
-            background: #f8f8f8;
-            border-top: 2px solid #4f46e5;
-            border-bottom: 2px solid #4f46e5;
-        }
-        .details-table th {
-            padding: 12px;
-            text-align: left;
-            font-weight: bold;
-            color: #333;
-            font-size: 12px;
+        th {
+            background: #f8fafc;
+            border: 2px solid #0f172a;
+            padding: 10px;
+            font-size: 10px;
+            font-weight: 900;
             text-transform: uppercase;
+            text-align: left;
         }
-        .details-table td {
-            padding: 10px 12px;
-            border-bottom: 1px solid #eee;
+        td {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 12px 10px;
+            font-size: 11px;
+            color: #1e293b;
         }
-        .text-right {
-            text-align: right !important;
-        }
-        .text-center {
-            text-align: center !important;
-        }
-        .summary {
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .font-bold { font-weight: 700; }
+        .font-black { font-weight: 900; }
+        .summary-container {
             display: flex;
             justify-content: flex-end;
-            margin-bottom: 30px;
         }
-        .summary-table {
-            width: 100%;
-            max-width: 400px;
-            border-collapse: collapse;
-            font-size: 14px;
+        .summary-box {
+            width: 350px;
+            border: 2px solid #0f172a;
         }
-        .summary-table tr td {
-            padding: 10px 12px;
-            border-bottom: 1px solid #eee;
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 15px;
+            font-size: 12px;
+            border-bottom: 1px solid #e2e8f0;
         }
-        .summary-table tr.total {
-            background: #eef2ff;
-            border-top: 2px solid #4f46e5;
-            border-bottom: 2px solid #4f46e5;
-            font-weight: bold;
-            font-size: 18px;
-            color: #4f46e5;
-        }
-        .summary-table tr.total td {
-            padding: 15px 12px;
-            border: none;
+        .summary-row:last-child { border-bottom: none; }
+        .summary-row.total {
+            background: #0f172a;
+            color: white;
+            font-weight: 900;
+            font-size: 16px;
         }
         .footer {
-            text-align: center;
-            color: #999;
-            font-size: 11px;
-            border-top: 1px solid #eee;
-            padding-top: 20px;
-            margin-top: 30px;
+            margin-top: 50px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 15px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+            font-weight: 700;
+            color: #94a3b8;
+            text-transform: uppercase;
+        }
+        .print-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #0f172a;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
         @media print {
             body { background: white; padding: 0; }
-            .report { box-shadow: none; max-width: 100%; padding: 0; }
-            .no-print { display: none; }
-        }
-        .print-btn {
-            display: block;
-            margin: 20px auto;
-            padding: 12px 30px;
-            background: #4f46e5;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-        }
-        .print-btn:hover {
-            background: #4338ca;
+            .report { box-shadow: none; max-width: 100%; padding: 10mm; }
+            .print-btn { display: none; }
         }
     </style>
 </head>
 <body>
-    <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimer le Rapport</button>
+    <button class="print-btn" onclick="window.print()">IMPRIMER LE RAPPORT</button>
     
     <div class="report">
         <div class="header">
-            <h1>RAPPORT DES PAIEMENTS DE LOYER</h1>
-            <p>GestionPro - Gestion des Loyers</p>
-        </div>
-
-        <div class="filters-section">
-            <div class="filters-title">Critères du Rapport</div>
-            <div>
-                <strong>Période:</strong> ${filters.start_date || 'Début'} au ${filters.end_date || 'Fin'} &nbsp;|&nbsp; 
-                <strong>Mode:</strong> ${filters.mode || 'Tous'} &nbsp;|&nbsp; 
-                <strong>Locataire:</strong> ${filters.locataire || 'Tous'} &nbsp;|&nbsp;
-                <strong>Imprimé le:</strong> ${today.toLocaleDateString('fr-FR')} à ${today.toLocaleTimeString('fr-FR')}
+            <div class="company-info">
+                <h1>${company?.nom_entreprise || "GESTION PRO"}</h1>
+                <p>${company?.adresse || "ADRESSE NON CONFIGURÉE"}</p>
+            </div>
+            <div style="text-align: right; font-size: 10px; font-weight: 700; color: #94a3b8;">
+                Généré le ${today.toLocaleDateString('fr-FR')}<br>
+                à ${today.toLocaleTimeString('fr-FR')}
             </div>
         </div>
 
-        <table class="details-table">
+        <div class="divider"></div>
+
+        <div class="title-box">
+            <h2>RAPPORT DES PAIEMENTS DE LOYER</h2>
+        </div>
+
+        <div class="filters-section">
+            <div class="filters-title">Critères de filtrage</div>
+            <div>
+                Période: ${filters.start_date ? formatDate(filters.start_date) : 'Début'} au ${filters.end_date ? formatDate(filters.end_date) : 'Fin'} &nbsp; | &nbsp;
+                Mode: ${filters.mode || 'Tous'} &nbsp; | &nbsp;
+                Locataire: ${filters.locataire || 'Tous'}
+            </div>
+        </div>
+
+        <table>
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Date</th>
-                    <th>Locataire</th>
-                    <th>Période Couverte</th>
-                    <th class="text-center">Qté Mois</th>
-                    <th class="text-right">Montant</th>
-                    <th>Mode</th>
+                    <th style="width: 80px;">N° REÇU</th>
+                    <th style="width: 100px;">DATE</th>
+                    <th>LOCATAIRE</th>
+                    <th>PÉRIODE</th>
+                    <th class="text-center" style="width: 60px;">MOIS</th>
+                    <th class="text-right" style="width: 120px;">MONTANT</th>
+                    <th style="width: 100px;">MODE</th>
                 </tr>
             </thead>
             <tbody>
-                ${rowsHtml || '<tr><td colspan="7" class="text-center">Aucun paiement trouvé pour ces critères.</td></tr>'}
+                ${rowsHtml || '<tr><td colspan="7" class="text-center">Aucun paiement trouvé.</td></tr>'}
             </tbody>
         </table>
 
-        <div class="summary">
-            <table class="summary-table">
-                <tr>
-                    <td><strong>Nombre de transactions</strong></td>
-                    <td class="text-right"><strong>${payments.length}</strong></td>
-                </tr>
-                <tr class="total">
-                    <td>TOTAL REÇU</td>
-                    <td class="text-right">${fmt(totalAmount)}</td>
-                </tr>
-            </table>
+        <div class="summary-container">
+            <div class="summary-box">
+                <div class="summary-row">
+                    <span class="font-bold">Nombre de transactions</span>
+                    <span class="font-black">${payments.length}</span>
+                </div>
+                <div class="summary-row total">
+                    <span>TOTAL REÇU</span>
+                    <span>${Number(totalAmount).toLocaleString('fr-FR')} F</span>
+                </div>
+            </div>
         </div>
 
         <div class="footer">
-            <p>GestionPro © ${today.getFullYear()} | Ce rapport est généré automatiquement par le système.</p>
+            <span>GestionPro - Système de Gestion Immobilière</span>
+            <span style="letter-spacing: 2px;">Rapport de Gestion des Loyers</span>
         </div>
     </div>
 </body>
