@@ -60,7 +60,7 @@ export async function GET(request: Request) {
     .from("articles")
     .select(`
       id, reference, designation, qte_min, unite, image_path,
-      stocks!left ( quantite, depot_id )
+      stocks!left ( quantite, depot_nom )
     `)
     .eq("is_deleted", false);
 
@@ -77,28 +77,25 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const rows = Array.isArray(data) ? (data as ArticleRow[]) : [];
-
-  const requestedDepotId = requestedDepot ? Number(requestedDepot) : null;
+  const rows = Array.isArray(data) ? (data as any[]) : [];
 
   const results = rows.map((art) => {
     const allStocks = Array.isArray(art.stocks) ? art.stocks : [];
 
-    const visibleStocks =
-      requestedDepotId
-        ? allStocks.filter(
-            (stock) =>
-              Number(stock.depot_id) === requestedDepotId
-          )
-        : !isAdmin && scopeDepots.length > 0
-          ? allStocks.filter((stock) =>
-              // This part still uses scopeDepots (names) because scopeDepots comes from auth_helper (text-based)
-              // We should ideally convert scopeDepots to IDs too.
-              // For now, let's just use allStocks if it's "Tous" or restricted by auth.
-              // I'll skip name matching here for simplicity and use ID if provided.
-              true 
-            )
-          : allStocks;
+    let visibleStocks = allStocks;
+    
+    if (requestedDepot && requestedDepot !== "Tous") {
+      visibleStocks = allStocks.filter((stock) => {
+        const stockDepot = String(stock.depot_nom || "").toLowerCase();
+        const reqDepot = requestedDepot.toLowerCase();
+        return stockDepot === reqDepot;
+      });
+    } else if (!isAdmin && scopeDepots.length > 0) {
+      visibleStocks = allStocks.filter((stock) => {
+        const stockDepot = String(stock.depot_nom || "").toLowerCase();
+        return scopeDepots.some(sd => sd.toLowerCase() === stockDepot);
+      });
+    }
 
     const quantite = visibleStocks.reduce(
       (sum, stock) => sum + Number(stock.quantite || 0),
@@ -125,7 +122,6 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({
-    depot_id: requestedDepotId,
     depot_nom: requestedDepot || (scopeDepots[0] || primaryDepot) || "Tous",
     items: filteredResults,
   });
