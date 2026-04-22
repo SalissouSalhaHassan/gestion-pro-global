@@ -54,6 +54,15 @@ export async function GET(
     const paymentDate = new Date(payment.date_paiement);
     const today = new Date();
 
+    const formatDate = (value: string | null | undefined) => {
+      if (!value) return '—';
+      try {
+        return new Date(value).toLocaleDateString('fr-FR');
+      } catch {
+        return String(value);
+      }
+    };
+
     // Fetch Company Info
     const { data: company } = await supabase.from('informations_entreprise').select('*').limit(1).single();
 
