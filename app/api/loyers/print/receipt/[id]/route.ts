@@ -62,6 +62,44 @@ export async function GET(
         return String(value);
       }
     };
+    // Fetch All Payments for the Year to show status
+    const payYear = paymentDate.getFullYear();
+    const { data: allYearPayments } = await supabase
+      .from('contrat_paiements')
+      .select('*')
+      .eq('contrat_id', payment.contrat_id)
+      .or(`periode_debut.gte.${payYear}-01-01,periode_fin.lte.${payYear}-12-31,nom_de_mois.ilike.%${payYear}%`);
+
+    const monthsFr = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+    
+    let statusHtml = `
+    <div style="margin-bottom: 35px;">
+        <h3 style="font-size: 13px; font-weight: 900; text-transform: uppercase; border-bottom: 2px solid #0f172a; padding-bottom: 5px; margin-bottom: 15px;">État de Paiement Annuel (${payYear})</h3>
+        <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;">
+    `;
+
+    monthsFr.forEach((month, idx) => {
+        const isPaid = (allYearPayments || []).some(p => {
+            if (p.nom_de_mois && p.nom_de_mois.includes(`${month} ${payYear}`)) return true;
+            if (p.periode_debut && p.periode_fin) {
+                const start = new Date(p.periode_debut);
+                const end = new Date(p.periode_fin);
+                const targetStart = new Date(payYear, idx, 1);
+                const targetEnd = new Date(payYear, idx + 1, 0);
+                return start <= targetEnd && end >= targetStart;
+            }
+            return false;
+        });
+
+        statusHtml += `
+            <div style="border: 1px solid ${isPaid ? '#10b981' : '#e2e8f0'}; background: ${isPaid ? '#f0fdf4' : '#fff1f2'}; padding: 8px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 8px; font-weight: 900; color: #64748b; text-transform: uppercase; margin-bottom: 3px;">${month}</div>
+                <div style="font-size: 9px; font-weight: 900; color: ${isPaid ? '#15803d' : '#be123c'};">${isPaid ? 'PAYÉ' : 'IMPAYÉ'}</div>
+            </div>
+        `;
+    });
+
+    statusHtml += `</div></div>`;
 
     // Fetch Company Info
     const { data: company } = await supabase.from('informations_entreprise').select('*').limit(1).single();
@@ -418,6 +456,8 @@ export async function GET(
                 <div class="summary-value">0 F</div>
             </div>
         </div>
+
+        ${statusHtml}
 
         <div class="signature-grid">
             <div class="signature-box">

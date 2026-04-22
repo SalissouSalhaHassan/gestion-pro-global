@@ -52,6 +52,7 @@ export default function LoyerReceiptModal({ paymentId, onClose }: LoyerReceiptMo
   };
 
   const [history, setHistory] = useState<any[]>([]);
+  const [allYearPayments, setAllYearPayments] = useState<any[]>([]);
 
   useEffect(() => {
     async function fetchData() {
@@ -82,6 +83,27 @@ export default function LoyerReceiptModal({ paymentId, onClose }: LoyerReceiptMo
             .order("date_paiement", { ascending: false })
             .limit(5);
           setHistory(historyData || []);
+
+          // 4. Fetch All Payments for the Year
+          const payYear = new Date(payData.date_paiement).getFullYear();
+          const { data: yearData } = await supabase
+            .from("contrat_paiements")
+            .select("*")
+            .eq("contrat_id", payData.contrat_id)
+            .gte("periode_debut", `${payYear}-01-01`)
+            .lte("periode_fin", `${payYear}-12-31`);
+          
+          // Also fetch based on nom_de_mois containing the year
+          const { data: yearDataByMonth } = await supabase
+            .from("contrat_paiements")
+            .select("*")
+            .eq("contrat_id", payData.contrat_id)
+            .ilike("nom_de_mois", `%${payYear}%`);
+
+          // Combine and deduplicate
+          const combined = [...(yearData || []), ...(yearDataByMonth || [])];
+          const unique = Array.from(new Map(combined.map(p => [p.id, p])).values());
+          setAllYearPayments(unique);
         }
 
       } catch (err: any) {
@@ -302,6 +324,46 @@ export default function LoyerReceiptModal({ paymentId, onClose }: LoyerReceiptMo
               </table>
             </div>
           )}
+
+          {/* 12-Month Status Grid */}
+          <div className="mb-12">
+            <h3 className="text-[11px] font-black uppercase mb-4 text-slate-900 flex items-center gap-2">
+              <ClipboardList size={14} className="text-indigo-600" />
+              État de Paiement Annuel ({new Date(payment.date_paiement).getFullYear()})
+            </h3>
+            <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
+              {["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"].map((month, idx) => {
+                const year = new Date(payment.date_paiement).getFullYear();
+                const isPaid = allYearPayments.some(p => {
+                  // Check if nom_de_mois contains "Month Year"
+                  if (p.nom_de_mois && p.nom_de_mois.includes(`${month} ${year}`)) return true;
+                  
+                  // Check if period covers this month
+                  if (p.periode_debut && p.periode_fin) {
+                    const start = new Date(p.periode_debut);
+                    const end = new Date(p.periode_fin);
+                    const targetStart = new Date(year, idx, 1);
+                    const targetEnd = new Date(year, idx + 1, 0);
+                    return start <= targetEnd && end >= targetStart;
+                  }
+                  return false;
+                });
+
+                return (
+                  <div key={month} className={`border-2 p-2 rounded-xl text-center transition-all ${
+                    isPaid ? "border-emerald-500 bg-emerald-50" : "border-rose-200 bg-rose-50"
+                  }`}>
+                    <p className="text-[9px] font-black uppercase text-slate-500 mb-1">{month}</p>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                      isPaid ? "text-emerald-700" : "text-rose-700"
+                    }`}>
+                      {isPaid ? "PAYÉ" : "IMPAYÉ"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Signatures */}
           <div className="mt-auto grid grid-cols-2 gap-20 pt-10 px-4">
