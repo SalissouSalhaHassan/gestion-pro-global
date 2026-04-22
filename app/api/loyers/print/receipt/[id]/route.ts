@@ -54,17 +54,38 @@ export async function GET(
     const paymentDate = new Date(payment.date_paiement);
     const today = new Date();
 
-    // Format currency
-    const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(n);
+    // Fetch Company Info
+    const { data: company } = await supabase.from('informations_entreprise').select('*').limit(1).single();
 
-    // Format date
-    const formatDate = (d: string | null) => {
-      if (!d) return '—';
-      try {
-        return new Date(d).toLocaleDateString('fr-FR');
-      } catch {
-        return String(d);
-      }
+    const numberToWordsFr = (total: number) => {
+      if (total === 0) return "zéro";
+      const ones = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf'];
+      const teens = ['dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
+      const tens = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante', 'quatre-vingt', 'quatre-vingt'];
+      const convert = (n: number): string => {
+        if (n < 10) return ones[n];
+        if (n < 20) return teens[n - 10];
+        if (n < 70) {
+          const t = Math.floor(n / 10);
+          const r = n % 10;
+          return tens[t] + (r === 1 ? ' et ' : (r > 0 ? '-' : '')) + ones[r];
+        }
+        if (n < 80) return "soixante-" + convert(n - 60);
+        if (n < 100) {
+          const t = Math.floor(n / 10);
+          const r = n % 10;
+          return (t === 8 ? "quatre-vingt" : "quatre-vingt-") + (r > 0 ? (t === 8 ? "-" : "") + convert(r) : "");
+        }
+        if (n < 1000) {
+          const c = Math.floor(n / 100);
+          const r = n % 100;
+          return (c === 1 ? "cent" : ones[c] + " cent") + (r > 0 ? " " + convert(r) : "");
+        }
+        const m = Math.floor(n / 1000);
+        const r = n % 1000;
+        return (m === 1 ? "mille" : convert(m) + " mille") + (r > 0 ? " " + convert(r) : "");
+      };
+      return convert(Math.floor(total)).charAt(0).toUpperCase() + convert(Math.floor(total)).slice(1);
     };
 
     const html = `<!DOCTYPE html>
@@ -74,257 +95,334 @@ export async function GET(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reçu de Paiement #${payment.id}</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f5f5;
-            padding: 20px;
-            color: #333;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #f1f5f9;
+            padding: 40px 20px;
+            color: #0f172a;
+            line-height: 1.4;
         }
         .receipt {
             width: 100%;
-            max-width: 800px;
+            max-width: 210mm;
             margin: 0 auto;
             background: white;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            page-break-after: always;
+            padding: 50px;
+            border-radius: 0;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            position: relative;
         }
         .header {
-            text-align: center;
-            border-bottom: 3px solid #4f46e5;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 25px;
         }
-        .header h1 {
-            color: #4f46e5;
+        .company-info h1 {
             font-size: 28px;
-            margin-bottom: 5px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -1px;
+            color: #0f172a;
         }
-        .header p {
-            color: #666;
-            font-size: 12px;
+        .company-info p {
+            font-size: 13px;
+            font-weight: 700;
+            color: #475569;
+            text-transform: uppercase;
+            margin-top: 4px;
         }
-        .receipt-number {
-            text-align: right;
-            color: #999;
+        .company-details {
             font-size: 11px;
-            margin-bottom: 20px;
+            font-weight: 600;
+            color: #64748b;
+            margin-top: 6px;
+            display: flex;
+            gap: 15px;
         }
-        .info-section {
+        .divider {
+            height: 2px;
+            background: #0f172a;
+            width: 100%;
+            margin-bottom: 25px;
+        }
+        .title-box {
+            border: 2px solid #0f172a;
+            background: #f8fafc;
+            padding: 12px;
+            text-align: center;
+            margin-bottom: 35px;
+        }
+        .title-box h2 {
+            font-size: 18px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+        }
+        .info-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #eee;
+            gap: 50px;
+            margin-bottom: 40px;
         }
-        .info-block {
+        .info-block h3 {
             font-size: 13px;
-            line-height: 1.8;
-        }
-        .info-block-title {
-            font-weight: bold;
-            color: #4f46e5;
-            margin-bottom: 8px;
+            font-weight: 900;
             text-transform: uppercase;
-            font-size: 11px;
-            letter-spacing: 0.5px;
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 5px;
+            margin-bottom: 12px;
         }
-        .info-block-content {
-            color: #555;
-        }
-        .details-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-            font-size: 13px;
-        }
-        .details-table thead {
-            background: #f8f8f8;
-            border-top: 2px solid #4f46e5;
-            border-bottom: 2px solid #4f46e5;
-        }
-        .details-table th {
-            padding: 12px;
-            text-align: left;
-            font-weight: bold;
-            color: #333;
+        .info-row {
+            display: grid;
+            grid-template-columns: 100px 1fr;
             font-size: 12px;
+            margin-bottom: 6px;
+        }
+        .info-label {
+            font-weight: 900;
+            color: #64748b;
             text-transform: uppercase;
         }
-        .details-table td {
-            padding: 12px;
-            border-bottom: 1px solid #eee;
+        .info-value {
+            font-weight: 700;
+            color: #0f172a;
         }
-        .text-right {
-            text-align: right;
+        .tenant-name {
+            font-size: 15px;
+            font-weight: 900;
+            color: #0f172a;
+            margin-bottom: 4px;
         }
-        .summary {
-            display: flex;
-            justify-content: flex-end;
+        .tenant-detail {
+            font-size: 12px;
+            font-weight: 700;
+            color: #475569;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
             margin-bottom: 30px;
         }
-        .summary-table {
-            width: 100%;
-            max-width: 350px;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
-        .summary-table tr td {
-            padding: 8px 12px;
-            border-bottom: 1px solid #eee;
-        }
-        .summary-table tr.total {
-            background: #f8f8f8;
-            border-top: 2px solid #4f46e5;
-            border-bottom: 2px solid #4f46e5;
-            font-weight: bold;
-            font-size: 16px;
-        }
-        .summary-table tr.total td {
+        th {
+            background: #f1f5f9;
+            border: 2px solid #0f172a;
             padding: 12px;
-            border: none;
+            font-size: 11px;
+            font-weight: 900;
+            text-transform: uppercase;
+            text-align: left;
+        }
+        td {
+            border-left: 2px solid #0f172a;
+            border-right: 2px solid #0f172a;
+            border-bottom: 2px solid #0f172a;
+            padding: 15px;
+            font-size: 12px;
+            vertical-align: top;
+        }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .item-desc { font-weight: 900; margin-bottom: 4px; text-transform: uppercase; }
+        .item-period { font-weight: 700; color: #475569; font-style: italic; }
+        .amount-words {
+            font-size: 11px;
+            font-style: italic;
+            font-weight: 700;
+            color: #475569;
+            margin-bottom: 35px;
+        }
+        .amount-words span {
+            font-weight: 900;
+            color: #0f172a;
+            text-transform: uppercase;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            border: 2px solid #0f172a;
+            margin-bottom: 40px;
+        }
+        .summary-box {
+            padding: 12px;
+            text-align: center;
+            border-right: 2px solid #0f172a;
+        }
+        .summary-box:last-child { border-right: none; }
+        .summary-box.gray { background: #f8fafc; }
+        .summary-label {
+            font-size: 9px;
+            font-weight: 900;
+            color: #64748b;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .summary-value {
+            font-size: 18px;
+            font-weight: 900;
+        }
+        .signature-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 80px;
+            margin-top: 50px;
+            margin-bottom: 60px;
+        }
+        .signature-box {
+            text-align: center;
+        }
+        .signature-line {
+            border-top: 2px solid #0f172a;
+            padding-top: 8px;
+            font-size: 11px;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+        .signature-sub {
+            font-size: 10px;
+            font-weight: 700;
+            color: #94a3b8;
+            font-style: italic;
+            margin-top: 4px;
         }
         .footer {
-            text-align: center;
-            color: #999;
-            font-size: 11px;
-            border-top: 1px solid #eee;
-            padding-top: 20px;
-            margin-top: 30px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 15px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            font-weight: 700;
+            color: #94a3b8;
         }
-        .stamp {
-            text-align: center;
-            margin-top: 20px;
-            font-weight: bold;
-            color: #4f46e5;
-            font-size: 14px;
-            padding: 10px;
-            border: 2px solid #4f46e5;
-            border-radius: 4px;
-            width: fit-content;
-            margin-left: auto;
-            margin-right: auto;
+        .print-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #0f172a;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
         @media print {
             body { background: white; padding: 0; }
-            .receipt { box-shadow: none; page-break-after: always; }
-            .no-print { display: none; }
-        }
-        .print-btn {
-            display: block;
-            margin: 20px auto;
-            padding: 12px 30px;
-            background: #4f46e5;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-        }
-        .print-btn:hover {
-            background: #4338ca;
+            .receipt { box-shadow: none; max-width: 100%; padding: 10mm; }
+            .print-btn { display: none; }
         }
     </style>
 </head>
 <body>
-    <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimer</button>
+    <button class="print-btn" onclick="window.print()">IMPRIMER LE REÇU</button>
     
     <div class="receipt">
         <div class="header">
-            <h1>REÇU DE PAIEMENT</h1>
-            <p>GestionPro - Gestion des Loyers</p>
-        </div>
-
-        <div class="receipt-number">
-            <strong>Reçu #${payment.id.toString().padStart(6, '0')}</strong><br>
-            Émis le ${today.toLocaleDateString('fr-FR')}
-        </div>
-
-        <div class="info-section">
-            <div class="info-block">
-                <div class="info-block-title">Propriétaire / Collecteur</div>
-                <div class="info-block-content">
-                    GestionPro Enterprise 4K<br>
-                    Gestion des Loyers<br>
-                    <br>
-                    📞 Contact disponible sur demande
-                </div>
-            </div>
-            <div class="info-block">
-                <div class="info-block-title">Locataire</div>
-                <div class="info-block-content">
-                    <strong>${contract.locataire_nom_complet}</strong><br>
-                    Référence: ${contract.ref_locataire}<br>
-                    ${contract.locataire_telephone ? `<br>📱 ${contract.locataire_telephone}` : ''}
-                    ${contract.locataire_email ? `<br>📧 ${contract.locataire_email}` : ''}
+            <div class="company-info">
+                <h1>${company?.nom_entreprise || "GESTION PRO"}</h1>
+                <p>${company?.adresse || "ADRESSE NON CONFIGURÉE"}</p>
+                <div class="company-details">
+                    <span>Tél: ${company?.telephone || "—"}</span>
+                    <span>NIF: ${company?.nif || "—"}</span>
+                    <span>RC: ${company?.rc || "—"}</span>
                 </div>
             </div>
         </div>
 
-        <table class="details-table">
+        <div class="divider"></div>
+
+        <div class="title-box">
+            <h2>REÇU DE PAIEMENT</h2>
+        </div>
+
+        <div class="info-grid">
+            <div class="info-block">
+                <h3>Détails du Paiement</h3>
+                <div class="info-row">
+                    <span class="info-label">Reçu N°:</span>
+                    <span class="info-value">${payment.id.toString().padStart(6, '0')}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Date:</span>
+                    <span class="info-value">${formatDate(payment.date_paiement)}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Gérant:</span>
+                    <span class="info-value">Admin</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Mode:</span>
+                    <span class="info-value">${payment.mode_paiement}</span>
+                </div>
+            </div>
+            <div class="info-block">
+                <h3>Locataire</h3>
+                <div class="tenant-name">${contract.locataire_nom_complet}</div>
+                <div class="tenant-detail">Réf: ${contract.ref_locataire}</div>
+                ${contract.locataire_telephone ? `<div class="tenant-detail">Tél: ${contract.locataire_telephone}</div>` : ''}
+                ${contract.adresse_complete ? `<div class="tenant-detail">${contract.adresse_complete}</div>` : ''}
+            </div>
+        </div>
+
+        <table>
             <thead>
                 <tr>
                     <th>Description</th>
-                    <th class="text-right">Détails</th>
+                    <th class="text-center" style="width: 80px;">Qté</th>
+                    <th class="text-right" style="width: 120px;">Loyer Mens.</th>
+                    <th class="text-right" style="width: 120px;">Total</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td><strong>Bien Loué</strong></td>
-                    <td class="text-right">${contract.bien_loue_details}</td>
+                    <td>
+                        <div class="item-desc">LOCATION DU BIEN : ${contract.bien_loue_details}</div>
+                        <div class="item-period">Période: ${payment.nom_de_mois || formatDate(payment.periode_debut)}</div>
+                        ${payment.description ? `<div style="margin-top: 8px; color: #64748b;">Note: ${payment.description}</div>` : ''}
+                    </td>
+                    <td class="text-center" style="font-weight: 700;">${payment.qte_mois || 1}</td>
+                    <td class="text-right" style="font-weight: 700;">${Number(contract.loyer_mensuel).toLocaleString('fr-FR')}</td>
+                    <td class="text-right" style="font-weight: 900;">${Number(payment.montant).toLocaleString('fr-FR')}</td>
                 </tr>
-                <tr>
-                    <td><strong>Loyer Mensuel</strong></td>
-                    <td class="text-right">${fmt(contract.loyer_mensuel)}</td>
-                </tr>
-                <tr>
-                    <td><strong>Mois / Période</strong></td>
-                    <td class="text-right">${payment.nom_de_mois || payment.periode_debut ? `${payment.nom_de_mois || formatDate(payment.periode_debut)} ${payment.qte_mois ? `(${payment.qte_mois} mois)` : ''}` : '—'}</td>
-                </tr>
-                ${payment.periode_debut ? `<tr>
-                    <td><strong>Période Couverte</strong></td>
-                    <td class="text-right">${formatDate(payment.periode_debut)} à ${formatDate(payment.periode_fin)}</td>
-                </tr>` : ''}
-                <tr>
-                    <td><strong>Mode de Paiement</strong></td>
-                    <td class="text-right">${payment.mode_paiement}</td>
-                </tr>
-                <tr>
-                    <td><strong>Date de Paiement</strong></td>
-                    <td class="text-right"><strong>${formatDate(payment.date_paiement)}</strong></td>
-                </tr>
-                ${payment.description ? `<tr>
-                    <td><strong>Observations</strong></td>
-                    <td class="text-right">${payment.description}</td>
-                </tr>` : ''}
             </tbody>
         </table>
 
-        <div class="summary">
-            <table class="summary-table">
-                <tr>
-                    <td><strong>Montant Payé</strong></td>
-                    <td class="text-right"><strong>${fmt(payment.montant)}</strong></td>
-                </tr>
-                <tr class="total">
-                    <td>TOTAL REÇU</td>
-                    <td class="text-right">${fmt(payment.montant)}</td>
-                </tr>
-            </table>
+        <div class="amount-words">
+            Arrêtée la présente somme à : <span>${numberToWordsFr(payment.montant)} francs CFA.</span>
         </div>
 
-        <div class="stamp">
-            ✓ PAYÉ
+        <div class="summary-grid">
+            <div class="summary-box gray">
+                <div class="summary-label">Total à payer</div>
+                <div class="summary-value">${Number(payment.montant).toLocaleString('fr-FR')} F</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-label">Montant Payé</div>
+                <div class="summary-value">${Number(payment.montant).toLocaleString('fr-FR')} F</div>
+            </div>
+            <div class="summary-box gray">
+                <div class="summary-label">Reste à payer</div>
+                <div class="summary-value">0 F</div>
+            </div>
+        </div>
+
+        <div class="signature-grid">
+            <div class="signature-box">
+                <div class="signature-line">Signature Locataire</div>
+                <div class="signature-sub">(Lu et approuvé)</div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-line">Cachet et Signature Bailleur</div>
+            </div>
         </div>
 
         <div class="footer">
-            <p><strong>Ce reçu atteste du paiement reçu</strong></p>
-            <p>Conservez ce document. Il constitue une preuve du paiement.</p>
-            <p style="margin-top: 15px; color: #ccc;">GestionPro © 2026 | Impression: ${today.toLocaleDateString('fr-FR')} à ${today.toLocaleTimeString('fr-FR')}</p>
+            <span>GestionPro - Système de Gestion Immobilière</span>
+            <span style="letter-spacing: 2px;">PAGE 1 / 1</span>
         </div>
     </div>
 </body>
