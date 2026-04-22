@@ -47,7 +47,10 @@ export default function TransitPage() {
     try {
       const res = await fetch("/api/stock/depots");
       const data = await res.json();
-      if (Array.isArray(data)) setDepots(data);
+      if (Array.isArray(data)) {
+        const names = data.map((d: any) => d.nom || d.nom_depot || d).filter(Boolean);
+        setDepots(names);
+      }
     } catch (err) {}
   };
 
@@ -62,7 +65,7 @@ export default function TransitPage() {
       const res = await fetch(url.toString());
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Erreur de chargement");
-      setData(json);
+      setData(Array.isArray(json) ? json : []);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -177,9 +180,9 @@ export default function TransitPage() {
                  <div className="flex items-center justify-between mb-8 px-2">
                     <div className="flex flex-col items-center">
                       <div className="w-12 h-12 rounded-full bg-slate-100 border-2 border-white shadow-sm flex items-center justify-center mb-2 z-10">
-                         <span className="text-xs font-black text-slate-600 truncate max-w-[40px] text-center">{tr.source_depot.substring(0,3)}</span>
+                         <span className="text-xs font-black text-slate-600 truncate max-w-[40px] text-center">{(tr.source_depot || "").substring(0,3)}</span>
                       </div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{tr.source_depot}</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{tr.source_depot || "Inconnu"}</span>
                     </div>
 
                     <div className="flex-1 relative flex items-center justify-center">
@@ -192,22 +195,22 @@ export default function TransitPage() {
 
                     <div className="flex flex-col items-center">
                       <div className="w-12 h-12 rounded-full bg-slate-100 border-2 border-white shadow-sm flex items-center justify-center mb-2 z-10">
-                         <span className="text-xs font-black text-slate-600 truncate max-w-[40px] text-center">{tr.dest_depot.substring(0,3)}</span>
+                         <span className="text-xs font-black text-slate-600 truncate max-w-[40px] text-center">{(tr.dest_depot || "").substring(0,3)}</span>
                       </div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{tr.dest_depot}</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{tr.dest_depot || "Inconnu"}</span>
                     </div>
                  </div>
 
                  {/* Items summary */}
                  <div className="bg-slate-50 rounded-2xl p-4 mb-6">
                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
-                     <Package size={12} /> Contenu ({tr.details.length} articles)
+                     <Package size={12} /> Contenu ({tr.details?.length || 0} articles)
                    </p>
                    <div className="space-y-2 max-h-24 overflow-y-auto no-scrollbar">
-                     {tr.details.map((d: any, i: number) => (
+                     {tr.details?.map((d: any, i: number) => (
                        <div key={i} className="flex justify-between items-center text-sm font-bold text-slate-700">
-                         <span className="truncate pr-2">{d.designation}</span>
-                         <span className="bg-white px-2 py-0.5 rounded shadow-sm text-indigo-600">x{d.qty}</span>
+                         <span className="truncate pr-2">{d.designation || "Article sans nom"}</span>
+                         <span className="bg-white px-2 py-0.5 rounded shadow-sm text-indigo-600">x{d.qty || 0}</span>
                        </div>
                      ))}
                    </div>
