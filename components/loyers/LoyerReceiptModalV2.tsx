@@ -157,13 +157,13 @@ export default function LoyerReceiptModalV2({ paymentId, onClose }: LoyerReceipt
           ) : (
             <div id="printable-receipt" className="bg-white mx-auto shadow-2xl p-10 min-h-[297mm] flex flex-col">
               {/* Receipt Header */}
-              <div className="flex justify-between items-start mb-10">
+              <div className="flex justify-between items-start mb-6">
                 <div>
                   <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase mb-1">
                     {company?.nom_entreprise || "ETS SOUNO"}
                   </h1>
                   <p className="text-slate-500 font-bold text-sm uppercase">{company?.adresse || "MARADI-NIGER"}</p>
-                  <div className="mt-4 flex flex-wrap gap-4 text-[10px] font-black text-slate-400 uppercase">
+                  <div className="mt-2 flex flex-wrap gap-4 text-[10px] font-black text-slate-400 uppercase">
                     <span>Tél: {company?.telephone || "98 41 03 99"}</span>
                     <span>NIF: {company?.nif || "11835/R"}</span>
                     <span>RC: {company?.rc || "NI-MAR-2007-A-93"}</span>
@@ -171,14 +171,14 @@ export default function LoyerReceiptModalV2({ paymentId, onClose }: LoyerReceipt
                 </div>
               </div>
 
-              <div className="h-0.5 bg-slate-900 w-full mb-8"></div>
+              <div className="h-0.5 bg-slate-900 w-full mb-6"></div>
 
-              <div className="border-4 border-slate-900 p-4 text-center mb-12 bg-slate-50">
+              <div className="border-4 border-slate-900 p-3 text-center mb-6 bg-slate-50">
                 <h2 className="text-2xl font-black uppercase tracking-[0.4em] text-slate-900">REÇU DE PAIEMENT</h2>
               </div>
 
               {/* Info Grid */}
-              <div className="grid grid-cols-2 gap-16 mb-12">
+              <div className="grid grid-cols-2 gap-8 mb-6">
                 <div>
                   <h3 className="text-xs font-black uppercase mb-4 text-slate-900 border-b-2 border-slate-900 pb-1">Détails du Paiement</h3>
                   <div className="space-y-2 text-sm">
@@ -211,47 +211,8 @@ export default function LoyerReceiptModalV2({ paymentId, onClose }: LoyerReceipt
                 </div>
               </div>
 
-              {/* Main Table */}
-              <table className="w-full mb-10 border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 border-2 border-slate-900">
-                    <th className="p-3 text-left font-black uppercase text-[11px] border-r-2 border-slate-900">Description</th>
-                    <th className="p-3 text-center font-black uppercase text-[11px] border-r-2 border-slate-900 w-24">Qté (Mois)</th>
-                    <th className="p-3 text-right font-black uppercase text-[11px] border-r-2 border-slate-900 w-32">Loyer Mens.</th>
-                    <th className="p-3 text-right font-black uppercase text-[11px] w-32">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-x-2 border-b-2 border-slate-900 font-bold text-sm">
-                    <td className="p-4 border-r-2 border-slate-900">
-                      <p className="font-black text-slate-900 uppercase">LOCATION DU BIEN : {payment.contrats.bien_loue_details}</p>
-                      <p className="text-xs text-slate-500 italic mt-1">Période: {payment.nom_de_mois || new Date(payment.periode_debut).toLocaleDateString("fr-FR")}</p>
-                    </td>
-                    <td className="p-4 text-center border-r-2 border-slate-900">{payment.qte_mois || 1}</td>
-                    <td className="p-4 text-right border-r-2 border-slate-900">{Number(payment.contrats.loyer_mensuel).toLocaleString("fr-FR")}</td>
-                    <td className="p-4 text-right font-black">{Number(payment.montant).toLocaleString("fr-FR")}</td>
-                  </tr>
-                </tbody>
-              </table>
-
-              {/* Total Summary */}
-              <div className="grid grid-cols-3 border-2 border-slate-900 mb-10">
-                <div className="p-4 text-center border-r-2 border-slate-900 bg-slate-50">
-                  <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total à payer</p>
-                  <p className="text-xl font-black text-slate-900">{Number(payment.montant).toLocaleString("fr-FR")} F</p>
-                </div>
-                <div className="p-4 text-center border-r-2 border-slate-900 bg-white">
-                  <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Montant Payé</p>
-                  <p className="text-xl font-black text-slate-900">{Number(payment.montant).toLocaleString("fr-FR")} F</p>
-                </div>
-                <div className="p-4 text-center bg-slate-50">
-                  <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Reste à payer</p>
-                  <p className="text-xl font-black text-slate-900">0 F</p>
-                </div>
-              </div>
-
               {/* 12-Month Status Grid */}
-              <div className="mb-10 border-4 border-slate-900 p-6 rounded-3xl bg-slate-50 shadow-xl">
+              <div className="mb-6 border-4 border-slate-900 p-4 rounded-3xl bg-slate-50 shadow-xl">
                 <h3 className="text-[14px] font-black uppercase mb-4 text-slate-900 border-b-2 border-slate-900 pb-2">
                   📊 ÉTAT DE PAIEMENT ANNUEL ({new Date(payment.date_paiement).getFullYear()})
                 </h3>
@@ -298,7 +259,7 @@ export default function LoyerReceiptModalV2({ paymentId, onClose }: LoyerReceipt
 
               {/* History Table */}
               {history.length > 0 && (
-                <div className="mb-12">
+                <div className="mb-6">
                   <h3 className="text-xs font-black uppercase mb-3 text-slate-900">Historique des Versements</h3>
                   <table className="w-full border-collapse text-xs">
                     <thead>
@@ -311,7 +272,7 @@ export default function LoyerReceiptModalV2({ paymentId, onClose }: LoyerReceipt
                     </thead>
                     <tbody>
                       {history.map((h, i) => (
-                        <tr key={i} className="border-x-2 border-b border-slate-900 last:border-b-2 font-bold">
+                        <tr key={i} className="border-x-2 border-b border-slate-900 font-bold">
                           <td className="p-2 border-r border-slate-300">{new Date(h.date_paiement).toLocaleDateString("fr-FR")}</td>
                           <td className="p-2 text-center border-r border-slate-300">{h.mode_paiement}</td>
                           <td className="p-2 border-r border-slate-300">{h.nom_de_mois || "—"}</td>
@@ -319,21 +280,27 @@ export default function LoyerReceiptModalV2({ paymentId, onClose }: LoyerReceipt
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr className="border-x-2 border-b-2 border-slate-900 font-black bg-slate-50">
+                        <td colSpan={3} className="p-2 text-right uppercase border-r border-slate-300">Total des Versements</td>
+                        <td className="p-2 text-right">{history.reduce((sum, h) => sum + Number(h.montant || 0), 0).toLocaleString("fr-FR")} F</td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               )}
 
               {/* Signatures */}
-              <div className="mt-auto grid grid-cols-2 gap-20 pt-16 px-4">
+              <div className="mt-auto grid grid-cols-2 gap-20 pt-8 px-4">
                 <div className="text-center">
-                  <p className="text-xs font-black uppercase mb-20 border-b-2 border-slate-900 pb-1">Signature Locataire</p>
+                  <p className="text-xs font-black uppercase mb-10 border-b-2 border-slate-900 pb-1">Signature Locataire</p>
                   <p className="text-[10px] font-bold text-slate-400 italic">(Lu et approuvé)</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-xs font-black uppercase mb-20 border-b-2 border-slate-900 pb-1">Cachet et Signature Bailleur</p>
+                  <p className="text-xs font-black uppercase mb-10 border-b-2 border-slate-900 pb-1">Cachet et Signature Bailleur</p>
                   <div className="flex justify-center opacity-10">
-                    <div className="w-24 h-24 border-4 border-slate-400 rounded-full flex items-center justify-center rotate-12">
-                      <span className="text-xs font-black text-center">GESTION<br/>PRO</span>
+                    <div className="w-20 h-20 border-4 border-slate-400 rounded-full flex items-center justify-center rotate-12">
+                      <span className="text-[10px] font-black text-center leading-tight">GESTION<br/>PRO</span>
                     </div>
                   </div>
                 </div>

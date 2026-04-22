@@ -102,6 +102,12 @@ export async function GET(
                         </tr>
                     `).join('')}
                 </tbody>
+                <tfoot>
+                    <tr style="background: #f1f5f9;">
+                        <td colspan="3" style="border: 2px solid #0f172a; padding: 8px; font-size: 10px; font-weight: 900; text-align: right; text-transform: uppercase;">Total des Versements</td>
+                        <td style="border: 2px solid #0f172a; padding: 8px; font-size: 11px; font-weight: 900; text-align: right;">${history.reduce((sum, h) => sum + Number(h.montant || 0), 0).toLocaleString('fr-FR')} F</td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
         `;
@@ -458,49 +464,9 @@ export async function GET(
             </div>
         </div>
 
-        <table>
-            <thead>
-                <tr>
-                    <th>Description</th>
-                    <th class="text-center" style="width: 80px;">Qté</th>
-                    <th class="text-right" style="width: 120px;">Loyer Mens.</th>
-                    <th class="text-right" style="width: 120px;">Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>
-                        <div class="item-desc">LOCATION DU BIEN : ${contract.bien_loue_details}</div>
-                        <div class="item-period">Période: ${payment.nom_de_mois || formatDate(payment.periode_debut)}</div>
-                        ${payment.description ? `<div style="margin-top: 8px; color: #64748b;">Note: ${payment.description}</div>` : ''}
-                    </td>
-                    <td class="text-center" style="font-weight: 700;">${payment.qte_mois || 1}</td>
-                    <td class="text-right" style="font-weight: 700;">${Number(contract.loyer_mensuel).toLocaleString('fr-FR')}</td>
-                    <td class="text-right" style="font-weight: 900;">${Number(payment.montant).toLocaleString('fr-FR')}</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <div class="amount-words">
-            Arrêtée la présente somme à : <span>${numberToWordsFr(payment.montant)} francs CFA.</span>
-        </div>
-
-        <div class="summary-grid">
-            <div class="summary-box gray">
-                <div class="summary-label">Total à payer</div>
-                <div class="summary-value">${Number(payment.montant).toLocaleString('fr-FR')} F</div>
-            </div>
-            <div class="summary-box">
-                <div class="summary-label">Montant Payé</div>
-                <div class="summary-value">${Number(payment.montant).toLocaleString('fr-FR')} F</div>
-            </div>
-            <div class="summary-box gray">
-                <div class="summary-label">Reste à payer</div>
-                <div class="summary-value">0 F</div>
-            </div>
-        </div>
-
         ${statusHtml}
+
+        ${historyHtml}
 
         <div class="signature-grid">
             <div class="signature-box">
