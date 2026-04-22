@@ -9,6 +9,17 @@ type CheckoutItem = {
   prix?: number;
 };
 
+type PriceChangePayload = {
+  articleId: number | string;
+  designation?: string;
+  oldPrice?: number;
+  newPrice?: number;
+  quantity?: number;
+  changedAt?: string;
+  changedBy?: string;
+  reason?: string;
+};
+
 type DepotRow = {
   id: number | string;
   nom: string | null;
@@ -113,6 +124,247 @@ function isMissingRpcSignature(error: { message?: string } | null | undefined, r
   );
 }
 
+async function reconcileInvoicePricing(params: {
+  supabase: any;
+  invoiceId: number;
+  items: CheckoutItem[];
+}) {
+  const { supabase, invoiceId, items } = params;
+  if (!invoiceId || !Array.isArray(items) || items.length === 0) return null;
+
+  const { data: existingItems, error: existingItemsError } = await supabase
+    .from("facture_items")
+    .select("id, article_id, qte, pu_ht, pu_ttc, total_item_ht, total_item_ttc, taux_tva_item, montant_tva_item")
+    .eq("facture_id", invoiceId)
+    .order("id", { ascending: true });
+
+  if (existingItemsError) throw existingItemsError;
+
+  const articleIds = Array.from(
+    new Set(
+      items
+        .map((item) => Number(item.id))
+        .filter((value) => Number.isFinite(value))
+    )
+  );
+
+  const { data: articleRows, error: articleRowsError } = await supabase
+    .from("articles")
+    .select("id, taxe, p_vente_ht, p_vente_ttc")
+    .in("id", articleIds);
+
+  if (articleRowsError) throw articleRowsError;
+
+  const groupedItems = new Map<string, any[]>();
+  for (const row of (existingItems || [])) {
+    const key = String(row.article_id);
+    const list = groupedItems.get(key) || [];
+    list.push(row);
+    groupedItems.set(key, list);
+  }
+
+  const articleMap = new Map<string, any>();
+  for (const row of (articleRows || [])) {
+    articleMap.set(String(row.id), row);
+  }
+
+  for (const item of items) {
+    const list = groupedItems.get(String(item.id)) || [];
+    const existingRow = list.shift();
+    groupedItems.set(String(item.id), list);
+    if (!existingRow) continue;
+
+    const qte = Number(item.quantite || existingRow.qte || 0);
+    const article = articleMap.get(String(item.id));
+    const tauxTva = Number(article?.taxe ?? existingRow.taux_tva_item ?? 0);
+    const requestedPrice = Number(item.prix);
+    const puTtc = Number.isFinite(requestedPrice) && requestedPrice >= 0
+      ? requestedPrice
+      : Number(existingRow.pu_ttc ?? article?.p_vente_ttc ?? article?.p_vente_ht ?? 0);
+    const puHt = 1 + tauxTva / 100 === 0 ? puTtc : puTtc / (1 + tauxTva / 100);
+    const totalItemTtc = qte * puTtc;
+    const totalItemHt = qte * puHt;
+    const montantTva = totalItemTtc - totalItemHt;
+
+    const { error: updateItemError } = await supabase
+      .from("facture_items")
+      .update({
+        qte,
+        pu_ht: puHt,
+        pu_ttc: puTtc,
+        total_item_ht: totalItemHt,
+        total_item_ttc: totalItemTtc,
+        taux_tva_item: tauxTva,
+        montant_tva_item: montantTva,
+      })
+      .eq("id", existingRow.id);
+
+    if (updateItemError) throw updateItemError;
+  }
+
+  const { data: finalItems, error: finalItemsError } = await supabase
+    .from("facture_items")
+    .select("total_item_ht, total_item_ttc")
+    .eq("facture_id", invoiceId);
+
+  if (finalItemsError) throw finalItemsError;
+
+  const totals = (finalItems || []).reduce(
+    (acc: { ht: number; ttc: number }, row: any) => {
+      acc.ht += Number(row.total_item_ht || 0);
+      acc.ttc += Number(row.total_item_ttc || 0);
+      return acc;
+    },
+    { ht: 0, ttc: 0 }
+  );
+
+  const totalTva = totals.ttc - totals.ht;
+
+  const { error: updateInvoiceError } = await supabase
+    .from("factures")
+    .update({
+      total_ht: totals.ht,
+      total_ttc: totals.ttc,
+      total_tva: totalTva,
+      nbr_art: items.length,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", invoiceId);
+
+  if (updateInvoiceError) throw updateInvoiceError;
+
+  return {
+    totalHT: totals.ht,
+    totalTTC: totals.ttc,
+    totalTVA: totalTva,
+  };
+}
+
+async function syncInvoicePaymentsAndStatus(params: {
+  supabase: any;
+  invoiceId: number;
+  totalTTC: number;
+  moyenReglement: string;
+  isEditMode: boolean;
+}) {
+  const { supabase, invoiceId, totalTTC, moyenReglement, isEditMode } = params;
+  const { data: payments, error: paymentsError } = await supabase
+    .from("paiements")
+    .select("id, montant_regle, moyen_reglement")
+    .eq("facture_id", invoiceId)
+    .order("id", { ascending: true });
+
+  if (paymentsError) throw paymentsError;
+
+  const paymentRows = Array.isArray(payments) ? payments : [];
+  const isDebtMode = moyenReglement === "Crédit" || moyenReglement === "Avance";
+  const nonCreditRows = paymentRows.filter(
+    (payment) => !String(payment.moyen_reglement || "").toLowerCase().includes("redit")
+  );
+
+  if (!isDebtMode && nonCreditRows.length === 1 && !isEditMode) {
+    const { error: paymentUpdateError } = await supabase
+      .from("paiements")
+      .update({ montant_regle: totalTTC })
+      .eq("id", nonCreditRows[0].id);
+
+    if (paymentUpdateError) throw paymentUpdateError;
+    nonCreditRows[0].montant_regle = totalTTC;
+  }
+
+  const totalPaid = paymentRows.reduce((sum: number, payment: any) => {
+    if (String(payment.moyen_reglement || "").toLowerCase().includes("redit")) {
+      return sum;
+    }
+    return sum + Number(payment.montant_regle || 0);
+  }, 0);
+
+  const status =
+    totalPaid >= totalTTC
+      ? "Payée"
+      : totalPaid > 0
+        ? "Partiellement Payée"
+        : "Non Payée";
+
+  const { error: invoiceUpdateError } = await supabase
+    .from("factures")
+    .update({
+      montant_paye: totalPaid,
+      montant_restant: Math.max(0, totalTTC - totalPaid),
+      statut: status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", invoiceId);
+
+  if (invoiceUpdateError) throw invoiceUpdateError;
+
+  return { totalPaid, status };
+}
+
+async function logPriceChangeAudit(params: {
+  supabase: any;
+  invoiceId: number;
+  documentNumber: string;
+  priceChanges: PriceChangePayload[];
+  userId: string | number | null;
+  username: string;
+  depotId: number | null;
+  depotName: string;
+}) {
+  const { supabase, invoiceId, documentNumber, priceChanges, userId, username, depotId, depotName } = params;
+  if (!Array.isArray(priceChanges) || priceChanges.length === 0) return;
+
+  for (const entry of priceChanges) {
+    const articleId = Number(entry.articleId);
+    if (!Number.isFinite(articleId)) continue;
+
+    const changeDate = String(entry.changedAt || new Date().toISOString());
+    const details = [
+      entry.designation || `Article ${articleId}`,
+      `Prix ${Number(entry.oldPrice || 0).toFixed(2)} -> ${Number(entry.newPrice || 0).toFixed(2)}`,
+      `Qté ${Number(entry.quantity || 0)}`,
+      entry.reason ? `Motif: ${entry.reason}` : "",
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    const basePayload = {
+      article_id: articleId,
+      nr_doc: documentNumber || `FACT-${invoiceId}`,
+      date_mouvement: changeDate,
+      fournisseur_client: details,
+      entree: 0,
+      sortie: 0,
+      quantite: 0,
+      pv: Number(entry.newPrice || 0),
+      prix: Number(entry.oldPrice || 0),
+      type: "MODIF_PRIX_POS",
+      utilisateur: username || entry.changedBy || "Système",
+      user_id: userId == null ? null : Number(userId),
+    };
+
+    let insertError: any = null;
+
+    if (depotId != null) {
+      const response = await supabase.from("mouvements").insert({
+        ...basePayload,
+        depot_id: depotId,
+      });
+      insertError = response.error;
+    }
+
+    if (insertError || depotId == null) {
+      const fallback = await supabase.from("mouvements").insert({
+        ...basePayload,
+        depot: depotName,
+      });
+      if (fallback.error) {
+        console.warn("Price change audit insert failed:", fallback.error);
+      }
+    }
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -132,6 +384,7 @@ export async function POST(request: Request) {
       moyenReglement?: string;
       emplacement?: string;
       items?: CheckoutItem[];
+      priceChanges?: PriceChangePayload[];
       versement?: number; // Add versement (cash part)
     };
 
@@ -146,6 +399,8 @@ export async function POST(request: Request) {
             (item) => !!item.id && item.quantite > 0
           )
       : [];
+
+    const priceChanges = Array.isArray(body.priceChanges) ? body.priceChanges : [];
 
     if (items.length === 0) {
       return NextResponse.json(
@@ -162,6 +417,10 @@ export async function POST(request: Request) {
     }
 
     const moyenReglement = body.moyenReglement?.trim() || "Espece";
+    const normalizedPaymentMethod =
+      moyenReglement === "Avance" || moyenReglement === "Crédit"
+        ? "Crédit"
+        : moyenReglement;
     const cashVersement = Number(body.versement || 0);
     const requestedDepotKey = normalizeDepotName(depotName);
 
@@ -302,7 +561,7 @@ export async function POST(request: Request) {
         p_client_id: clientId,
         p_vendeur: user.username ?? "Caisse",
         p_emplacement: body.emplacement ?? null,
-        p_moyen_reglement: moyenReglement === "Avance" ? "Crédit" : moyenReglement,
+        p_moyen_reglement: normalizedPaymentMethod,
         p_depot_id: effectiveDepotId, // Switched to ID
         p_items: items,
         p_user_id_text: rpcUserIdText,
@@ -313,7 +572,7 @@ export async function POST(request: Request) {
           p_client_id: clientId,
           p_vendeur: user.username ?? "Caisse",
           p_emplacement: body.emplacement ?? null,
-          p_moyen_reglement: moyenReglement === "Avance" ? "Crأ©dit" : moyenReglement,
+          p_moyen_reglement: normalizedPaymentMethod,
           p_depot_nom: canonicalDepotName,
           p_items: items,
           p_user_id_text: rpcUserIdText,
@@ -328,7 +587,7 @@ export async function POST(request: Request) {
         p_client_id: clientId,
         p_vendeur: user.username ?? "Caisse",
         p_emplacement: body.emplacement ?? null,
-        p_moyen_reglement: (moyenReglement === "Avance" || moyenReglement === "Crédit") ? "Crédit" : moyenReglement,
+        p_moyen_reglement: normalizedPaymentMethod,
         p_depot_id: effectiveDepotId, // Switched to ID
         p_items: items,
         p_user_id: rpcUserId,
@@ -338,7 +597,7 @@ export async function POST(request: Request) {
           p_client_id: clientId,
           p_vendeur: user.username ?? "Caisse",
           p_emplacement: body.emplacement ?? null,
-          p_moyen_reglement: (moyenReglement === "Avance" || moyenReglement === "Crأ©dit") ? "Crأ©dit" : moyenReglement,
+          p_moyen_reglement: normalizedPaymentMethod,
           p_depot_nom: canonicalDepotName,
           p_items: items,
           p_user_id: rpcUserId,
@@ -382,6 +641,17 @@ export async function POST(request: Request) {
     }
 
     // ─── POST-CHECKOUT SETTLEMENT LOGIC ───
+
+    let reconciledTotalTTC: number | null = null;
+
+    if (extractedId && !isNaN(extractedId)) {
+      const reconciliation = await reconcileInvoicePricing({
+        supabase,
+        invoiceId: extractedId,
+        items,
+      });
+      reconciledTotalTTC = reconciliation?.totalTTC ?? null;
+    }
 
     if (extractedId && !isNaN(extractedId)) {
       const isDebtMode = moyenReglement === "Crédit" || moyenReglement === "Avance";
@@ -462,6 +732,32 @@ export async function POST(request: Request) {
           montant_restant: Math.max(0, totalTTC - cashVersement)
         }).eq("id", extractedId);
       }
+      const { data: finalInvoiceRow } = await supabase
+        .from("factures")
+        .select("bl_number, total_ttc")
+        .eq("id", extractedId)
+        .single();
+
+      const finalTotalTTC = Number(finalInvoiceRow?.total_ttc || reconciledTotalTTC || totalTTC || 0);
+
+      await syncInvoicePaymentsAndStatus({
+        supabase,
+        invoiceId: extractedId,
+        totalTTC: finalTotalTTC,
+        moyenReglement,
+        isEditMode: !!requestedInvoiceId,
+      });
+
+      await logPriceChangeAudit({
+        supabase,
+        invoiceId: extractedId,
+        documentNumber: String(finalInvoiceRow?.bl_number || extractedId),
+        priceChanges,
+        userId: rpcUserIdText,
+        username: user.username || "Système",
+        depotId: effectiveDepotId,
+        depotName: canonicalDepotName,
+      });
     }
 
     return NextResponse.json({

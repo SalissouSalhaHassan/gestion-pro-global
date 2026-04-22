@@ -52,7 +52,12 @@ type Article = {
   depot_stocks?: Record<string, number>;
 };
 
-type CartItem = Article & { quantite: number; depot_origine?: string | null };
+type CartItem = Article & {
+  quantite: number;
+  depot_origine?: string | null;
+  original_price?: number;
+  price_modified?: boolean;
+};
 
 type Client = {
   id: string | number;
@@ -81,6 +86,27 @@ type SessionCookieData = {
   admin?: string | boolean;
   emplacement?: string;
   depots?: string;
+};
+
+type PriceChangeLogEntry = {
+  id: string;
+  articleId: string | number;
+  designation: string;
+  oldPrice: number;
+  newPrice: number;
+  quantity: number;
+  changedAt: string;
+  changedBy: string;
+  invoiceId?: string | number | null;
+  reason?: string;
+};
+
+type PendingPriceChange = {
+  itemId: string | number;
+  designation: string;
+  oldPrice: number;
+  newPrice: number;
+  quantity: number;
 };
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -226,6 +252,65 @@ function formatAmount(amount: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function parsePersistedPriceChange(row: Row): PriceChangeLogEntry | null {
+  const articleId = (row.article_id as string | number | undefined) ?? "";
+  const rawDetails = String(row.fournisseur_client ?? "").trim();
+  const segments = rawDetails
+    .split("|")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  let designation = segments[0] || `Article ${articleId || "inconnu"}`;
+  let oldPrice = toNumber(row.prix);
+  let newPrice = toNumber(row.pv);
+  let reason: string | undefined;
+
+  const priceSegment = segments.find((segment) => /^prix\s+/i.test(segment));
+  const priceMatch = priceSegment?.match(/prix\s+(-?\d+(?:[.,]\d+)?)\s*->\s*(-?\d+(?:[.,]\d+)?)/i);
+  if (priceMatch) {
+    oldPrice = Number(priceMatch[1].replace(",", "."));
+    newPrice = Number(priceMatch[2].replace(",", "."));
+  }
+
+  const quantitySegment = segments.find((segment) => /^qt[ée]/i.test(segment));
+  const quantityMatch = quantitySegment?.match(/(-?\d+(?:[.,]\d+)?)/);
+  const quantity = quantityMatch ? Number(quantityMatch[1].replace(",", ".")) : 0;
+
+  const reasonSegment = segments.find((segment) => /^motif\s*:/i.test(segment));
+  if (reasonSegment) {
+    reason = reasonSegment.replace(/^motif\s*:/i, "").trim() || undefined;
+  }
+
+  const changedAt = String(row.date_mouvement ?? new Date().toISOString());
+  const changedBy = String(row.utilisateur ?? "Système");
+  const documentNumber = String(row.nr_doc ?? "");
+
+  if (!designation && !documentNumber) return null;
+
+  return {
+    id: `${documentNumber || "audit"}-${articleId || "item"}-${changedAt}`,
+    articleId,
+    designation,
+    oldPrice,
+    newPrice,
+    quantity,
+    changedAt,
+    changedBy,
+    invoiceId: documentNumber || undefined,
+    reason,
+  };
 }
 
 function getProductImage(name: string): string | null {
@@ -823,7 +908,16 @@ function PosPage() {
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
 
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [parkedCarts, setParkedCarts] = useState<{id: string, time: string, cart: CartItem[], clientId: string | number}[]>([]);
+  const [parkedCarts, setParkedCarts] = useState<{
+    id: string;
+    time: string;
+    cart: CartItem[];
+    clientId: string | number;
+    selectedDepot: string;
+    invoiceId: string | number | null;
+    priceChanges: PriceChangeLogEntry[];
+    priceDrafts: Record<string, string>;
+  }[]>([]);
   const [query, setQuery] = useState("");
   const [selectedClientId, setSelectedClientId] = useState<string | number>(1);
   const [selectedDepot, setSelectedDepot] = useState<string>("");
@@ -853,9 +947,28 @@ function PosPage() {
     getSessionData();
   }, []);
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("pos_price_change_history");
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        setPriceChangeHistory(parsed);
+      }
+    } catch (error) {
+      console.error("Failed to load POS price change history:", error);
+    }
+  }, []);
+
   const [paymentMethod, setPaymentMethod] = useState("Espece");
   const [receivedAmount, setReceivedAmount] = useState("");
   const [selectedItemId, setSelectedItemId] = useState<string | number | null>(null);
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
+  const [pendingPriceChange, setPendingPriceChange] = useState<PendingPriceChange | null>(null);
+  const [currentPriceChanges, setCurrentPriceChanges] = useState<PriceChangeLogEntry[]>([]);
+  const [priceChangeHistory, setPriceChangeHistory] = useState<PriceChangeLogEntry[]>([]);
+  const [serverPriceChangeHistory, setServerPriceChangeHistory] = useState<PriceChangeLogEntry[]>([]);
+  const [priceChangeReason, setPriceChangeReason] = useState("");
   const [barcodeMode, setBarcodeMode] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loading, setLoading] = useState(true);
@@ -878,6 +991,33 @@ function PosPage() {
   const searchParams = useSearchParams();
   const [editInvoiceId, setEditInvoiceId] = useState<string | number | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(false);
+
+  const loadPersistedPriceChanges = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("mouvements")
+        .select("article_id, nr_doc, date_mouvement, fournisseur_client, pv, prix, utilisateur, type")
+        .eq("type", "MODIF_PRIX_POS")
+        .order("date_mouvement", { ascending: false })
+        .limit(20);
+
+      if (error) {
+        throw error;
+      }
+
+      setServerPriceChangeHistory(
+        (data || [])
+          .map((row) => parsePersistedPriceChange(row as Row))
+          .filter((entry): entry is PriceChangeLogEntry => entry !== null)
+      );
+    } catch (error) {
+      console.error("Failed to load persisted POS price change history:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPersistedPriceChanges();
+  }, [loadPersistedPriceChanges]);
 
   // Monitor printInvoiceId changes
   useEffect(() => {
@@ -945,9 +1085,13 @@ function PosPage() {
           image_path: null,
           stock_total: 9999, // Placeholder since we revert stock on save
           quantite: toNumber(it.qte),
-          depot_origine: it.depot_origine || null
+          depot_origine: it.depot_origine || null,
+          original_price: toNumber(it.pu_ttc),
+          price_modified: false,
         }));
         setCart(cartItems);
+        setCurrentPriceChanges([]);
+        setPriceDrafts({});
       }
     } catch (err) {
       console.error("Error loading invoice for POS edit:", err);
@@ -994,32 +1138,53 @@ function PosPage() {
       id: Math.random().toString(36).substring(7),
       time: new Date().toLocaleTimeString("fr-FR", {hour: '2-digit', minute:'2-digit'}),
       cart: [...cart],
-      clientId: selectedClientId
+      clientId: selectedClientId,
+      selectedDepot,
+      invoiceId: editInvoiceId,
+      priceChanges: [...currentPriceChanges],
+      priceDrafts: { ...priceDrafts },
     };
     setParkedCarts([...parkedCarts, newTab]);
     setCart([]);
+    setCurrentPriceChanges([]);
+    setPriceDrafts({});
+    setPendingPriceChange(null);
+    setPriceChangeReason("");
     setSelectedClientId(1);
+    setEditInvoiceId(null);
   };
 
   const restoreParkedCart = (tabId: string) => {
-    if (cart.length > 0) {
-      // Park the active one before restoring 
-      const newTab = {
-        id: Math.random().toString(36).substring(7),
-        time: new Date().toLocaleTimeString("fr-FR", {hour: '2-digit', minute:'2-digit'}),
-        cart: [...cart],
-        clientId: selectedClientId
-      };
-      setParkedCarts(prev => [...prev.filter(t => t.id !== tabId), newTab]);
-    }
     const tabToRestore = parkedCarts.find(t => t.id === tabId);
-    if (tabToRestore) {
-      setCart(tabToRestore.cart);
-      setSelectedClientId(tabToRestore.clientId);
-      if (cart.length === 0) {
-         setParkedCarts(parkedCarts.filter(t => t.id !== tabId));
-      }
-    }
+    if (!tabToRestore) return;
+
+    const activeCartSnapshot = cart.length > 0
+      ? {
+          id: Math.random().toString(36).substring(7),
+          time: new Date().toLocaleTimeString("fr-FR", {hour: '2-digit', minute:'2-digit'}),
+          cart: [...cart],
+          clientId: selectedClientId,
+          selectedDepot,
+          invoiceId: editInvoiceId,
+          priceChanges: [...currentPriceChanges],
+          priceDrafts: { ...priceDrafts },
+        }
+      : null;
+
+    setParkedCarts((prev) => {
+      const remaining = prev.filter((tab) => tab.id !== tabId);
+      return activeCartSnapshot ? [...remaining, activeCartSnapshot] : remaining;
+    });
+
+    setCart(tabToRestore.cart);
+    setSelectedClientId(tabToRestore.clientId);
+    setSelectedDepot(tabToRestore.selectedDepot || "");
+    setEditInvoiceId(tabToRestore.invoiceId ?? null);
+    setCurrentPriceChanges(tabToRestore.priceChanges || []);
+    setPriceDrafts(tabToRestore.priceDrafts || {});
+    setPendingPriceChange(null);
+    setPriceChangeReason("");
+    setSelectedItemId(tabToRestore.cart[0]?.id ?? null);
   };
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -1202,12 +1367,18 @@ function PosPage() {
             : item
         );
       }
-      return [...prev, { ...article, quantite: 1 }];
+      return [...prev, { ...article, quantite: 1, original_price: article.p_vente_ttc, price_modified: false }];
     });
   }, [editInvoiceId, selectedDepot]);
 
   const removeItem = useCallback((id: string | number) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
+    setCurrentPriceChanges((prev) => prev.filter((entry) => entry.articleId !== id));
+    setPriceDrafts((prev) => {
+      const next = { ...prev };
+      delete next[String(id)];
+      return next;
+    });
   }, []);
 
   const updateQuantity = useCallback((id: string | number, qty: number) => {
@@ -1226,20 +1397,133 @@ function PosPage() {
         item.id === id ? { ...item, quantite: Math.max(1, qty) } : item
       )
     );
+    setCurrentPriceChanges((prev) =>
+      prev.map((entry) =>
+        entry.articleId === id ? { ...entry, quantity: Math.max(1, qty) } : entry
+      )
+    );
   }, [articles, cart, editInvoiceId, selectedDepot]);
+
+  const persistPriceHistory = useCallback((entry: PriceChangeLogEntry) => {
+    setPriceChangeHistory((prev) => {
+      const next = [entry, ...prev].slice(0, 100);
+      try {
+        localStorage.setItem("pos_price_change_history", JSON.stringify(next));
+      } catch (error) {
+        console.error("Failed to persist POS price history:", error);
+      }
+      return next;
+    });
+  }, []);
 
   const updatePrice = useCallback((id: string | number, price: number) => {
     setCart((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, p_vente_ttc: Math.max(0, price) } : item
-      )
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const normalizedPrice = Math.max(0, price);
+        const originalPrice = typeof item.original_price === "number" ? item.original_price : item.p_vente_ttc;
+        return {
+          ...item,
+          p_vente_ttc: normalizedPrice,
+          original_price: originalPrice,
+          price_modified: Math.abs(normalizedPrice - originalPrice) > 0.0001,
+        };
+      })
     );
   }, []);
+
+  const handlePriceDraftChange = useCallback((id: string | number, value: string) => {
+    setPriceDrafts((prev) => ({ ...prev, [String(id)]: value }));
+  }, []);
+
+  const requestPriceChangeConfirmation = useCallback((item: CartItem) => {
+    const draftValue = priceDrafts[String(item.id)];
+    const parsedPrice = Number(draftValue);
+
+    if (draftValue == null || draftValue === "") {
+      setPriceDrafts((prev) => {
+        const next = { ...prev };
+        delete next[String(item.id)];
+        return next;
+      });
+      return;
+    }
+
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      setError("Le nouveau prix doit être un nombre valide.");
+      setTimeout(() => setError(null), 2500);
+      return;
+    }
+
+    if (Math.abs(parsedPrice - item.p_vente_ttc) < 0.0001) {
+      setPriceDrafts((prev) => {
+        const next = { ...prev };
+        delete next[String(item.id)];
+        return next;
+      });
+      return;
+    }
+
+    setPendingPriceChange({
+      itemId: item.id,
+      designation: item.designation,
+      oldPrice: item.p_vente_ttc,
+      newPrice: parsedPrice,
+      quantity: item.quantite,
+    });
+    setPriceChangeReason("");
+  }, [priceDrafts]);
+
+  const cancelPendingPriceChange = useCallback(() => {
+    if (pendingPriceChange) {
+      setPriceDrafts((prev) => ({
+        ...prev,
+        [String(pendingPriceChange.itemId)]: pendingPriceChange.oldPrice.toString(),
+      }));
+    }
+    setPendingPriceChange(null);
+    setPriceChangeReason("");
+  }, [pendingPriceChange]);
+
+  const confirmPendingPriceChange = useCallback(() => {
+    if (!pendingPriceChange) return;
+
+    updatePrice(pendingPriceChange.itemId, pendingPriceChange.newPrice);
+
+    const entry: PriceChangeLogEntry = {
+      id: `${pendingPriceChange.itemId}-${Date.now()}`,
+      articleId: pendingPriceChange.itemId,
+      designation: pendingPriceChange.designation,
+      oldPrice: pendingPriceChange.oldPrice,
+      newPrice: pendingPriceChange.newPrice,
+      quantity: pendingPriceChange.quantity,
+      changedAt: new Date().toISOString(),
+      changedBy: cashierName,
+      invoiceId: editInvoiceId,
+      reason: priceChangeReason.trim() || undefined,
+    };
+
+    setCurrentPriceChanges((prev) => [entry, ...prev]);
+    persistPriceHistory(entry);
+    setPriceDrafts((prev) => ({
+      ...prev,
+      [String(pendingPriceChange.itemId)]: pendingPriceChange.newPrice.toString(),
+    }));
+    setPendingPriceChange(null);
+    setPriceChangeReason("");
+    setSuccess(`Prix mis à jour pour "${entry.designation}".`);
+    setTimeout(() => setSuccess(null), 2500);
+  }, [cashierName, editInvoiceId, pendingPriceChange, persistPriceHistory, priceChangeReason, updatePrice]);
 
   const clearCart = useCallback(() => {
     setCart([]);
     setSelectedItemId(null);
     setReceivedAmount("");
+    setPriceDrafts({});
+    setCurrentPriceChanges([]);
+    setPendingPriceChange(null);
+    setPriceChangeReason("");
+    setEditInvoiceId(null);
   }, []);
 
   /* ── Computed ── */
@@ -1310,6 +1594,24 @@ function PosPage() {
       return;
     }
 
+    if (pendingPriceChange) {
+      setError("Validez ou annulez d'abord la modification de prix en cours.");
+      return;
+    }
+
+    const unconfirmedPriceDraft = cart.find((item) => {
+      const draftValue = priceDrafts[String(item.id)];
+      if (draftValue == null || draftValue === "") return false;
+      const parsedPrice = Number(draftValue);
+      return Number.isFinite(parsedPrice) && Math.abs(parsedPrice - item.p_vente_ttc) > 0.0001;
+    });
+
+    if (unconfirmedPriceDraft) {
+      setSelectedItemId(unconfirmedPriceDraft.id);
+      setError(`Confirmez d'abord le nouveau prix pour "${unconfirmedPriceDraft.designation}".`);
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -1329,6 +1631,18 @@ function PosPage() {
             id: item.id,
             quantite: item.quantite,
             prix: item.p_vente_ttc,
+          })),
+          priceChanges: currentPriceChanges.map((entry) => ({
+            articleId: entry.articleId,
+            designation: entry.designation,
+            oldPrice: entry.oldPrice,
+            newPrice: entry.newPrice,
+            quantity:
+              cart.find((item) => item.id === entry.articleId)?.quantite ??
+              entry.quantity,
+            changedAt: entry.changedAt,
+            changedBy: entry.changedBy,
+            reason: entry.reason,
           })),
         }),
       });
@@ -1364,6 +1678,8 @@ function PosPage() {
           "final invoice_id": payload.invoice_id
         });
       }
+
+      await loadPersistedPriceChanges();
 
       // Update local stock after successful sale
       setArticles((prev) =>
@@ -1797,16 +2113,60 @@ function PosPage() {
                           />
                         </td>
                         <td style={{ ...S.ticketTd, textAlign: "right" }}>
-                          <input
-                            type="number"
-                            className="pos-price-input"
-                            value={item.p_vente_ttc}
-                            onChange={(e) => updatePrice(item.id, parseFloat(e.target.value) || 0)}
-                            onClick={(e) => e.stopPropagation()}
-                            style={S.ticketPriceInput}
-                            step="0.01"
-                            min="0"
-                          />
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+                            <input
+                              type="number"
+                              className="pos-price-input"
+                              value={priceDrafts[String(item.id)] ?? item.p_vente_ttc}
+                              onChange={(e) => handlePriceDraftChange(item.id, e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              onFocus={(e) => e.target.select()}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  requestPriceChangeConfirmation(item);
+                                }
+                                if (e.key === "Escape") {
+                                  setPriceDrafts((prev) => ({
+                                    ...prev,
+                                    [String(item.id)]: item.p_vente_ttc.toString(),
+                                  }));
+                                }
+                              }}
+                              style={{
+                                ...S.ticketPriceInput,
+                                border: item.price_modified ? "2px solid #f59e0b" : S.ticketPriceInput.border,
+                                background: item.price_modified ? "#fff7ed" : S.ticketPriceInput.background,
+                              }}
+                              step="0.01"
+                              min="0"
+                            />
+                            {(priceDrafts[String(item.id)] ?? item.p_vente_ttc.toString()) !== item.p_vente_ttc.toString() && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  requestPriceChangeConfirmation(item);
+                                }}
+                                title="Confirmer le nouveau prix"
+                                style={{
+                                  border: "none",
+                                  background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
+                                  color: "#fff",
+                                  width: 26,
+                                  height: 26,
+                                  borderRadius: 8,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  cursor: "pointer",
+                                  boxShadow: "0 4px 10px rgba(22,163,74,0.25)",
+                                }}
+                              >
+                                <Save size={13} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td style={{ ...S.ticketTdLast, fontWeight: 800 }}>{(item.p_vente_ttc * item.quantite).toFixed(2)}</td>
                       </tr>
@@ -1854,6 +2214,55 @@ function PosPage() {
                 >
                   <X size={14} strokeWidth={4} /> Supprimer
                 </button>
+              </div>
+
+              <div style={{ marginTop: 10, border: "1px solid #dbe4f0", borderRadius: 10, background: "#f8fafc", overflow: "hidden" }}>
+                <div style={{ padding: "8px 10px", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#eef2ff" }}>
+                  <span style={{ fontSize: 12, fontWeight: 900, color: "#312e81", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                    Historique Prix En Cours
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#475569" }}>
+                    {currentPriceChanges.length} modification(s)
+                  </span>
+                </div>
+                <div className="pos-scrollbar" style={{ maxHeight: 110, overflowY: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {currentPriceChanges.length > 0 ? currentPriceChanges.map((entry) => (
+                    <div key={entry.id} style={{ background: "#fff", borderRadius: 8, border: "1px solid #e2e8f0", padding: "8px 10px" }}>
+                      <div style={{ fontSize: 12, fontWeight: 900, color: "#0f172a" }}>{entry.designation}</div>
+                      <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>
+                        {formatAmount(entry.oldPrice)} → {formatAmount(entry.newPrice)} F CFA • Qté {entry.quantity}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>
+                        {formatDateTime(entry.changedAt)} • {entry.changedBy}
+                      </div>
+                    </div>
+                  )) : (
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textAlign: "center", padding: "8px 0" }}>
+                      Aucun changement de prix validé pour cette vente.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 8, border: "1px solid #e2e8f0", borderRadius: 10, background: "#fff", padding: "8px 10px" }}>
+                <div style={{ fontSize: 11, fontWeight: 900, color: "#0f172a", textTransform: "uppercase", marginBottom: 6 }}>
+                  Journal des Modifications Prix
+                </div>
+                <div className="pos-scrollbar" style={{ maxHeight: 84, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+                  {(serverPriceChangeHistory.length > 0 ? serverPriceChangeHistory : priceChangeHistory).slice(0, 4).map((entry) => (
+                    <div key={entry.id} style={{ fontSize: 11, color: "#475569", borderBottom: "1px dashed #e2e8f0", paddingBottom: 4 }}>
+                      <strong style={{ color: "#0f172a" }}>{entry.designation}</strong> • {formatAmount(entry.oldPrice)} → {formatAmount(entry.newPrice)} • {entry.changedBy}
+                      {entry.quantity > 0 && <span> • Qté {entry.quantity}</span>}
+                      {entry.reason && <div style={{ color: "#64748b", marginTop: 2 }}>Motif: {entry.reason}</div>}
+                      <div style={{ color: "#94a3b8", marginTop: 2 }}>{formatDateTime(entry.changedAt)}</div>
+                    </div>
+                  ))}
+                  {serverPriceChangeHistory.length === 0 && priceChangeHistory.length === 0 && (
+                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>
+                      Le journal des changements de prix apparaîtra ici après la première validation.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </section>
@@ -2147,6 +2556,76 @@ function PosPage() {
           </button>
         </footer>
       </div>
+
+      {pendingPriceChange && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={cancelPendingPriceChange}></div>
+          <div style={{
+            position: "relative",
+            width: "100%",
+            maxWidth: 520,
+            background: "#fff",
+            borderRadius: 24,
+            boxShadow: "0 25px 50px -12px rgba(0,0,0,0.30)",
+            overflow: "hidden",
+          }}>
+            <div style={{ padding: "20px 24px", background: "linear-gradient(135deg, #0f172a 0%, #312e81 100%)", color: "#fff" }}>
+              <div style={{ fontSize: 22, fontWeight: 900 }}>Confirmer le nouveau prix</div>
+              <div style={{ fontSize: 13, opacity: 0.9, marginTop: 4 }}>
+                La vente et la facture seront recalculées avec ce tarif.
+              </div>
+            </div>
+            <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18 }}>
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>{pendingPriceChange.designation}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
+                  <div style={{ background: "#fff", borderRadius: 12, padding: 12, border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontSize: 11, fontWeight: 900, color: "#64748b", textTransform: "uppercase" }}>Ancien Prix</div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", marginTop: 4 }}>{formatAmount(pendingPriceChange.oldPrice)} F</div>
+                  </div>
+                  <div style={{ background: "#ecfdf5", borderRadius: 12, padding: 12, border: "1px solid #a7f3d0" }}>
+                    <div style={{ fontSize: 11, fontWeight: 900, color: "#047857", textTransform: "uppercase" }}>Nouveau Prix</div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: "#065f46", marginTop: 4 }}>{formatAmount(pendingPriceChange.newPrice)} F</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginTop: 10 }}>
+                  Quantité: {pendingPriceChange.quantity} • Impact total: {formatAmount((pendingPriceChange.newPrice - pendingPriceChange.oldPrice) * pendingPriceChange.quantity)} F
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 900, color: "#475569", textTransform: "uppercase", marginBottom: 8 }}>
+                  Motif de modification (optionnel)
+                </label>
+                <textarea
+                  value={priceChangeReason}
+                  onChange={(e) => setPriceChangeReason(e.target.value)}
+                  rows={3}
+                  placeholder="Ex: Remise exceptionnelle, accord client, correction de saisie..."
+                  style={{ width: "100%", borderRadius: 14, border: "1px solid #cbd5e1", padding: "12px 14px", fontSize: 14, outline: "none", resize: "none", background: "#fff" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={cancelPendingPriceChange}
+                  style={{ border: "none", background: "#e2e8f0", color: "#334155", padding: "12px 18px", borderRadius: 12, fontWeight: 800, cursor: "pointer" }}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmPendingPriceChange}
+                  style={{ border: "none", background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)", color: "#fff", padding: "12px 18px", borderRadius: 12, fontWeight: 800, cursor: "pointer", boxShadow: "0 10px 20px rgba(21,128,61,0.22)" }}
+                >
+                  Confirmer et appliquer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {printInvoiceId && (
         <InvoiceModal 
