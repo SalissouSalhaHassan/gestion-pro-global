@@ -6,7 +6,7 @@ import {
   ArrowLeft, User, Home, Wallet, Loader2, Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import LoyerReceiptModal from "@/components/loyers/LoyerReceiptModal";
+import LoyerReceiptModalV2 from "@/components/loyers/LoyerReceiptModalV2";
 import type { Contract, Payment } from "@/lib/services/loyer.service";
 
 function fmt(n: number) {
@@ -226,7 +226,7 @@ export default function TenantDashboardPage({ params }: { params: Promise<{ id: 
 
       {/* Print Receipt Modal */}
       {receiptPaymentId && (
-        <LoyerReceiptModal
+        <LoyerReceiptModalV2
           paymentId={receiptPaymentId}
           onClose={() => setReceiptPaymentId(null)}
         />

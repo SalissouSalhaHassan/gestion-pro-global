@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import PaymentFormDialog from "@/components/loyers/PaymentFormDialog";
-import LoyerReceiptModal from "@/components/loyers/LoyerReceiptModal";
+import LoyerReceiptModalV2 from "@/components/loyers/LoyerReceiptModalV2";
 import type { Payment, Contract } from "@/lib/services/loyer.service";
 
 function fmt(n: number) {
@@ -333,7 +333,7 @@ export default function PaymentsListPage() {
 
       {/* Print Receipt Modal */}
       {receiptPaymentId && (
-        <LoyerReceiptModal
+        <LoyerReceiptModalV2
           paymentId={receiptPaymentId}
           onClose={() => setReceiptPaymentId(null)}
         />
