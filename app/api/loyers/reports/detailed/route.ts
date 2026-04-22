@@ -1,0 +1,86 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { ContractService } from '@/lib/services/loyer.service';
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
+    const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString());
+    const statusFilter = searchParams.get('status') || 'All'; // All, Paid, Unpaid
+
+    const supabase = await createClient();
+    const service = new ContractService(supabase);
+    
+    // Fetch all contracts and payments
+    const { data: contracts, error: contractError } = await supabase
+      .from('contrats')
+      .select('*')
+      .eq('is_deleted', false);
+
+    if (contractError) throw contractError;
+
+    const { data: payments, error: payError } = await supabase
+      .from('contrat_paiements')
+      .select('contrat_id, montant, date_paiement');
+
+    if (payError) throw payError;
+
+    // Process data
+    const reports = contracts.map(c => {
+      const startYear = c.annee_debut || 2024;
+      const startMonth = c.mois_debut || 1;
+      
+      // Calculate months elapsed from start until the selected year/month
+      const totalMonthsElapsed = (year - startYear) * 12 + (month - startMonth + 1);
+      const monthsToCalculate = Math.max(0, totalMonthsElapsed);
+      
+      const expectedAmount = monthsToCalculate * (c.loyer_mensuel || 0);
+      
+      // Total paid until the end of the selected month
+      // We filter payments that happened before or during the selected month/year
+      // Actually, usually total paid is total paid, but if the user wants a report "AS OF" a date:
+      const totalPaid = payments
+        .filter(p => {
+          if (p.contrat_id !== c.id) return false;
+          const pDate = new Date(p.date_paiement);
+          const pYear = pDate.getFullYear();
+          const pMonth = pDate.getMonth() + 1;
+          return (pYear < year) || (pYear === year && pMonth <= month);
+        })
+        .reduce((sum, p) => sum + (p.montant || 0), 0);
+
+      const retards = Math.max(0, expectedAmount - totalPaid);
+      const unpaidMonths = Math.floor(retards / (c.loyer_mensuel || 1));
+      
+      let paymentStatus = 'À jour';
+      if (retards > 0) paymentStatus = 'Impayé';
+
+      return {
+        id: c.id,
+        locataire: c.locataire_nom_complet,
+        ref: c.ref_locataire,
+        loyer: c.loyer_mensuel,
+        total_paye: totalPaid,
+        retards: retards,
+        mois_impayes: unpaidMonths,
+        statut_paiement: paymentStatus,
+        statut_contrat: c.statut
+      };
+    });
+
+    // Apply status filter
+    let filteredReports = reports;
+    if (statusFilter === 'Paid') {
+      filteredReports = reports.filter(r => r.retards <= 0);
+    } else if (statusFilter === 'Unpaid') {
+      filteredReports = reports.filter(r => r.retards > 0);
+    }
+
+    return NextResponse.json(filteredReports);
+
+  } catch (error: any) {
+    console.error('Detailed Report API Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
