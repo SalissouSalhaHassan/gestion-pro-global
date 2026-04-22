@@ -59,6 +59,7 @@ export default function TransitPage() {
     setError(null);
     try {
       const url = new URL("/api/stock/transits", window.location.origin);
+      url.searchParams.set("t", new Date().getTime().toString()); // Cache bust
       if (depotFilter !== "Tous") url.searchParams.set("depot", depotFilter);
       if (statusFilter !== "Tous") url.searchParams.set("status", statusFilter);
 

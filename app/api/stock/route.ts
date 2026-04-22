@@ -55,42 +55,55 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Non autorise pour ce depot" }, { status: 403 });
   }
 
-  let query = supabase
+  // Fetch articles
+  let articlesQuery = supabase
     .from("articles")
-    .select(`
-      id, reference, designation, qte_min, unite, image_path,
-      stocks!left ( quantite, depot_nom )
-    `)
+    .select(`id, reference, designation, qte_min, unite, image_path`)
     .eq("is_deleted", false);
 
   if (search) {
-    query = query.or(`reference.ilike.%${search}%,designation.ilike.%${search}%`);
+    articlesQuery = articlesQuery.or(`reference.ilike.%${search}%,designation.ilike.%${search}%`);
   }
-
   if (categoryId) {
-    query = query.eq("categorie_id", categoryId);
+    articlesQuery = articlesQuery.eq("categorie_id", categoryId);
   }
 
-  const { data, error } = await query.order("designation");
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  const { data: articlesData, error: articlesErr } = await articlesQuery.order("designation");
+  if (articlesErr) {
+    return NextResponse.json({ error: articlesErr.message }, { status: 500 });
   }
 
-  const rows = Array.isArray(data) ? (data as any[]) : [];
+  const articles = Array.isArray(articlesData) ? articlesData : [];
+  const articleIds = articles.map(a => a.id);
 
-  const results = rows.map((art) => {
-    const allStocks = Array.isArray(art.stocks) ? art.stocks : [];
+  // Fetch stocks for these articles
+  let stocksQuery = supabase
+    .from("stocks")
+    .select("article_id, quantite, depot_nom")
+    .in("article_id", articleIds);
 
-    let visibleStocks = allStocks;
+  const { data: stocksData, error: stocksErr } = await stocksQuery;
+  if (stocksErr) {
+     console.error("Stocks fetch error:", stocksErr);
+     // If stocks table is the problem, we still want to show articles with 0 stock
+  }
+
+  const stocks = Array.isArray(stocksData) ? stocksData : [];
+
+  const results = articles.map((art) => {
+    // Filter stocks for this article based on user scope and requested depot
+    let articleStocks = stocks.filter(s => s.article_id === art.id);
+
+    let visibleStocks = articleStocks;
     
     if (requestedDepot && requestedDepot !== "Tous") {
-      visibleStocks = allStocks.filter((stock) => {
+      visibleStocks = articleStocks.filter((stock) => {
         const stockDepot = String(stock.depot_nom || "").toLowerCase();
         const reqDepot = requestedDepot.toLowerCase();
         return stockDepot === reqDepot;
       });
     } else if (!isAdmin && scopeDepots.length > 0) {
-      visibleStocks = allStocks.filter((stock) => {
+      visibleStocks = articleStocks.filter((stock) => {
         const stockDepot = String(stock.depot_nom || "").toLowerCase();
         return scopeDepots.some(sd => sd.toLowerCase() === stockDepot);
       });

@@ -70,6 +70,7 @@ export default function InventoryPage() {
     setError(null);
     try {
       const url = new URL("/api/stock", window.location.origin);
+      url.searchParams.set("t", new Date().getTime().toString()); // Cache bust
       if (selectedDepot && selectedDepot !== "Tous") {
         url.searchParams.set("depot", selectedDepot);
       }

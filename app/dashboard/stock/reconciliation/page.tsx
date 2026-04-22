@@ -54,14 +54,19 @@ export default function InventoryReconciliation() {
       const { data, error } = await supabase
         .from("articles")
         .select(`
-          id, reference, designation,
-          stocks ( quantite, depot_id )
+          id, reference, designation
         `)
         .eq("is_deleted", false);
 
       if (data) {
+        // Fetch all stocks for these articles to filter manually (avoiding complex join issues)
+        const { data: allStocks } = await supabase.from("stocks").select("article_id, quantite, depot_nom");
+        
         const mapped = data.map((art: any) => {
-          const systemQte = art.stocks?.find((s: any) => s.depot_id === selectedDepotId)?.quantite || 0;
+          const systemQte = (allStocks || [])
+            .filter((s: any) => s.article_id === art.id && (s.depot_nom === depots.find(d => d.id === selectedDepotId)?.nom))
+            .reduce((acc, curr) => acc + Number(curr.quantite), 0);
+            
           return {
             id: art.id,
             reference: art.reference,
@@ -101,12 +106,13 @@ export default function InventoryReconciliation() {
     setSaving(true);
     try {
       for (const change of changes) {
-        // 1. Update stock
+        // 1. Update stock using depot name
+        const depotName = depots.find(d => d.id === selectedDepotId)?.nom;
         const { error: stockErr } = await supabase
           .from("stocks")
           .update({ quantite: change.physical_qte })
           .eq("article_id", change.id)
-          .eq("depot_id", selectedDepotId);
+          .eq("depot_nom", depotName);
 
         if (stockErr) throw stockErr;
 

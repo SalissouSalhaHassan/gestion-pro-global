@@ -507,9 +507,9 @@ export async function POST(request: Request) {
     // Fetch current stock for these items in the specific depot
     const { data: stockLevels, error: stockErr } = await supabase
       .from("stocks")
-      .select("article_id, quantite, depot_id")
+      .select("article_id, quantite, depot_nom")
       .in("article_id", itemIds)
-      .eq("depot_id", effectiveDepotId);
+      .ilike("depot_nom", selectedDepot);
 
     if (stockErr) console.error("Stock check error:", stockErr);
 

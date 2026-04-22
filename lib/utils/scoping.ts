@@ -24,12 +24,21 @@ export async function applyUserScope<T extends PostgrestFilterBuilder<any, any, 
   // 1. SCoping by Warehouse (for Inventory/Stock related tables)
   if (['mouvements', 'stocks'].includes(entityType)) {
     // Fetch assigned warehouses for the user
+    // Note: user_warehouses table might still have depot_id but it links to a name in the depots table
     const { data: allowed } = await supabase
       .from('user_warehouses')
-      .select('depot_id, depots(nom)')
+      .select('depot_id') 
       .eq('user_id', session.id);
 
-    const allowedDepotNames = allowed?.map((d: any) => d.depots?.nom).filter(Boolean) || [];
+    const depotIds = allowed?.map((d: any) => d.depot_id).filter(Boolean) || [];
+    
+    // Resolve IDs to Names
+    const { data: depotObjects } = await supabase
+      .from('depots')
+      .select('nom')
+      .in('id', depotIds);
+
+    const allowedDepotNames = depotObjects?.map((d: any) => d.nom) || [];
     
     // Fallback to session.emplacement if nothing in user_warehouses
     if (allowedDepotNames.length === 0 && session.emplacement) {
