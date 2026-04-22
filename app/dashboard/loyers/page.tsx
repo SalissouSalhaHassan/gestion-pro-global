@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, Pencil, Trash2, BarChart3, Wallet, ListChecks,
-  Loader2, Search, Home, Users, FileText, Printer
+  Loader2, Search, Home, Users, FileText, Printer, TrendingUp
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
