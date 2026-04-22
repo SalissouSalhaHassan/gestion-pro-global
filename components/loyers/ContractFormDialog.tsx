@@ -9,6 +9,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, User, Home, Wallet, Save, X } from "lucide-react";
 import type { Contract } from "@/lib/services/loyer.service";
 
+const Field = ({ label, dataKey, form, onChange, required, type = "text", colSpan = false }: { label: string; dataKey: string; form: Record<string, string>; onChange: (key: string, value: string) => void; required?: boolean; type?: string; colSpan?: boolean }) => (
+  <div className={colSpan ? "md:col-span-2" : ""}>
+    <Label className="text-xs font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1">
+      {label} {required && <span className="text-rose-500">*</span>}
+    </Label>
+    <Input
+      type={type}
+      value={form[dataKey] || ""}
+      onChange={(e) => onChange(dataKey, e.target.value)}
+      className="h-11 bg-white/60 border-slate-200/80 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all font-medium"
+    />
+  </div>
+);
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -117,19 +131,7 @@ export default function ContractFormDialog({ open, onClose, onSaved, contractId 
     }
   };
 
-  const Field = ({ label, dataKey, required, type = "text", colSpan = false }: { label: string; dataKey: string; required?: boolean; type?: string; colSpan?: boolean }) => (
-    <div className={colSpan ? "md:col-span-2" : ""}>
-      <Label className="text-xs font-black uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1">
-        {label} {required && <span className="text-rose-500">*</span>}
-      </Label>
-      <Input
-        type={type}
-        value={form[dataKey] || ""}
-        onChange={(e) => handleChange(dataKey, e.target.value)}
-        className="h-11 bg-white/60 border-slate-200/80 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all font-medium"
-      />
-    </div>
-  );
+
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -155,14 +157,14 @@ export default function ContractFormDialog({ open, onClose, onSaved, contractId 
                 <User size={16} /> Informations du Locataire
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="Nom complet" dataKey="locataire_nom_complet" required colSpan />
-                <Field label="Référence (Code)" dataKey="ref_locataire" />
-                <Field label="Téléphone" dataKey="locataire_telephone" />
-                <Field label="Email" dataKey="locataire_email" type="email" />
-                <Field label="Numéro CNI" dataKey="locataire_cni" />
-                <Field label="Date de naissance" dataKey="date_naissance" type="date" />
-                <Field label="Profession" dataKey="profession" />
-                <Field label="Adresse complète" dataKey="adresse_complete" colSpan />
+                <Field form={form} onChange={handleChange} label="Nom complet" dataKey="locataire_nom_complet" required colSpan />
+                <Field form={form} onChange={handleChange} label="Référence (Code)" dataKey="ref_locataire" />
+                <Field form={form} onChange={handleChange} label="Téléphone" dataKey="locataire_telephone" />
+                <Field form={form} onChange={handleChange} label="Email" dataKey="locataire_email" type="email" />
+                <Field form={form} onChange={handleChange} label="Numéro CNI" dataKey="locataire_cni" />
+                <Field form={form} onChange={handleChange} label="Date de naissance" dataKey="date_naissance" type="date" />
+                <Field form={form} onChange={handleChange} label="Profession" dataKey="profession" />
+                <Field form={form} onChange={handleChange} label="Adresse complète" dataKey="adresse_complete" colSpan />
               </div>
             </div>
 
@@ -185,8 +187,8 @@ export default function ContractFormDialog({ open, onClose, onSaved, contractId 
                     </SelectContent>
                   </Select>
                 </div>
-                <Field label="Description du bien" dataKey="bien_loue_details" required />
-                <Field label="Quartier" dataKey="quartier" />
+                <Field form={form} onChange={handleChange} label="Description du bien" dataKey="bien_loue_details" required />
+                <Field form={form} onChange={handleChange} label="Quartier" dataKey="quartier" />
               </div>
             </div>
 
@@ -196,9 +198,9 @@ export default function ContractFormDialog({ open, onClose, onSaved, contractId 
                 <Wallet size={16} /> Informations Financières
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="Loyer mensuel (F CFA)" dataKey="loyer_mensuel" required type="number" />
-                <Field label="Caution (F CFA)" dataKey="caution" type="number" />
-                <Field label="Année de début" dataKey="annee_debut" type="number" />
+                <Field form={form} onChange={handleChange} label="Loyer mensuel (F CFA)" dataKey="loyer_mensuel" required type="number" />
+                <Field form={form} onChange={handleChange} label="Caution (F CFA)" dataKey="caution" type="number" />
+                <Field form={form} onChange={handleChange} label="Année de début" dataKey="annee_debut" type="number" />
                 <div>
                   <Label className="text-xs font-black uppercase tracking-wider text-slate-500 mb-1.5 block">Mois de début</Label>
                   <Select value={form.mois_debut} onValueChange={(v) => handleChange("mois_debut", v)}>
