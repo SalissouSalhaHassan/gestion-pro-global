@@ -156,6 +156,13 @@ export default function LoyersPage() {
           {deleting ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Trash2 size={16} className="mr-2" />} Supprimer
         </Button>
         <Button
+          onClick={() => router.push("/dashboard/loyers/reports")}
+          className="rounded-xl h-11 px-5 font-black bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 flex items-center gap-2"
+        >
+          <TrendingUp size={18} /> Rapports Détaillés
+        </Button>
+
+        <Button
           disabled={!selected}
           onClick={() => selected && router.push(`/dashboard/loyers/${selected.id}`)}
           className="rounded-xl h-11 px-5 font-black bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 shadow-sm disabled:opacity-40"
@@ -176,13 +183,6 @@ export default function LoyersPage() {
           variant="outline"
         >
           <ListChecks size={16} className="mr-2" /> Liste Paiements
-        </Button>
-
-        <Button
-          onClick={() => router.push("/dashboard/loyers/reports")}
-          className="rounded-xl h-11 px-5 font-black bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/30"
-        >
-          <BarChart3 size={18} className="mr-2" /> Rapports Détaillés
         </Button>
 
         <Button
