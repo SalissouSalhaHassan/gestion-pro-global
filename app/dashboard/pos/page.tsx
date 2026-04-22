@@ -1695,8 +1695,6 @@ function PosPage() {
         })
       );
 
-      clearCart();
-      
       // TRIGGER PAYMENT MODAL
       let printId: string | number | null = null;
       
@@ -1712,26 +1710,40 @@ function PosPage() {
 
       if (printId) {
         const numPrintId = typeof printId === 'string' ? Number(printId) : printId;
+        console.log("💳 Attempting to open Payment Modal for Invoice ID:", numPrintId);
         
-        // Fetch full invoice data for the payment modal
-        const { data: fullInvoice, error: fetchErr } = await supabase
-          .from("factures")
-          .select("*, clients(nom, adresse, tel, gsm, email)")
-          .eq("id", numPrintId)
-          .single();
+        try {
+          // Fetch fresh invoice data for the payment modal
+          const { data: fullInvoice, error: fetchErr } = await supabase
+            .from("factures")
+            .select("*, clients(nom, adresse, tel, gsm, email)")
+            .eq("id", numPrintId)
+            .maybeSingle(); // Use maybeSingle to avoid errors if not found
 
-        if (!fetchErr && fullInvoice) {
-          const clientRow = Array.isArray(fullInvoice.clients) ? fullInvoice.clients[0] : fullInvoice.clients;
+          if (fetchErr) console.error("❌ Fetch error:", fetchErr);
+
+          const clientRow = fullInvoice?.clients ? (Array.isArray(fullInvoice.clients) ? fullInvoice.clients[0] : fullInvoice.clients) : null;
+          
+          // Construct the invoice object with a robust fallback
           const invoiceForModal = {
-            ...fullInvoice,
-            client_nom: clientRow?.nom || fullInvoice.client_nom || "Client Divers",
+            id: numPrintId,
+            client_id: fullInvoice?.client_id || selectedClientId || 1,
+            bl_number: fullInvoice?.bl_number || payload.sale?.numero || `FACT-${numPrintId}`,
+            total_ttc: fullInvoice?.total_ttc || cart.reduce((acc, it) => acc + (it.p_vente_ttc * it.quantite), 0),
+            montant_restant: fullInvoice?.montant_restant !== undefined 
+              ? fullInvoice.montant_restant 
+              : (cart.reduce((acc, it) => acc + (it.p_vente_ttc * it.quantite), 0) - Number(receivedAmount)),
+            client_nom: clientRow?.nom || fullInvoice?.client_nom || clients.find(c => c.id === (fullInvoice?.client_id || selectedClientId))?.nom || "Client Divers",
+            ...fullInvoice // Spread original fields if any
           };
           
+          console.log("📦 Invoice object for modal:", invoiceForModal);
           setPaymentInvoice(invoiceForModal);
           setShowPaymentModal(true);
           localStorage.setItem("last_invoice_id", String(numPrintId));
-        } else {
-          // Fallback if fetch fails, just go to print
+        } catch (err) {
+          console.error("❌ Error preparing payment modal:", err);
+          // Last resort fallback
           setPrintInvoiceId(numPrintId);
         }
       }
@@ -1742,6 +1754,8 @@ function PosPage() {
       if (payload.sale?.alerts && payload.sale.alerts.length > 0) {
         setStockAlerts(payload.sale.alerts);
       }
+
+      clearCart();
 
       // If no printId was found, show a warning alert
       if (!printId) {
