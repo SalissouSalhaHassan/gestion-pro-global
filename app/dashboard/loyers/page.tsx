@@ -179,6 +179,13 @@ export default function LoyersPage() {
         </Button>
 
         <Button
+          onClick={() => router.push("/dashboard/loyers/reports")}
+          className="rounded-xl h-11 px-5 font-black bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/30"
+        >
+          <BarChart3 size={18} className="mr-2" /> Rapports Détaillés
+        </Button>
+
+        <Button
           onClick={() => setShowReportModal(true)}
           className="rounded-xl h-11 px-5 font-black bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50 shadow-sm"
           variant="outline"
