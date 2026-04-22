@@ -34,14 +34,17 @@ export async function GET(request: Request) {
         stock_apres, 
         type, 
         utilisateur,
-        articles ( designation, reference ),
-        depots ( nom )
+        depot,
+        articles ( designation, reference )
       `)
       .order("date_mouvement", { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (articleId) query = query.eq("article_id", articleId);
-    if (depotId) query = query.eq("depot_id", depotId);
+    if (depotId && depotId !== "Tous") {
+       // Support filtering by depot name stored in the depotId variable
+       query = query.eq("depot", depotId);
+    }
 
     const { data, error } = await query;
 
@@ -55,7 +58,7 @@ export async function GET(request: Request) {
       ...m,
       designation: Array.isArray(m.articles) ? m.articles[0]?.designation : m.articles?.designation,
       reference: Array.isArray(m.articles) ? m.articles[0]?.reference : m.articles?.reference,
-      depot: Array.isArray(m.depots) ? m.depots[0]?.nom : m.depots?.nom
+      depot: m.depot
     }));
 
     return NextResponse.json({

@@ -42,7 +42,7 @@ export async function GET(request: Request) {
         sortie, 
         stock_apres, 
         type, 
-        depot_id,
+        depot,
         utilisateur, 
         user_id,
         articles ( reference, designation )
@@ -51,15 +51,16 @@ export async function GET(request: Request) {
       .range(offset, offset + limit - 1);
 
     // Security: Sellers only see movements in their depot.
-    if (!isAdmin) {
-      // In the new schema we should use depot_id, but for now let's check what we have
-      if (userDepot) {
-        // query = query.eq("depot", userDepot); // Legacy
-      }
+    if (!isAdmin && userDepot) {
+       query = query.eq("depot", userDepot);
     } 
     
-    if (depotId && depotId !== "Tous") {
-      query = query.eq("depot_id", depotId);
+    if (depotName && depotName !== "Tous") {
+      query = query.eq("depot", depotName);
+    } else if (depotId && depotId !== "Tous") {
+      // If we only have an ID, we might need to resolve it or just skip if the table only has names
+      // For now, let's assume we can filter by name if depotId is actually a name (common in this app)
+      query = query.eq("depot", depotId);
     }
 
     // Date Filters

@@ -2,12 +2,11 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { getServerSession, isAdminOrManager, getAllowedDepots } from "@/lib/auth_helper";
 
-// Enable caching for the stock API (30 seconds TTL)
-export const revalidate = 30;
+// Disable caching for the stock API to ensure fresh data
+export const revalidate = 0;
 
 type StockRow = {
   quantite?: number | string | null;
-  depot_id?: number | null;
   depot_nom?: string | null;
 };
 
