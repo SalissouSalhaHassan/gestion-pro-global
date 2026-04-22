@@ -196,9 +196,15 @@ export default function InventoryPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erreur de soumission");
 
-      setSuccess("L'inventaire a été clôturé avec succès et le stock mis à jour.");
+      setSuccess(`L'inventaire a été clôturé avec succès. Session: INV-${data.invSessionId}`);
+      
+      // Auto-open print if needed or show a button
+      if (data.invSessionId) {
+        window.open(`/api/inventory/print/${data.invSessionId}`, '_blank');
+      }
+      
       fetchStockForInventory();
-      setTimeout(() => setSuccess(null), 5000);
+      setTimeout(() => setSuccess(null), 10000);
 
     } catch (err: any) {
       setError(err.message);
@@ -220,12 +226,14 @@ export default function InventoryPage() {
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
         <div>
            <div className="flex items-center gap-3 mb-2">
-             <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/30">
-               <ScanLine size={24} className="text-white" />
+             <div className="bg-indigo-600 w-14 h-14 rounded-[20px] flex items-center justify-center shadow-2xl shadow-indigo-500/40 rotate-3 transition-transform hover:rotate-0">
+               <ScanLine size={28} className="text-white" />
              </div>
              <div>
-                <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-none">Cession d'Inventaire</h1>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Audit Physique du Stock</span>
+                <h1 className="text-4xl font-black text-slate-900 tracking-tighter leading-none italic uppercase">
+                   Cession <span className="text-indigo-600">d'Inventaire</span>
+                </h1>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1 ml-1">Audit Physique & Ajustement</p>
              </div>
            </div>
         </div>
