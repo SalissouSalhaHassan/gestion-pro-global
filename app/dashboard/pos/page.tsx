@@ -34,6 +34,7 @@ import {
 
 import { createClient } from "@/lib/supabase/client";
 import InvoiceModal from "../invoices/InvoiceModal";
+import PaymentModal from "../invoices/PaymentModal";
 
 /* ═══════════════════════════════════════════════════════════════════
    TYPES
@@ -977,6 +978,8 @@ function PosPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [stockAlerts, setStockAlerts] = useState<{ designation: string, stock_restant: number }[]>([]);
   const [printInvoiceId, setPrintInvoiceId] = useState<string | number | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentInvoice, setPaymentInvoice] = useState<any>(null);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickAddForm, setQuickAddForm] = useState({ designation: "", price: "", quantity: "1" });
   
@@ -1694,39 +1697,47 @@ function PosPage() {
 
       clearCart();
       
-      // TRIGGER PRINT PREVIEW - Direct state update (no setTimeout)
+      // TRIGGER PAYMENT MODAL
       let printId: string | number | null = null;
       
       if (payload.invoice_id) {
         printId = payload.invoice_id;
-        console.log("✅ Using payload.invoice_id:", printId);
       } else if (payload.sale?.invoice_id) {
         printId = payload.sale.invoice_id;
-        console.log("✅ Using payload.sale.invoice_id:", printId);
       } else if (payload.sale?.id) {
         printId = payload.sale.id;
-        console.log("✅ Using payload.sale.id:", printId);
       } else if (editInvoiceId) {
         printId = editInvoiceId;
-        console.log("✅ Using editInvoiceId (edit mode):", printId);
-      } else {
-        console.error("❌ NO invoice_id found anywhere in response:", payload);
-        console.error("❌ Entire payload:", JSON.stringify(payload));
       }
-      
-      // Set print modal IMMEDIATELY (not in setTimeout)
+
       if (printId) {
         const numPrintId = typeof printId === 'string' ? Number(printId) : printId;
-        console.log("🖨️ SETTING printInvoiceId NOW to:", numPrintId, "Type:", typeof numPrintId);
-        setPrintInvoiceId(numPrintId);
-        localStorage.setItem("last_invoice_id", String(numPrintId));
-        console.log("✅ localStorage.last_invoice_id set to:", numPrintId);
-      } else {
-        console.error("❌ printId is null or empty, not setting print state");
+        
+        // Fetch full invoice data for the payment modal
+        const { data: fullInvoice, error: fetchErr } = await supabase
+          .from("factures")
+          .select("*, clients(nom, adresse, tel, gsm, email)")
+          .eq("id", numPrintId)
+          .single();
+
+        if (!fetchErr && fullInvoice) {
+          const clientRow = Array.isArray(fullInvoice.clients) ? fullInvoice.clients[0] : fullInvoice.clients;
+          const invoiceForModal = {
+            ...fullInvoice,
+            client_nom: clientRow?.nom || fullInvoice.client_nom || "Client Divers",
+          };
+          
+          setPaymentInvoice(invoiceForModal);
+          setShowPaymentModal(true);
+          localStorage.setItem("last_invoice_id", String(numPrintId));
+        } else {
+          // Fallback if fetch fails, just go to print
+          setPrintInvoiceId(numPrintId);
+        }
       }
       
       setSuccess(
-        `✅ Vente enregistrée${payload.sale?.numero ? ` — N° ${payload.sale.numero}` : ""}${printId ? " • Aperçu impression" : ""}`
+        `✅ Vente enregistrée${payload.sale?.numero ? ` — N° ${payload.sale.numero}` : ""}`
       );
       if (payload.sale?.alerts && payload.sale.alerts.length > 0) {
         setStockAlerts(payload.sale.alerts);
@@ -1749,6 +1760,14 @@ function PosPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handlePaymentModalClose = () => {
+    if (paymentInvoice?.id) {
+      setPrintInvoiceId(paymentInvoice.id);
+    }
+    setShowPaymentModal(false);
+    setPaymentInvoice(null);
   };
 
   const handleConfirmQuickAdd = () => {
@@ -2632,6 +2651,16 @@ function PosPage() {
           key={`invoice-${printInvoiceId}`}
           invoiceId={printInvoiceId} 
           onClose={() => setPrintInvoiceId(null)} 
+        />
+      )}
+
+      {showPaymentModal && paymentInvoice && (
+        <PaymentModal
+          invoice={paymentInvoice}
+          onClose={handlePaymentModalClose}
+          onRefresh={() => {
+            // Data is refreshed inside PaymentModal, but we could sync POS here if needed
+          }}
         />
       )}
 
