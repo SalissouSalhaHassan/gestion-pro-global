@@ -35,6 +35,20 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
   const [printFormat, setPrintFormat] = useState<'A4' | 'A5' | 'Ticket'>('A4');
   const [error, setError] = useState<string | null>(null);
 
+  const resolveUnitPrice = (item: any) => {
+    const qty = Number(item?.qte || 0);
+    const totalTtc = Number(item?.total_item_ttc || 0);
+    const puTtc = Number(item?.pu_ttc || 0);
+    const puHt = Number(item?.pu_ht || 0);
+    const derivedUnitPrice = qty > 0 ? totalTtc / qty : 0;
+
+    if (derivedUnitPrice > 0 && Math.abs(derivedUnitPrice - puTtc) > 0.0001) {
+      return derivedUnitPrice;
+    }
+
+    return puTtc || puHt || derivedUnitPrice;
+  };
+
   const numberToWordsFr = (total: number) => {
     if (total === 0) return "zéro";
     const ones = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf'];
@@ -91,7 +105,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
         // 2. Fetch Invoice Header
         const { data: invData, error: invErr } = await supabase
           .from("factures")
-          .select("*")
+          .select("*, clients(nom, adresse, tel, gsm, email)")
           .eq("id", numericId);
         
         if (invErr) throw new Error(`Erreur facture: ${invErr.message}`);
@@ -99,14 +113,26 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
         
         const inv = invData[0];
         console.log("✅ Invoice loaded:", inv);
-        setInvoice(inv);
+        const clientRow = Array.isArray(inv.clients) ? inv.clients[0] : inv.clients;
+        setInvoice({
+          ...inv,
+          client_nom: clientRow?.nom || inv.client_nom || "Client Divers",
+          client_adresse: clientRow?.adresse || inv.client_adresse || "",
+          client_telephone: clientRow?.tel || clientRow?.gsm || inv.client_telephone || "",
+          client_email: clientRow?.email || inv.client_email || "",
+        });
 
         // 3. Fetch Items
         const { data: its } = await supabase
           .from("facture_items")
           .select("*")
           .eq("facture_id", numericId);
-        setItems(its || []);
+        setItems(
+          (its || []).map((item) => ({
+            ...item,
+            display_unit_price: resolveUnitPrice(item),
+          }))
+        );
 
         // 4. Fetch Payments
         const { data: pays } = await supabase
@@ -301,7 +327,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                       <>
                         <td className="border-r border-black p-1 break-words leading-tight">{item.description}</td>
                         <td className="border-r border-black p-1 text-center font-bold">{Number(item.qte).toFixed(2)}</td>
-                        <td className="border-r border-black p-1 text-right">{Number(item.pu_ttc || item.pu_ht).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="border-r border-black p-1 text-right">{Number(item.display_unit_price ?? item.pu_ttc ?? item.pu_ht).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="p-1 text-right font-bold">{Number(item.total_item_ttc).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       </>
                     ) : (

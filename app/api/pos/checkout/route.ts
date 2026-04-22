@@ -105,6 +105,14 @@ function findBestDepotMatch(target: string, candidates: string[]) {
   return uniqueCandidates.length === 1 ? uniqueCandidates[0].raw : null;
 }
 
+function isMissingRpcSignature(error: { message?: string } | null | undefined, rpcName: string) {
+  const message = String(error?.message || "");
+  return (
+    message.includes(`Could not find the function public.${rpcName}`) ||
+    message.includes(`Could not find the function ${rpcName}`)
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -201,6 +209,9 @@ export async function POST(request: Request) {
 
     const canonicalDepotName = matchedDepot?.nom || depotName;
     const effectiveDepotId = matchedDepot?.id ? Number(matchedDepot.id) : null;
+    const numericUserId = Number(user.id);
+    const rpcUserId = Number.isFinite(numericUserId) ? numericUserId : null;
+    const rpcUserIdText = user.id == null ? null : String(user.id);
 
     const requestedInvoiceId = body.invoiceId ? Number(body.invoiceId) : null;
     let originalInvoiceItems: EditInvoiceItemRow[] = [];
@@ -286,7 +297,7 @@ export async function POST(request: Request) {
     
     if (body.invoiceId) {
       // MODE: UPDATE EXISTING INVOICE
-      const { data, error } = await supabase.rpc("update_invoice_from_pos_safe", {
+      let { data, error } = await supabase.rpc("update_invoice_from_pos_safe", {
         p_invoice_id: Number(body.invoiceId),
         p_client_id: clientId,
         p_vendeur: user.username ?? "Caisse",
@@ -294,21 +305,45 @@ export async function POST(request: Request) {
         p_moyen_reglement: moyenReglement === "Avance" ? "Crédit" : moyenReglement,
         p_depot_id: effectiveDepotId, // Switched to ID
         p_items: items,
-        p_user_id_text: user.id,
+        p_user_id_text: rpcUserIdText,
       });
+      if (error && isMissingRpcSignature(error, "update_invoice_from_pos_safe")) {
+        ({ data, error } = await supabase.rpc("update_invoice_from_pos_safe", {
+          p_invoice_id: Number(body.invoiceId),
+          p_client_id: clientId,
+          p_vendeur: user.username ?? "Caisse",
+          p_emplacement: body.emplacement ?? null,
+          p_moyen_reglement: moyenReglement === "Avance" ? "Crأ©dit" : moyenReglement,
+          p_depot_nom: canonicalDepotName,
+          p_items: items,
+          p_user_id_text: rpcUserIdText,
+        }));
+      }
       if (error) throw error;
+      result = data;
       invoiceId = Number(body.invoiceId);
     } else {
       // MODE: NEW SALE
-      const { data, error } = await supabase.rpc("checkout_pos_sale", {
+      let { data, error } = await supabase.rpc("checkout_pos_sale", {
         p_client_id: clientId,
         p_vendeur: user.username ?? "Caisse",
         p_emplacement: body.emplacement ?? null,
         p_moyen_reglement: (moyenReglement === "Avance" || moyenReglement === "Crédit") ? "Crédit" : moyenReglement,
         p_depot_id: effectiveDepotId, // Switched to ID
         p_items: items,
-        p_user_id: user.id,
+        p_user_id: rpcUserId,
       });
+      if (error && isMissingRpcSignature(error, "checkout_pos_sale")) {
+        ({ data, error } = await supabase.rpc("checkout_pos_sale", {
+          p_client_id: clientId,
+          p_vendeur: user.username ?? "Caisse",
+          p_emplacement: body.emplacement ?? null,
+          p_moyen_reglement: (moyenReglement === "Avance" || moyenReglement === "Crأ©dit") ? "Crأ©dit" : moyenReglement,
+          p_depot_nom: canonicalDepotName,
+          p_items: items,
+          p_user_id: rpcUserId,
+        }));
+      }
       if (error) throw error;
       result = data;
     }
