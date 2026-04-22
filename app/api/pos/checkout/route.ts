@@ -478,7 +478,7 @@ export async function POST(request: Request) {
     if (requestedInvoiceId) {
       const { data: invoiceItems, error: invoiceItemsError } = await supabase
         .from("facture_items")
-        .select("article_id, qte, depot_id") // Switched to depot_id
+        .select("article_id, qte, depot_origine") // Reverted to depot_origine
         .eq("facture_id", requestedInvoiceId);
 
       if (invoiceItemsError) {
@@ -521,7 +521,7 @@ export async function POST(request: Request) {
 
     if (requestedInvoiceId && originalInvoiceItems.length > 0) {
       for (const originalItem of originalInvoiceItems) {
-        if (Number(originalItem.depot_id) !== effectiveDepotId) {
+        if (normalizeDepotName(String(originalItem.depot_origine || "")) !== normalizeDepotName(canonicalDepotName)) {
           continue;
         }
 
