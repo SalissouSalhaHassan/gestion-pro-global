@@ -47,12 +47,15 @@ export default function InventoryPage() {
       const res = await fetch("/api/stock/depots");
       const data = await res.json();
       if (Array.isArray(data)) {
-        setDepots(data);
-        if (data.length > 0 && !selectedDepot) {
-           setSelectedDepot(data[0]);
+        const names = data.map((d: any) => d.nom || d.nom_depot || d).filter(Boolean);
+        setDepots(names);
+        if (names.length > 0 && !selectedDepot) {
+           setSelectedDepot(names[0]);
         }
       }
-    } catch (err) {}
+    } catch (err) {
+      console.error("Failed to fetch depots:", err);
+    }
   };
 
   // Fetch stocks when Depot changes
@@ -67,30 +70,31 @@ export default function InventoryPage() {
     setError(null);
     try {
       const url = new URL("/api/stock", window.location.origin);
-      if (selectedDepot) {
+      if (selectedDepot && selectedDepot !== "Tous") {
         url.searchParams.set("depot", selectedDepot);
       }
 
       const res = await fetch(url.toString());
       const data = await res.json();
+      
       if (!res.ok) {
         throw new Error(data?.error || "Erreur de chargement du stock.");
       }
       
-      if (data.items) {
-        const mappedItems: InventoryItem[] = data.items.map((i: any) => ({
-          article_id: i.id,
-          reference: i.reference || i.code_barre || "",
-          designation: i.designation,
-          quantite_avant: Number(i.quantite) || 0, // Current stock
-          quantite_apres: String(i.quantite || 0), // Default to matching
-          prix_achat: Number(i.p_achat_ht) || 0,
-        }));
-        setItems(mappedItems);
-      }
-    } catch (err) {
+      const itemsList = Array.isArray(data) ? data : (data?.items || []);
+      
+      const mappedItems: InventoryItem[] = itemsList.map((i: any) => ({
+        article_id: i.id,
+        reference: i.reference || i.code_barre || `ID_${i.id}`,
+        designation: i.designation || "Article sans nom",
+        quantite_avant: Number(i.quantite) || 0,
+        quantite_apres: String(i.quantite || 0),
+        prix_achat: Number(i.p_achat_ht) || 0,
+      }));
+      setItems(mappedItems);
+    } catch (err: any) {
       console.error("Failed to fetch inventory stock:", err);
-      setError("Erreur de chargement du stock.");
+      setError(err.message || "Erreur de chargement du stock.");
     } finally {
       setLoading(false);
     }
