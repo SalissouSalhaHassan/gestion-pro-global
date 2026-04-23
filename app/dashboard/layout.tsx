@@ -66,7 +66,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/clients", label: "Clients", icon: Users },
     { href: "/dashboard/invoices", label: "Factures", icon: FileText },
     { href: "/dashboard/expenses", label: "Dépenses", icon: TrendingDown },
-    { href: "/dashboard/reports/cash-balance", label: "Bilan de Caisse", icon: Scale, adminOnly: true },
+    { href: "/dashboard/reports/cash-balance", label: "Bilan de Caisse", icon: Scale },
     { href: "/dashboard/advances", label: "Dépôts & Avances", icon: Wallet },
     { href: "/dashboard/loyers", label: "Gestion des Loyers", icon: Home },
     { href: "/dashboard/depots", label: "Gestion des Dépôts", icon: Warehouse, adminOnly: true },

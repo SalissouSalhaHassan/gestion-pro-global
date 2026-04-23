@@ -34,6 +34,24 @@ export default function CashBalancePage() {
     cashier: "Tous"
   });
 
+  const [userSession, setUserSession] = useState<any>(null);
+
+  useEffect(() => {
+    const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
+    if (cookie) {
+      try {
+        const session = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
+        setUserSession(session);
+        const isAdmin = session?.admin === "Oui" || session?.role === 1 || session?.role === "1";
+        if (!isAdmin) {
+          setFilters(f => ({ ...f, cashier: session.username || "Tous" }));
+        }
+      } catch (e) { console.error(e); }
+    }
+  }, []);
+
+  const isAdmin = userSession?.admin === "Oui" || userSession?.role === 1 || userSession?.role === "1";
+
   const fetchBalance = async () => {
     setLoading(true);
     try {
@@ -49,8 +67,8 @@ export default function CashBalancePage() {
   };
 
   useEffect(() => {
-    fetchBalance();
-  }, [filters]);
+    if (userSession) fetchBalance();
+  }, [filters, userSession]);
 
   const summaryItems = [
     {
@@ -132,19 +150,35 @@ export default function CashBalancePage() {
                />
             </div>
          </div>
-         <div className="h-8 w-px bg-slate-100 mx-2 hidden md:block"></div>
-         <div className="flex items-center gap-3">
-            <User size={18} className="text-slate-400" />
-            <select 
-               className="bg-transparent font-black text-slate-700 outline-none cursor-pointer"
-               value={filters.cashier}
-               onChange={(e) => setFilters({...filters, cashier: e.target.value})}
-            >
-               <option value="Tous">Tous les caissiers</option>
-               <option value="ADRR">ADRR</option>
-               <option value="ADMIN">ADMIN</option>
-            </select>
-         </div>
+         
+         {isAdmin && (
+           <>
+             <div className="h-8 w-px bg-slate-100 mx-2 hidden md:block"></div>
+             <div className="flex items-center gap-3">
+                <User size={18} className="text-slate-400" />
+                <select 
+                   className="bg-transparent font-black text-slate-700 outline-none cursor-pointer"
+                   value={filters.cashier}
+                   onChange={(e) => setFilters({...filters, cashier: e.target.value})}
+                >
+                   <option value="Tous">Tous les caissiers</option>
+                   <option value="ADRR">ADRR</option>
+                   <option value="ADMIN">ADMIN</option>
+                   <option value="KADER">KADER</option>
+                </select>
+             </div>
+           </>
+         )}
+         
+         {!isAdmin && (
+           <>
+             <div className="h-8 w-px bg-slate-100 mx-2 hidden md:block"></div>
+             <div className="flex items-center gap-3">
+                <User size={18} className="text-slate-400" />
+                <span className="font-black text-slate-700 uppercase tracking-tight">{userSession?.username}</span>
+             </div>
+           </>
+         )}
       </div>
 
       {/* Summary Cards */}

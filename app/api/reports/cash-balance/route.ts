@@ -11,7 +11,14 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const start = searchParams.get("start");
     const end = searchParams.get("end");
-    const cashier = searchParams.get("cashier");
+    let cashier = searchParams.get("cashier");
+
+    const isAdmin = (user.admin === "Oui" || user.admin === "oui" || user.admin === "true" || (user as any).admin === true) || 
+                    (user.role === 1 || user.role === "1" || user.role === "admin");
+
+    if (!isAdmin) {
+      cashier = user.username || null;
+    }
 
     // We will perform multiple queries and combine them in JS to replicate the UNION ALL logic
     
