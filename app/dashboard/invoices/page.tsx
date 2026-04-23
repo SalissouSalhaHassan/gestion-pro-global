@@ -78,13 +78,20 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     if (currentUsername !== null && typeof currentUsername !== 'undefined') {
-      loadInvoices();
+      loadInvoices(false); // First load is not silent
+
+      // Implement silent auto-refresh every 30 seconds
+      const intervalId = setInterval(() => {
+        loadInvoices(true); // Silent refresh
+      }, 30000); 
+
+      return () => clearInterval(intervalId);
     }
   }, [refreshKey, currentUsername, currentUserId, isAdmin]);
 
-  const loadInvoices = async () => {
+  const loadInvoices = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       
       const response = await fetch('/api/invoices');
       if (!response.ok) throw new Error('Erreur lors du chargement des factures');
@@ -106,7 +113,6 @@ export default function InvoicesPage() {
           emplacement: r.emplacement || "N/A"
         }));
         setInvoices(mapped);
-        console.log(`✅ Loaded ${mapped.length} invoices via API`);
         
         // Extract unique vendors and depots for filters
         const vendors = [...new Set(mapped.map(inv => inv.vendeur).filter(Boolean))] as string[];
@@ -117,7 +123,7 @@ export default function InvoicesPage() {
     } catch (err) {
       console.error("Failed to load invoices", err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
