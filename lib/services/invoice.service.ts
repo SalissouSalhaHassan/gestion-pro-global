@@ -32,7 +32,7 @@ export type Invoice = {
 export class InvoiceService {
   constructor(private supabase: SupabaseClient) {}
 
-  async getInvoices(userId?: number, username?: string) {
+  async getInvoices(userId?: number, username?: string, userEmplacement?: string) {
     let query = this.supabase
       .from('factures')
       .select('*, clients(nom)')
@@ -42,11 +42,14 @@ export class InvoiceService {
       .limit(1000);
 
     if (userId) {
+      let filter = `user_id.eq.${userId},created_by.eq.${userId}`;
       if (username) {
-        query = query.or(`user_id.eq.${userId},created_by.eq.${userId},vendeur.eq.${username}`);
-      } else {
-        query = query.or(`user_id.eq.${userId},created_by.eq.${userId}`);
+        filter += `,vendeur.eq.${username}`;
       }
+      if (userEmplacement) {
+        filter += `,emplacement.eq.${userEmplacement}`;
+      }
+      query = query.or(filter);
     }
 
     const { data, error } = await query;

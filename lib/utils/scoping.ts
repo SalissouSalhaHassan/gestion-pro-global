@@ -1,5 +1,5 @@
 import { PostgrestFilterBuilder } from "@supabase/postgrest-js";
-import { CustomSession, isAdminOrManager } from "@/lib/auth_helper";
+import { CustomSession, isAdminOrManager, getAllowedDepots } from "@/lib/auth_helper";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -57,8 +57,21 @@ export async function applyUserScope<T extends PostgrestFilterBuilder<any, any, 
 
   // 2. Scoping by Ownership (for sales/invoices)
   if (entityType === 'factures') {
-    // Sellers only see their own invoices
-    return (query as any).or(`user_id.eq.${session.id},vendeur.eq.${session.username}`);
+    // Sellers only see their own invoices or invoices in their allowed depots
+    const allowedDepots = await getAllowedDepots(session);
+    let filter = `user_id.eq.${session.id},vendeur.eq.${session.username}`;
+    
+    if (session.emplacement) {
+      filter += `,emplacement.eq."${session.emplacement}"`;
+    }
+    
+    if (allowedDepots.length > 0) {
+      // Join with quotes for safety if they contain spaces
+      const depotsList = allowedDepots.map(d => `"${d}"`).join(',');
+      filter += `,emplacement.in.(${depotsList})`;
+    }
+    
+    return (query as any).or(filter);
   }
 
   // 3. For Clients/Fournisseurs (Optional: can be limited by area if needed)

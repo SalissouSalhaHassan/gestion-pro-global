@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { InvoiceService } from '@/lib/services/invoice.service';
 import { getServerSession, isAdminOrManager } from '@/lib/auth_helper';
+import { applyUserScope } from '@/lib/utils/scoping';
 
 export async function GET(
   request: Request,
@@ -17,7 +18,12 @@ export async function GET(
     const invoiceService = new InvoiceService(supabase);
     
     // Admins see everything, Sellers only their own
-    const invoice = await invoiceService.getInvoiceById(Number(id), isAdmin ? undefined : Number(session.id), session.username);
+    const invoice = await invoiceService.getInvoiceById(
+      Number(id), 
+      isAdmin ? undefined : Number(session.id), 
+      session.username,
+      session.emplacement
+    );
     
     if (!invoice) {
         return NextResponse.json({ error: "Facture introuvable ou accès refusé" }, { status: 404 });
@@ -42,26 +48,14 @@ export async function PATCH(
     const isAdmin = await isAdminOrManager(session);
     const body = await request.json();
     
-    // Check if invoice exists and belongs to user if they are not admin
-    const { data: existing, error: fetchError } = await supabase
-        .from('factures')
-        .select('user_id, created_by, vendeur, emplacement')
-        .eq('id', id)
-        .single();
-    
-    if (fetchError || !existing) {
-        return NextResponse.json({ error: "Facture introuvable" }, { status: 404 });
-    }
-
-    const isOwner = (
-      String(existing.user_id) === String(session.id) || 
-      String(existing.created_by) === String(session.id) || 
-      existing.vendeur === session.username ||
-      (existing.emplacement && existing.emplacement === session.emplacement)
-    );
-
-    if (!isAdmin && !isOwner) {
+    // Ownership check using centralized scoping
+    if (!isAdmin) {
+      let query = supabase.from("factures").select("id").eq("id", id);
+      query = await applyUserScope(query as any, session, 'factures');
+      const { data: inv } = await query.single();
+      if (!inv) {
         return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+      }
     }
 
     const { data, error } = await supabase
@@ -93,26 +87,14 @@ export async function DELETE(
 
     const isAdmin = await isAdminOrManager(session);
     
-    // Check ownership
-    const { data: existing, error: fetchError } = await supabase
-        .from('factures')
-        .select('user_id, created_by, vendeur, emplacement')
-        .eq('id', id)
-        .single();
-    
-    if (fetchError || !existing) {
-        return NextResponse.json({ error: "Facture introuvable" }, { status: 404 });
-    }
-
-    const isOwner = (
-      String(existing.user_id) === String(session.id) || 
-      String(existing.created_by) === String(session.id) || 
-      existing.vendeur === session.username ||
-      (existing.emplacement && existing.emplacement === session.emplacement)
-    );
-
-    if (!isAdmin && !isOwner) {
+    // Ownership check using centralized scoping
+    if (!isAdmin) {
+      let query = supabase.from("factures").select("id").eq("id", id);
+      query = await applyUserScope(query as any, session, 'factures');
+      const { data: inv } = await query.single();
+      if (!inv) {
         return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+      }
     }
 
     // Use the safe delete RPC to handle stock adjustment

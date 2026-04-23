@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { getServerSession, isAdminOrManager } from "@/lib/auth_helper";
+import { applyUserScope } from "@/lib/utils/scoping";
 
 export async function GET(
   request: Request,
@@ -17,23 +18,13 @@ export async function GET(
     return NextResponse.json({ error: `ID de facture invalide: ${rawId}` }, { status: 400 });
   }
 
-  // Ownership check
+  // Ownership check using centralized scoping
   const isAdmin = await isAdminOrManager(session);
   if (!isAdmin) {
-    const { data: inv } = await supabase
-      .from("factures")
-      .select("user_id, created_by, vendeur, emplacement")
-      .eq("id", invoiceId)
-      .single();
-    
-    const isOwner = inv && (
-      String(inv.user_id) === String(session.id) || 
-      String(inv.created_by) === String(session.id) || 
-      inv.vendeur === session.username ||
-      (inv.emplacement && inv.emplacement === session.emplacement)
-    );
-
-    if (!isOwner) {
+    let query = supabase.from("factures").select("id").eq("id", invoiceId);
+    query = await applyUserScope(query as any, session, 'factures');
+    const { data: inv } = await query.single();
+    if (!inv) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
   }
@@ -63,23 +54,13 @@ export async function POST(
     return NextResponse.json({ error: `ID de facture invalide: ${rawId}` }, { status: 400 });
   }
 
-  // Ownership check
+  // Ownership check using centralized scoping
   const isAdmin = await isAdminOrManager(session);
   if (!isAdmin) {
-    const { data: inv } = await supabase
-      .from("factures")
-      .select("user_id, created_by, vendeur, emplacement")
-      .eq("id", invoiceId)
-      .single();
-    
-    const isOwner = inv && (
-      String(inv.user_id) === String(session.id) || 
-      String(inv.created_by) === String(session.id) || 
-      inv.vendeur === session.username ||
-      (inv.emplacement && inv.emplacement === session.emplacement)
-    );
-
-    if (!isOwner) {
+    let query = supabase.from("factures").select("id").eq("id", invoiceId);
+    query = await applyUserScope(query as any, session, 'factures');
+    const { data: inv } = await query.single();
+    if (!inv) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
   }
