@@ -72,11 +72,12 @@ export default function LoyersPage() {
   }, [contracts, search]);
 
   const stats = useMemo(() => {
-    const total = contracts.length;
-    const actifs = contracts.filter((c) => c.statut === "Actif").length;
-    const totalPaye = contracts.reduce((sum, c) => sum + (c.total_paye || 0), 0);
-    return { total, actifs, totalPaye };
-  }, [contracts]);
+    const total = filtered.length;
+    const actifs = filtered.filter((c) => c.statut === "Actif").length;
+    const impayes = filtered.filter((c) => (c.retards || 0) > 0 || c.mois_impayes?.includes("m")).length;
+    const totalPaye = filtered.reduce((sum, c) => sum + (c.total_paye || 0), 0);
+    return { total, actifs, impayes, totalPaye };
+  }, [filtered]);
 
   const handleDelete = async () => {
     if (!selected) return;
@@ -214,7 +215,7 @@ export default function LoyersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10 text-slate-400">
-                {["ID", "Référence", "Nom", "Téléphone", "Loyer", "Total Payé", "Retards", "Mois Impayés", "Statut"].map((h) => (
+                {["ID", "Référence", "Nom", "Loyer", "Total Payé", "Retards", "Mois Impayés", "Échéance", "Statut"].map((h) => (
                   <th key={h} className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-[0.15em]">{h}</th>
                 ))}
               </tr>
@@ -234,34 +235,38 @@ export default function LoyersPage() {
                 filtered.map((c, i) => {
                   const isSelected = selected?.id === c.id;
                   const st = STATUS_STYLES[c.statut] || STATUS_STYLES.Actif;
+                  const isImpaye = (c.retards || 0) > 0 || c.mois_impayes?.includes("m");
+                  
                   return (
                     <tr
                       key={c.id}
                       onClick={() => setSelected(isSelected ? null : c)}
                       className={`border-b border-white/5 cursor-pointer transition-all duration-200 ${
                         isSelected
-                          ? "bg-indigo-600/20 border-indigo-500/30"
-                          : i % 2 === 0
-                            ? "bg-white/[0.02] hover:bg-white/[0.06]"
-                            : "hover:bg-white/[0.06]"
+                          ? "bg-indigo-600/40 border-indigo-500/50 shadow-lg scale-[1.01] z-10"
+                          : isImpaye
+                            ? "bg-rose-500/5 hover:bg-rose-500/10"
+                            : i % 2 === 0
+                              ? "bg-white/[0.01] hover:bg-white/[0.04]"
+                              : "hover:bg-white/[0.04]"
                       }`}
                     >
-                      <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">{c.id}</td>
+                      <td className="px-5 py-3.5 text-slate-500 font-mono text-[10px]">{c.id}</td>
                       <td className="px-5 py-3.5 text-indigo-400 font-bold text-xs">{c.ref_locataire}</td>
-                      <td className="px-5 py-3.5 text-white font-black">{c.locataire_nom_complet}</td>
-                      <td className="px-5 py-3.5 text-slate-300 font-medium">{c.locataire_telephone || "—"}</td>
+                      <td className={`px-5 py-3.5 font-black ${isImpaye ? "text-rose-400" : "text-white"}`}>{c.locataire_nom_complet}</td>
                       <td className="px-5 py-3.5 text-emerald-400 font-black text-right">{fmt(c.loyer_mensuel)} F</td>
-                      <td className="px-5 py-3.5 text-amber-400 font-black text-right">{fmt(c.total_paye || 0)} F</td>
-                      <td className="px-5 py-3.5 text-rose-400 font-black text-right">{fmt(c.retards || 0)} F</td>
+                      <td className="px-5 py-3.5 text-slate-300 font-black text-right">{fmt(c.total_paye || 0)} F</td>
+                      <td className={`px-5 py-3.5 font-black text-right ${isImpaye ? "text-rose-500" : "text-slate-400"}`}>{fmt(c.retards || 0)} F</td>
                       <td className="px-5 py-3.5">
                         <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
-                          c.mois_impayes === "À jour" || c.mois_impayes === "OK" 
+                          !isImpaye
                             ? "bg-emerald-500/20 text-emerald-400" 
-                            : "bg-rose-500/20 text-rose-400"
+                            : "bg-rose-500/20 text-rose-400 animate-pulse"
                         }`}>
                           {c.mois_impayes}
                         </span>
                       </td>
+                      <td className={`px-5 py-3.5 font-black text-xs ${isImpaye ? "text-rose-400" : "text-indigo-400"}`}>{c.echeance}</td>
                       <td className="px-5 py-3.5">
                         <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${st.bg} ${st.text}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
@@ -277,8 +282,14 @@ export default function LoyersPage() {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-white/5 text-right text-xs text-slate-500 font-bold">
-          Total: {stats.total} | Actifs: {stats.actifs}
+        <div className="px-6 py-4 border-t border-white/5 flex items-center justify-between text-xs font-black uppercase tracking-widest">
+          <div className="flex gap-6">
+            <span className="text-slate-500">Total: <span className="text-white">{stats.total}</span></span>
+            <span className="text-rose-500">Impayés: <span className="text-rose-400">{stats.impayes}</span></span>
+          </div>
+          <div className="text-indigo-400">
+            Contrats Actifs: <span className="text-white">{stats.actifs}</span>
+          </div>
         </div>
       </div>
 

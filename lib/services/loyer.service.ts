@@ -27,6 +27,7 @@ export type Contract = {
   total_paye?: number;
   retards?: number;
   mois_impayes?: string;
+  echeance?: string;
 };
 
 export type ContractFormData = Omit<Contract, 'id' | 'is_deleted' | 'created_at' | 'updated_at' | 'total_paye'>;
@@ -99,64 +100,67 @@ export class ContractService {
       console.error('Error loading payment totals:', payError.message);
     }
 
-    // Calculate totals
+    // Calculate totals and find latest payment dates
     const totals: Record<number, number> = {};
+    const latestPaymentDates: Record<number, Date> = {};
+
     if (payments) {
       for (const p of payments) {
         totals[p.contrat_id] = (totals[p.contrat_id] || 0) + (p.montant || 0);
+        
+        // Use either periode_fin or date_paiement to find latest
+        const pDate = p.periode_fin ? new Date(p.periode_fin) : new Date(p.date_paiement);
+        if (!latestPaymentDates[p.contrat_id] || pDate > latestPaymentDates[p.contrat_id]) {
+          latestPaymentDates[p.contrat_id] = pDate;
+        }
       }
     }
 
     return contracts.map(c => {
       const paid = totals[c.id] || 0;
-      
-      // Calculate Delays & Unpaid Months for 2026
-      const currentYear = 2026;
-      const startYear = c.annee_debut || currentYear;
-      const startMonth = c.mois_debut || 1;
-      
-      // Total months expected from start until the end of 2026 (or current month if you prefer)
-      // The user specified "months delayed in 2026"
-      // Let's assume we want to calculate based on the current date in 2026
       const today = new Date();
       const currentYearReal = today.getFullYear();
       const currentMonthReal = today.getMonth() + 1; // 1-12
       
-      // We calculate only for the year 2026 as requested
-      let monthsToPayIn2026 = 0;
-      if (startYear < 2026) {
-        monthsToPayIn2026 = currentMonthReal; // All months from Jan to now in 2026
-      } else if (startYear === 2026) {
-        monthsToPayIn2026 = Math.max(0, currentMonthReal - startMonth + 1);
-      }
+      const startYear = c.annee_debut || 2024;
+      const startMonth = c.mois_debut || 1;
       
-      // Total expected amount for these months
-      const expectedAmount = monthsToPayIn2026 * (c.loyer_mensuel || 0);
+      // 1. Calculate total expected months from start to current date
+      const totalMonthsExpected = (currentYearReal - startYear) * 12 + (currentMonthReal - startMonth + 1);
       
-      // Delays (Retards) = Financial debt
-      // Note: This logic assumes payments cover from the start. 
-      // If we want total debt, we should calculate from startYear/Month.
-      const totalExpectedFromStart = (() => {
-        const totalMonths = (currentYearReal - startYear) * 12 + (currentMonthReal - startMonth + 1);
-        return Math.max(0, totalMonths) * (c.loyer_mensuel || 0);
-      })();
+      // 2. Calculate months paid based on total amount
+      const monthsPaid = Math.floor(paid / (c.loyer_mensuel || 1));
       
-      const retards = Math.max(0, totalExpectedFromStart - paid);
+      // 3. Calculate delays
+      const unpaidMonthsCount = Math.max(0, totalMonthsExpected - monthsPaid);
+      const retards = unpaidMonthsCount * (c.loyer_mensuel || 0);
       
-      // Mois Impayés
-      const unpaidMonthsCount = Math.floor(retards / (c.loyer_mensuel || 1));
+      // 4. Format Mois Impayés: "2026: 4m"
       let moisImpayes = "À jour";
       if (unpaidMonthsCount > 0) {
-        moisImpayes = `${unpaidMonthsCount}m`;
-      } else if (retards > 0) {
-        moisImpayes = "Partiel";
+        moisImpayes = `${currentYearReal}: ${unpaidMonthsCount}m`;
+      }
+
+      // 5. Calculate Échéance: Next month after the latest payment
+      let echeance = "N/A";
+      const lastPayDate = latestPaymentDates[c.id];
+      if (lastPayDate) {
+        const nextMonth = new Date(lastPayDate);
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        nextMonth.setDate(1); // Usually due on the 1st of the next month
+        echeance = nextMonth.toLocaleDateString('fr-FR');
+      } else {
+        // If no payments, due on start month
+        const start = new Date(startYear, startMonth - 1, 1);
+        echeance = start.toLocaleDateString('fr-FR');
       }
 
       return {
         ...c,
         total_paye: paid,
         retards: retards,
-        mois_impayes: moisImpayes
+        mois_impayes: moisImpayes,
+        echeance: echeance
       };
     });
   }
