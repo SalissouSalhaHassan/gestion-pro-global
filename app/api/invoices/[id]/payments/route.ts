@@ -22,7 +22,7 @@ export async function GET(
   const isAdmin = await isAdminOrManager(session);
   if (!isAdmin) {
     let query = supabase.from("factures").select("id").eq("id", invoiceId);
-    query = await applyUserScope(query as any, session, 'factures');
+    query = applyUserScope(query as any, session, 'factures');
     const { data: inv } = await query.single();
     if (!inv) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
@@ -58,7 +58,7 @@ export async function POST(
   const isAdmin = await isAdminOrManager(session);
   if (!isAdmin) {
     let query = supabase.from("factures").select("id").eq("id", invoiceId);
-    query = await applyUserScope(query as any, session, 'factures');
+    query = applyUserScope(query as any, session, 'factures');
     const { data: inv } = await query.single();
     if (!inv) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });

@@ -21,7 +21,7 @@ export async function GET() {
       .eq("date_facture", today)
       .eq("is_deleted", false);
     
-    invoicesQuery = await applyUserScope(invoicesQuery as any, user, 'factures');
+    invoicesQuery = applyUserScope(invoicesQuery as any, user, 'factures');
     const { data: salesData, error: salesError } = await invoicesQuery;
 
     if (salesError) throw salesError;
@@ -38,7 +38,7 @@ export async function GET() {
       `)
       .eq("is_deleted", false);
     
-    stockQuery = await applyUserScope(stockQuery as any, user, 'stocks');
+    stockQuery = applyUserScope(stockQuery as any, user, 'stocks');
     const { data: stockData, error: stockError } = await stockQuery;
 
     if (stockError) throw stockError;
@@ -58,7 +58,7 @@ export async function GET() {
       .order("id", { ascending: false })
       .limit(5);
 
-    activityQuery = await applyUserScope(activityQuery as any, user, 'mouvements');
+    activityQuery = applyUserScope(activityQuery as any, user, 'mouvements');
     const { data: recentActivity, error: activityError } = await activityQuery;
 
     if (activityError) throw activityError;
@@ -87,7 +87,7 @@ export async function GET() {
       .in("date_mouvement", last7Days)
       .filter("type", "ilike", "VENTE%");
 
-    performanceQuery = await applyUserScope(performanceQuery as any, user, 'mouvements');
+    performanceQuery = applyUserScope(performanceQuery as any, user, 'mouvements');
     const { data: performanceRes, error: perfError } = await performanceQuery;
 
     if (perfError) throw perfError;

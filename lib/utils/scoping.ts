@@ -11,42 +11,30 @@ import { createClient } from "@/lib/supabase/server";
  *    - For 'factures': sees only their own sales (by user_id or vendeur name).
  *    - For 'stocks' or 'mouvements': sees only data for their allowed warehouses.
  */
-export async function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, any>>(
+/**
+ * Applies data isolation filters to a Supabase query based on user session.
+ */
+export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, any>>(
   query: T,
   session: CustomSession,
-  entityType: 'factures' | 'mouvements' | 'stocks' | 'clients' | 'fournisseurs'
-): Promise<T> {
-  const isAdmin = await isAdminOrManager(session);
-  if (isAdmin) return query; // Admins see everything
+  entityType: 'factures' | 'mouvements' | 'stocks' | 'clients' | 'fournisseurs' | 'expenses'
+): T {
+  // 1. Admin/Manager: No filters (sees everything).
+  const isAdmin = (session.admin === "Oui" || session.admin === "oui" || session.admin === "true" || (session as any).admin === true) || 
+                  (session.role === 1 || session.role === "1" || session.role === "admin");
+  
+  if (isAdmin) return query;
 
-  const supabase = await createClient();
-
-  // 1. SCoping by Warehouse (for Inventory/Stock related tables)
-  if (['mouvements', 'stocks'].includes(entityType)) {
-    // Fetch assigned warehouses for the user
-    // Note: user_warehouses table might still have depot_id but it links to a name in the depots table
-    const { data: allowed } = await supabase
-      .from('user_warehouses')
-      .select('depot_id') 
-      .eq('user_id', session.id);
-
-    const depotIds = allowed?.map((d: any) => d.depot_id).filter(Boolean) || [];
+  // 2. Scoping by Warehouse (for Inventory/Stock related tables)
+  if (['mouvements', 'stocks', 'expenses'].includes(entityType)) {
+    const allowedDepotNames = getAllowedDepots(session);
     
-    // Resolve IDs to Names
-    const { data: depotObjects } = await supabase
-      .from('depots')
-      .select('nom')
-      .in('id', depotIds);
-
-    const allowedDepotNames = depotObjects?.map((d: any) => d.nom) || [];
-    
-    // Fallback to session.emplacement if nothing in user_warehouses
+    // Fallback to session.emplacement if nothing in depots list
     if (allowedDepotNames.length === 0 && session.emplacement) {
       allowedDepotNames.push(session.emplacement);
     }
 
     if (allowedDepotNames.length > 0) {
-      // Apply filter: depot column in allowed list
       const column = entityType === 'stocks' ? 'depot_nom' : 'depot';
       return (query as any).in(column, allowedDepotNames);
     } else {
@@ -55,10 +43,10 @@ export async function applyUserScope<T extends PostgrestFilterBuilder<any, any, 
     }
   }
 
-  // 2. Scoping by Ownership (for sales/invoices)
+  // 3. Scoping by Ownership (for sales/invoices)
   if (entityType === 'factures') {
     // Sellers only see their own invoices or invoices in their allowed depots
-    const allowedDepots = await getAllowedDepots(session);
+    const allowedDepots = getAllowedDepots(session);
     let filter = `user_id.eq.${session.id},created_by.eq.${session.id}`;
     
     if (session.username) {
@@ -78,8 +66,5 @@ export async function applyUserScope<T extends PostgrestFilterBuilder<any, any, 
     return (query as any).or(filter);
   }
 
-  // 3. For Clients/Fournisseurs (Optional: can be limited by area if needed)
-  // For now, allow reading all clients for reference, but restrict mutations in RLS
-  
   return query;
 }

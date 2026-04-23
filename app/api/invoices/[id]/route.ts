@@ -51,7 +51,7 @@ export async function PATCH(
     // Ownership check using centralized scoping
     if (!isAdmin) {
       let query = supabase.from("factures").select("id").eq("id", id);
-      query = await applyUserScope(query as any, session, 'factures');
+      query = applyUserScope(query as any, session, 'factures');
       const { data: inv } = await query.single();
       if (!inv) {
         return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
@@ -90,7 +90,7 @@ export async function DELETE(
     // Ownership check using centralized scoping
     if (!isAdmin) {
       let query = supabase.from("factures").select("id").eq("id", id);
-      query = await applyUserScope(query as any, session, 'factures');
+      query = applyUserScope(query as any, session, 'factures');
       const { data: inv } = await query.single();
       if (!inv) {
         return NextResponse.json({ error: "Accès refusé" }, { status: 403 });

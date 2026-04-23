@@ -52,11 +52,19 @@ export async function isSeller(session?: CustomSession | null): Promise<boolean>
 }
 
 /**
- * Gets the list of allowed depots for the user.
+ * Gets the list of allowed depots for the user. (Synchronous if session provided)
  */
-export async function getAllowedDepots(session?: CustomSession | null): Promise<string[]> {
-  const s = session || await getServerSession();
-  if (!s || !s.depots) return [];
-  return s.depots.split(",").map(d => d.trim()).filter(d => d.length > 0);
+export function getAllowedDepots(session: CustomSession): string[] {
+  if (!session || !session.depots) return [];
+  return session.depots.split(",").map(d => d.trim()).filter(d => d.length > 0);
+}
+
+/**
+ * Async version of getAllowedDepots
+ */
+export async function getAllowedDepotsAsync(): Promise<string[]> {
+  const s = await getServerSession();
+  if (!s) return [];
+  return getAllowedDepots(s);
 }
 
