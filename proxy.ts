@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -29,7 +29,7 @@ export async function middleware(request: NextRequest) {
     try {
       sessionData = JSON.parse(decodeURIComponent(gpSessionCookie))
     } catch (e) {
-      console.error('Middleware: Failed to parse session cookie')
+      console.error('Proxy: Failed to parse session cookie')
     }
   }
 
