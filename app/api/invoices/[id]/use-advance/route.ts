@@ -21,7 +21,7 @@ export async function POST(
   const isAdmin = await isAdminOrManager(session);
   if (!isAdmin) {
     const { data: inv } = await supabase.from("factures").select("user_id").eq("id", invoiceId).single();
-    if (!inv || inv.user_id !== Number(session.id)) {
+    if (!inv || String(inv.user_id) !== String(session.id)) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
   }

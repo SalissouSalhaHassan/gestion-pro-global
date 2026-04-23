@@ -53,7 +53,7 @@ export async function PATCH(
         return NextResponse.json({ error: "Facture introuvable" }, { status: 404 });
     }
 
-    if (!isAdmin && existing.user_id !== Number(session.id)) {
+    if (!isAdmin && String(existing.user_id) !== String(session.id)) {
         return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
@@ -97,7 +97,7 @@ export async function DELETE(
         return NextResponse.json({ error: "Facture introuvable" }, { status: 404 });
     }
 
-    if (!isAdmin && existing.user_id !== Number(session.id)) {
+    if (!isAdmin && String(existing.user_id) !== String(session.id)) {
         return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 

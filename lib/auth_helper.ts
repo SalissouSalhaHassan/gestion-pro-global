@@ -34,7 +34,12 @@ export async function getServerSession(): Promise<CustomSession | null> {
 export async function isAdminOrManager(session?: CustomSession | null): Promise<boolean> {
   const s = session || await getServerSession();
   if (!s) return false;
-  return s.admin === "Oui" || s.role === 1 || s.role === "1";
+  
+  // Robust check for administrative privileges
+  const isAdminFlag = s.admin === "Oui" || s.admin === "oui" || s.admin === "true" || (s as any).admin === true;
+  const isRoleAdmin = s.role === 1 || s.role === "1" || s.role === "admin";
+  
+  return isAdminFlag || isRoleAdmin;
 }
 
 /**
