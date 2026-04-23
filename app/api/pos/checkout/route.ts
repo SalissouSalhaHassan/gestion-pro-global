@@ -560,7 +560,7 @@ export async function POST(request: Request) {
         p_invoice_id: Number(body.invoiceId),
         p_client_id: clientId,
         p_vendeur: user.username ?? "Caisse",
-        p_emplacement: body.emplacement ?? null,
+        p_emplacement: body.emplacement ?? user.emplacement ?? null,
         p_moyen_reglement: normalizedPaymentMethod,
         p_depot_id: effectiveDepotId, // Switched to ID
         p_items: items,
@@ -571,7 +571,7 @@ export async function POST(request: Request) {
           p_invoice_id: Number(body.invoiceId),
           p_client_id: clientId,
           p_vendeur: user.username ?? "Caisse",
-          p_emplacement: body.emplacement ?? null,
+          p_emplacement: body.emplacement ?? user.emplacement ?? null,
           p_moyen_reglement: normalizedPaymentMethod,
           p_depot_nom: canonicalDepotName,
           p_items: items,
@@ -586,7 +586,7 @@ export async function POST(request: Request) {
       let { data, error } = await supabase.rpc("checkout_pos_sale", {
         p_client_id: clientId,
         p_vendeur: user.username ?? "Caisse",
-        p_emplacement: body.emplacement ?? null,
+        p_emplacement: body.emplacement ?? user.emplacement ?? null,
         p_moyen_reglement: normalizedPaymentMethod,
         p_depot_id: effectiveDepotId, // Switched to ID
         p_items: items,
@@ -596,7 +596,7 @@ export async function POST(request: Request) {
         ({ data, error } = await supabase.rpc("checkout_pos_sale", {
           p_client_id: clientId,
           p_vendeur: user.username ?? "Caisse",
-          p_emplacement: body.emplacement ?? null,
+          p_emplacement: body.emplacement ?? user.emplacement ?? null,
           p_moyen_reglement: normalizedPaymentMethod,
           p_depot_nom: canonicalDepotName,
           p_items: items,

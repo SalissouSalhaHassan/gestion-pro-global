@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { applyUserScope } from '@/lib/utils/scoping';
 
 export type InvoiceItem = {
   id?: number;
@@ -32,7 +33,7 @@ export type Invoice = {
 export class InvoiceService {
   constructor(private supabase: SupabaseClient) {}
 
-  async getInvoices(userId?: number, username?: string, userEmplacement?: string) {
+  async getInvoices(session: any) {
     let query = this.supabase
       .from('factures')
       .select('*, clients(nom)')
@@ -41,38 +42,20 @@ export class InvoiceService {
       .order('id', { ascending: false })
       .limit(1000);
 
-    if (userId) {
-      let filter = `user_id.eq.${userId},created_by.eq.${userId}`;
-      if (username) {
-        filter += `,vendeur.eq.${username}`;
-      }
-      if (userEmplacement) {
-        filter += `,emplacement.eq.${userEmplacement}`;
-      }
-      query = query.or(filter);
-    }
+    query = applyUserScope(query as any, session, 'factures');
 
     const { data, error } = await query;
     if (error) throw new Error(error.message);
     return data;
   }
 
-  async getInvoiceById(id: number, userId?: number, username?: string, userEmplacement?: string) {
+  async getInvoiceById(id: number, session: any) {
     let query = this.supabase
       .from('factures')
       .select('*, facture_items(*), clients(nom, adresse, nif)')
       .eq('id', id);
     
-    if (userId) {
-      let filter = `user_id.eq.${userId},created_by.eq.${userId}`;
-      if (username) {
-        filter += `,vendeur.eq.${username}`;
-      }
-      if (userEmplacement) {
-        filter += `,emplacement.eq.${userEmplacement}`;
-      }
-      query = query.or(filter);
-    }
+    query = applyUserScope(query as any, session, 'factures');
 
     const { data, error } = await query.single();
     

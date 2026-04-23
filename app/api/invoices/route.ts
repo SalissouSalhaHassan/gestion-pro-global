@@ -12,12 +12,8 @@ export async function GET() {
     const isAdmin = await isAdminOrManager(session);
     const invoiceService = new InvoiceService(supabase);
     
-    // Admin sees all, Seller sees only their own
-    const invoices = await invoiceService.getInvoices(
-      isAdmin ? undefined : Number(session.id), 
-      session.username,
-      session.emplacement
-    );
+    // Admin sees all, Seller sees only their own (scoping handled in service)
+    const invoices = await invoiceService.getInvoices(session);
     
     return NextResponse.json(invoices);
   } catch (error: any) {

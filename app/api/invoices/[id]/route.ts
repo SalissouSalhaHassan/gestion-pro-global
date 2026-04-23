@@ -17,13 +17,8 @@ export async function GET(
     const isAdmin = await isAdminOrManager(session);
     const invoiceService = new InvoiceService(supabase);
     
-    // Admins see everything, Sellers only their own
-    const invoice = await invoiceService.getInvoiceById(
-      Number(id), 
-      isAdmin ? undefined : Number(session.id), 
-      session.username,
-      session.emplacement
-    );
+    // Admins see everything, Sellers only their own (scoping handled in service)
+    const invoice = await invoiceService.getInvoiceById(Number(id), session);
     
     if (!invoice) {
         return NextResponse.json({ error: "Facture introuvable ou accès refusé" }, { status: 404 });
