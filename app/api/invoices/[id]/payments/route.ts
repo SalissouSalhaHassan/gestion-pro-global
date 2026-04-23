@@ -22,14 +22,15 @@ export async function GET(
   if (!isAdmin) {
     const { data: inv } = await supabase
       .from("factures")
-      .select("user_id, created_by, vendeur")
+      .select("user_id, created_by, vendeur, emplacement")
       .eq("id", invoiceId)
       .single();
     
     const isOwner = inv && (
       String(inv.user_id) === String(session.id) || 
       String(inv.created_by) === String(session.id) || 
-      inv.vendeur === session.username
+      inv.vendeur === session.username ||
+      (inv.emplacement && inv.emplacement === session.emplacement)
     );
 
     if (!isOwner) {
@@ -67,14 +68,15 @@ export async function POST(
   if (!isAdmin) {
     const { data: inv } = await supabase
       .from("factures")
-      .select("user_id, created_by, vendeur")
+      .select("user_id, created_by, vendeur, emplacement")
       .eq("id", invoiceId)
       .single();
     
     const isOwner = inv && (
       String(inv.user_id) === String(session.id) || 
       String(inv.created_by) === String(session.id) || 
-      inv.vendeur === session.username
+      inv.vendeur === session.username ||
+      (inv.emplacement && inv.emplacement === session.emplacement)
     );
 
     if (!isOwner) {

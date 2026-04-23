@@ -45,7 +45,7 @@ export async function PATCH(
     // Check if invoice exists and belongs to user if they are not admin
     const { data: existing, error: fetchError } = await supabase
         .from('factures')
-        .select('user_id, created_by, vendeur')
+        .select('user_id, created_by, vendeur, emplacement')
         .eq('id', id)
         .single();
     
@@ -56,7 +56,8 @@ export async function PATCH(
     const isOwner = (
       String(existing.user_id) === String(session.id) || 
       String(existing.created_by) === String(session.id) || 
-      existing.vendeur === session.username
+      existing.vendeur === session.username ||
+      (existing.emplacement && existing.emplacement === session.emplacement)
     );
 
     if (!isAdmin && !isOwner) {
@@ -95,7 +96,7 @@ export async function DELETE(
     // Check ownership
     const { data: existing, error: fetchError } = await supabase
         .from('factures')
-        .select('user_id, created_by, vendeur')
+        .select('user_id, created_by, vendeur, emplacement')
         .eq('id', id)
         .single();
     
@@ -106,7 +107,8 @@ export async function DELETE(
     const isOwner = (
       String(existing.user_id) === String(session.id) || 
       String(existing.created_by) === String(session.id) || 
-      existing.vendeur === session.username
+      existing.vendeur === session.username ||
+      (existing.emplacement && existing.emplacement === session.emplacement)
     );
 
     if (!isAdmin && !isOwner) {

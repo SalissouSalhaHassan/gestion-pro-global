@@ -54,23 +54,26 @@ export class InvoiceService {
     return data;
   }
 
-  async getInvoiceById(id: number, userId?: number, username?: string) {
+  async getInvoiceById(id: number, userId?: number, username?: string, userEmplacement?: string) {
     let query = this.supabase
       .from('factures')
       .select('*, facture_items(*), clients(nom, adresse, nif)')
       .eq('id', id);
     
     if (userId) {
+      let filter = `user_id.eq.${userId},created_by.eq.${userId}`;
       if (username) {
-        query = query.or(`user_id.eq.${userId},created_by.eq.${userId},vendeur.eq.${username}`);
-      } else {
-        query = query.or(`user_id.eq.${userId},created_by.eq.${userId}`);
+        filter += `,vendeur.eq.${username}`;
       }
+      if (userEmplacement) {
+        filter += `,emplacement.eq.${userEmplacement}`;
+      }
+      query = query.or(filter);
     }
 
     const { data, error } = await query.single();
     
-    if (error) return null; // Return null instead of throwing to handle 'not found' or 'denied' gracefully
+    if (error) return null;
     return data;
   }
 
