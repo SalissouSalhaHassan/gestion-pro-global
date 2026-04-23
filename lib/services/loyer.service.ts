@@ -185,6 +185,11 @@ export class ContractService {
       }
     }
 
+    // REMOVE MISSING COLUMNS (annee_debut, mois_debut) to prevent "column not found" error
+    // These should be added to the DB schema via SQL later
+    delete payload.annee_debut;
+    delete payload.mois_debut;
+
     // Ensure numeric fields
     payload.loyer_mensuel = parseFloat(payload.loyer_mensuel) || 0;
     payload.caution = parseFloat(payload.caution) || 0;
