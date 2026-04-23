@@ -93,7 +93,7 @@ export class ContractService {
     const contractIds = contracts.map(c => c.id);
     const { data: payments, error: payError } = await this.supabase
       .from('contrat_paiements')
-      .select('contrat_id, montant')
+      .select('contrat_id, montant, date_paiement, periode_fin')
       .in('contrat_id', contractIds);
 
     if (payError) {
