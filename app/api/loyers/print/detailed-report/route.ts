@@ -99,8 +99,8 @@ export async function GET(request: NextRequest) {
         <td class="text-right">${Number(row.loyer).toLocaleString('fr-FR')} F</td>
         <td class="text-right text-emerald-600 font-bold">${Number(row.total_paye).toLocaleString('fr-FR')} F</td>
         <td class="text-right font-black text-rose-600">${Number(row.retards).toLocaleString('fr-FR')} F</td>
-        <td class="text-center font-black ${row.mois_impayes > 0 ? 'text-rose-600' : 'text-slate-300'}">
-          ${row.mois_impayes > 0 ? row.mois_impayes + ' mois' : 'À jour'}
+        <td class="text-center font-black ${row.mois_impayes !== 'À jour' ? 'text-rose-600' : 'text-slate-300'}">
+          ${row.mois_impayes}
         </td>
         <td class="text-center text-xs uppercase font-bold">${row.statut_contrat}</td>
       </tr>
