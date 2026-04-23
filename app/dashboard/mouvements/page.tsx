@@ -67,7 +67,7 @@ export default function MouvementsPage() {
   // Advanced Filters
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [selectedDepotId, setSelectedDepotId] = useState<number | null>(null);
+  const [selectedDepotName, setSelectedDepotName] = useState<string>("");
   const [depots, setDepots] = useState<{id: number, nom: string}[]>([]);
   const [typeFilter, setTypeFilter] = useState("Tous");
   const [generalSearch, setGeneralSearch] = useState("");
@@ -107,7 +107,7 @@ export default function MouvementsPage() {
       const url = new URL("/api/stock/mouvements", window.location.origin);
       if (startDate) url.searchParams.set("startDate", startDate);
       if (endDate) url.searchParams.set("endDate", endDate);
-      if (selectedDepotId) url.searchParams.set("depotId", selectedDepotId.toString());
+      if (selectedDepotName) url.searchParams.set("depot", selectedDepotName);
       if (generalSearch) url.searchParams.set("search", generalSearch);
 
       const res = await fetch(url.toString());
@@ -126,7 +126,7 @@ export default function MouvementsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [startDate, endDate, selectedDepotId, generalSearch]);
+  }, [startDate, endDate, selectedDepotName, generalSearch]);
 
   useEffect(() => {
     fetchData();
@@ -290,7 +290,7 @@ export default function MouvementsPage() {
          />
          <KPICard 
           title="Valeur Stock" 
-          value={stats.valuation.toLocaleString("fr-FR", { minimumFractionDigits: 2 }) + " DH"} 
+          value={stats.valuation.toLocaleString("fr-FR", { minimumFractionDigits: 2 }) + " F CFA"} 
           sub="Estimation Financière" 
           color="slate" 
           icon={Sparkles} 
@@ -334,16 +334,18 @@ export default function MouvementsPage() {
                 <option value="Tous">Tous Types</option>
                 <option value="VENTE">Ventes</option>
                 <option value="achat">Achats</option>
+                <option value="ENTRÉE INITIALE">Entrée Initiale</option>
                 <option value="transfert_entree">Transferts (In)</option>
                 <option value="transfert_sortie">Transferts (Out)</option>
                 <option value="ajustement_entree">Ajustements (+)</option>
                 <option value="ajustement_sortie">Ajustements (-)</option>
+                <option value="retour">Retours</option>
               </select>
             </FilterField>
             <FilterField label="Dépôt" icon={MapPin}>
-              <select value={selectedDepotId || ""} onChange={(e) => setSelectedDepotId(e.target.value ? Number(e.target.value) : null)} className="w-full bg-transparent outline-none font-bold text-slate-700 appearance-none">
+              <select value={selectedDepotName} onChange={(e) => setSelectedDepotName(e.target.value)} className="w-full bg-transparent outline-none font-bold text-slate-700 appearance-none">
                 <option value="">Tous les Dépôts</option>
-                {depots.map(d => <option key={d.id} value={d.id}>{d.nom}</option>)}
+                {depots.map(d => <option key={d.id} value={d.nom}>{d.nom}</option>)}
               </select>
             </FilterField>
           </div>
@@ -404,7 +406,7 @@ export default function MouvementsPage() {
              Système Certifié Logistique Excellence
           </div>
           <div className="bg-white px-4 py-2 rounded-full border border-slate-200">
-            {filteredData.length} Lignes د'audit affichées
+            {filteredData.length} Lignes d&apos;audit affichées
           </div>
         </div>
       </div>
@@ -418,7 +420,7 @@ export default function MouvementsPage() {
       )}
       {showPrintJournal && (
         <StockJournalModal 
-          filters={{ search: generalSearch, startDate, endDate, depot: selectedDepotId?.toString() || "", type: typeFilter }}
+          filters={{ search: generalSearch, startDate, endDate, depot: selectedDepotName || "", type: typeFilter }}
           onClose={() => setShowPrintJournal(false)}
         />
       )}

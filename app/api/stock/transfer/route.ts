@@ -124,7 +124,9 @@ export async function POST(request: Request) {
     });
 
     // Create Transit Record
-    const details = [{ article_id, qty, designation: "Article ID " + article_id }];
+    // Fetch article designation for transit record
+    const { data: artRow } = await supabase.from("articles").select("designation").eq("id", article_id).single();
+    const details = [{ article_id, qty, designation: artRow?.designation || "Article ID " + article_id }];
     
     await supabase.from("stock_transits").insert({
        reference: refTrans,

@@ -177,7 +177,7 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
                                 <span className="font-black text-slate-800 uppercase">{item.articles?.designation}</span>
                             </td>
                             <td className="p-5 text-center text-lg font-black text-indigo-600">
-                                {item.quantite} <span className="text-[10px] text-slate-300 uppercase italic ml-1">{item.articles?.unite}</span>
+                                {Math.abs(item.sortie || item.quantite)} <span className="text-[10px] text-slate-300 uppercase italic ml-1">{item.articles?.unite}</span>
                             </td>
                         </tr>
                     ))}

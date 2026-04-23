@@ -159,7 +159,7 @@ export default function StockJournalModal({ filters, onClose }: StockJournalModa
                 <tbody className="text-[10px] font-bold">
                     {(Array.isArray(movements) ? movements : []).map((m: any, i: number) => (
                         <tr key={i} className={`border-b border-slate-100 last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-                            <td className="p-4 text-slate-500 border-r border-slate-50">{m.date_mouvement}</td>
+                            <td className="p-4 text-slate-500 border-r border-slate-50">{new Date(m.date_mouvement).toLocaleDateString('fr-FR')}</td>
                             <td className="p-4 text-slate-900 border-r border-slate-50 font-black tracking-tighter">{m.nr_doc}</td>
                             <td className="p-4 border-r border-slate-50">
                                 <span className="font-black text-slate-800 uppercase block">{m.articles?.designation}</span>
