@@ -426,7 +426,22 @@ const S = {
   headerLeft: {
     display: "flex",
     alignItems: "center",
-    gap: 12,
+    gap: 16,
+  },
+  btnBack: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    background: "rgba(255,255,255,0.1)",
+    border: "1px solid rgba(255,255,255,0.2)",
+    color: "#fff",
+    padding: "8px 16px",
+    borderRadius: "12px",
+    fontWeight: 800,
+    fontSize: 14,
+    cursor: "pointer",
+    transition: "all 0.2s",
+    textDecoration: "none",
   },
   headerStoreName: {
     fontWeight: 900,
@@ -1937,6 +1952,15 @@ function PosPage() {
         {/* ════════════════════ TOP HEADER ════════════════════ */}
         <header style={S.header}>
           <div style={S.headerLeft}>
+            <button 
+              onClick={() => router.push("/dashboard")}
+              style={S.btnBack}
+              className="hover:bg-white/20 transition-all"
+            >
+              <ArrowLeft size={18} />
+              <span>Retour</span>
+            </button>
+            
             {/* Store Icon — blue shopping bag */}
             <svg width="36" height="36" viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg">
               <path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 16H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v12z"/>
