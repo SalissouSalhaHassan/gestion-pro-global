@@ -11,17 +11,34 @@ export async function GET() {
     }
 
     const isAdmin = await isAdminOrManager(user);
+    const userDepot = user.emplacement;
     
-    let query = supabase
+    // Fetch all non-deleted articles with their stock records
+    const { data, error } = await supabase
       .from("articles")
-      .select("*, stocks(quantite)")
+      .select("*, stocks(quantite, depot_nom)")
       .eq("is_deleted", false);
-    // Articles are global registry, no need to restrict by created_by.
 
-    const { data, error } = await query;
     if (error) throw error;
 
-    return NextResponse.json(data);
+    let articles = data || [];
+
+    // VENDEUR: Filter to only show articles that have stock in their assigned depot
+    if (!isAdmin && userDepot && userDepot !== "Tous") {
+      articles = articles.filter((art: any) => {
+        if (!Array.isArray(art.stocks) || art.stocks.length === 0) return false;
+        return art.stocks.some((s: any) => 
+          String(s.depot_nom || "").toLowerCase() === userDepot.toLowerCase() &&
+          Number(s.quantite || 0) > 0
+        );
+      });
+    }
+
+    return NextResponse.json({ 
+      items: articles, 
+      role: isAdmin ? "admin" : "vendeur",
+      depot: userDepot || "Tous"
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

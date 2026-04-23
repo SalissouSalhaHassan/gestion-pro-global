@@ -45,6 +45,8 @@ export default function ArticlesPage() {
   const [sortAsc, setSortAsc] = useState(true);
   const [selectedIds, setSelectedIds] = useState<(string | number)[]>([]);
   const [printArticle, setPrintArticle] = useState<Article | null>(null);
+  const [userRole, setUserRole] = useState<"admin" | "vendeur">("vendeur");
+  const [userDepot, setUserDepot] = useState("");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -304,21 +306,22 @@ export default function ArticlesPage() {
 
     async function loadArticles() {
       try {
-        const { data, error } = await supabase
-          .from("articles")
-          .select(`
-            id, reference, code_barre, designation, nom,
-            p_vente_ht, p_vente_ttc, image_path,
-            stocks ( quantite )
-          `)
-          .eq("is_deleted", false);
-
-        if (error) {
-          console.error("❌ Articles fetch error:", error.message, error.details);
+        const res = await fetch("/api/articles");
+        const result = await res.json();
+        
+        if (!res.ok) {
+          console.error("❌ Articles fetch error:", result.error);
+          return;
         }
 
-        if (!error && data) {
-          const mapped: Article[] = data.map((r: any) => {
+        // Set role and depot from API response
+        if (result.role) setUserRole(result.role);
+        if (result.depot) setUserDepot(result.depot);
+
+        const rawArticles = Array.isArray(result) ? result : (result.items || []);
+
+        if (rawArticles.length > 0) {
+          const mapped: Article[] = rawArticles.map((r: any) => {
             const stockTotal = Array.isArray(r.stocks)
               ? r.stocks.reduce((acc: number, cur: any) => acc + (Number(cur.quantite) || 0), 0)
               : 0;
@@ -430,7 +433,10 @@ export default function ArticlesPage() {
             Gestion des Articles
           </h1>
           <p className="mt-2 text-slate-500 font-medium ml-1">
-            Consultez et gérez le catalogue complet de vos produits et stocks.
+            {userRole === "vendeur" 
+              ? `Articles disponibles dans votre dépôt: ${userDepot}` 
+              : "Consultez et gérez le catalogue complet de vos produits et stocks."
+            }
           </p>
         </div>
       </div>
@@ -474,12 +480,14 @@ export default function ArticlesPage() {
               className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-13 pr-4 py-4 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-[#6366f1]/5 transition-all text-slate-700"
             />
           </div>
-          <button 
-            onClick={() => { resetForm(); setIsModalOpen(true); }}
-            className="flex items-center gap-2 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all active:scale-95 group bg-[#6366f1] shadow-indigo-100">
-            <Plus size={18} className="transition-transform group-hover:rotate-90" />
-            Nouvel Article
-          </button>
+          {userRole === "admin" && (
+            <button 
+              onClick={() => { resetForm(); setIsModalOpen(true); }}
+              className="flex items-center gap-2 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all active:scale-95 group bg-[#6366f1] shadow-indigo-100">
+              <Plus size={18} className="transition-transform group-hover:rotate-90" />
+              Nouvel Article
+            </button>
+          )}
         </div>
       </div>
 
@@ -621,20 +629,24 @@ export default function ArticlesPage() {
                           >
                             <Printer size={18} />
                           </button>
-                          <button 
-                            onClick={() => handleEdit(article.id)}
-                            className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl transition-all"
-                            title="Modifier"
-                          >
-                            <Edit3 size={18} />
-                          </button>
-                          <button 
-                            onClick={() => handleDelete(article.id)}
-                            className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl transition-all"
-                            title="Supprimer"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                          {userRole === "admin" && (
+                            <>
+                              <button 
+                                onClick={() => handleEdit(article.id)}
+                                className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl transition-all"
+                                title="Modifier"
+                              >
+                                <Edit3 size={18} />
+                              </button>
+                              <button 
+                                onClick={() => handleDelete(article.id)}
+                                className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl transition-all"
+                                title="Supprimer"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
