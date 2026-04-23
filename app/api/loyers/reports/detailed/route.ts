@@ -51,7 +51,36 @@ export async function GET(request: NextRequest) {
         .reduce((sum, p) => sum + (p.montant || 0), 0);
 
       const retards = Math.max(0, expectedAmount - totalPaid);
-      const unpaidMonths = Math.floor(retards / (c.loyer_mensuel || 1));
+      const unpaidMonthsCount = Math.floor(retards / (c.loyer_mensuel || 1));
+      
+      let moisImpayesText = "À jour";
+      if (unpaidMonthsCount > 0) {
+        const unpaidYears: Record<number, number> = {};
+        let currentYearIter = startYear;
+        let currentMonthIter = startMonth;
+        let monthsToSkip = Math.floor(totalPaid / (c.loyer_mensuel || 1));
+        let remainingToCount = unpaidMonthsCount;
+
+        while (remainingToCount > 0) {
+          if (monthsToSkip > 0) {
+            monthsToSkip--;
+          } else {
+            unpaidYears[currentYearIter] = (unpaidYears[currentYearIter] || 0) + 1;
+            remainingToCount--;
+          }
+          currentMonthIter++;
+          if (currentMonthIter > 12) {
+            currentMonthIter = 1;
+            currentYearIter++;
+          }
+          if (currentYearIter > year + 5) break;
+        }
+        
+        moisImpayesText = Object.entries(unpaidYears)
+          .sort((a, b) => Number(a[0]) - Number(b[0]))
+          .map(([y, count]) => `${y}: ${count}m`)
+          .join(", ");
+      }
       
       let paymentStatus = 'À jour';
       if (retards > 0) paymentStatus = 'Impayé';
@@ -63,7 +92,7 @@ export async function GET(request: NextRequest) {
         loyer: c.loyer_mensuel,
         total_paye: totalPaid,
         retards: retards,
-        mois_impayes: unpaidMonths,
+        mois_impayes: moisImpayesText,
         statut_paiement: paymentStatus,
         statut_contrat: c.statut
       };

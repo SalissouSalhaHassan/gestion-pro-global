@@ -135,10 +135,37 @@ export class ContractService {
       const unpaidMonthsCount = Math.max(0, totalMonthsExpected - monthsPaid);
       const retards = unpaidMonthsCount * (c.loyer_mensuel || 0);
       
-      // 4. Format Mois Impayés: "2026: 4m"
+      // 4. Format Mois Impayés with multi-year detail
       let moisImpayes = "À jour";
       if (unpaidMonthsCount > 0) {
-        moisImpayes = `${currentYearReal}: ${unpaidMonthsCount}m`;
+        const unpaidYears: Record<number, number> = {};
+        let currentYearIter = startYear;
+        let currentMonthIter = startMonth;
+        let monthsToSkip = monthsPaid;
+        let remainingToCount = unpaidMonthsCount;
+
+        // Iterate through all months from start until we've counted all unpaid months
+        while (remainingToCount > 0) {
+          if (monthsToSkip > 0) {
+            monthsToSkip--;
+          } else {
+            unpaidYears[currentYearIter] = (unpaidYears[currentYearIter] || 0) + 1;
+            remainingToCount--;
+          }
+          
+          currentMonthIter++;
+          if (currentMonthIter > 12) {
+            currentMonthIter = 1;
+            currentYearIter++;
+          }
+          
+          if (currentYearIter > currentYearReal + 5) break; // Safety
+        }
+        
+        moisImpayes = Object.entries(unpaidYears)
+          .sort((a, b) => Number(a[0]) - Number(b[0]))
+          .map(([year, count]) => `${year}: ${count}m`)
+          .join(", ");
       }
 
       // 5. Calculate Échéance: Next month after the latest payment
