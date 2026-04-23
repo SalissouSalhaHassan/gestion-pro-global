@@ -59,7 +59,11 @@ export async function applyUserScope<T extends PostgrestFilterBuilder<any, any, 
   if (entityType === 'factures') {
     // Sellers only see their own invoices or invoices in their allowed depots
     const allowedDepots = await getAllowedDepots(session);
-    let filter = `user_id.eq.${session.id},vendeur.eq.${session.username}`;
+    let filter = `user_id.eq.${session.id},created_by.eq.${session.id}`;
+    
+    if (session.username) {
+      filter += `,vendeur.eq."${session.username}"`;
+    }
     
     if (session.emplacement) {
       filter += `,emplacement.eq."${session.emplacement}"`;
