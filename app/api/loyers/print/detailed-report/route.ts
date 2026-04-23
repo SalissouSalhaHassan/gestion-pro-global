@@ -113,25 +113,25 @@ export async function GET(request: NextRequest) {
     <title>Rapport Détaillé des Impayés - ${monthName} ${year}</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; background: #f1f5f9; padding: 40px; color: #0f172a; }
-        .report { background: white; padding: 50px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 210mm; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; margin-bottom: 20px; }
-        .company h1 { font-size: 20px; font-weight: 900; }
-        .divider { height: 2px; background: #0f172a; margin: 20px 0; }
-        .title { border: 2px solid #0f172a; padding: 15px; text-align: center; margin-bottom: 30px; }
-        .title h2 { font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; }
-        .meta { background: #f8fafc; border-left: 4px solid #0f172a; padding: 15px; font-size: 12px; margin-bottom: 30px; font-weight: 700; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-        th { background: #f8fafc; border: 2px solid #0f172a; padding: 10px; font-size: 10px; font-weight: 900; text-transform: uppercase; text-align: left; }
-        td { border-bottom: 1px solid #e2e8f0; padding: 10px; font-size: 11px; }
+        body { font-family: 'Inter', sans-serif; background: #f1f5f9; padding: 15px; color: #0f172a; }
+        .report { background: white; padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 210mm; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; margin-bottom: 10px; }
+        .company h1 { font-size: 18px; font-weight: 900; }
+        .divider { height: 1.5px; background: #0f172a; margin: 10px 0; }
+        .title { border: 2px solid #0f172a; padding: 8px; text-align: center; margin-bottom: 15px; }
+        .title h2 { font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; }
+        .meta { background: #f8fafc; border-left: 4px solid #0f172a; padding: 8px 12px; font-size: 11px; margin-bottom: 15px; font-weight: 700; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+        th { background: #f8fafc; border: 2px solid #0f172a; padding: 8px; font-size: 9px; font-weight: 900; text-transform: uppercase; text-align: left; }
+        td { border-bottom: 1px solid #e2e8f0; padding: 8px; font-size: 10px; }
         .text-right { text-align: right; }
         .text-center { text-align: center; }
         .text-rose-600 { color: #e11d48; }
         .text-emerald-600 { color: #059669; }
         .font-black { font-weight: 900; }
         .font-bold { font-weight: 700; }
-        .print-btn { position: fixed; top: 20px; right: 20px; background: #0f172a; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
-        @media print { .print-btn { display: none; } body { padding: 0; background: white; } .report { box-shadow: none; padding: 10mm; max-width: 100%; } }
+        .print-btn { position: fixed; top: 15px; right: 15px; background: #0f172a; color: white; padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; }
+        @media print { .print-btn { display: none; } body { padding: 0; background: white; } .report { box-shadow: none; padding: 5mm; max-width: 100%; } }
     </style>
 </head>
 <body>
