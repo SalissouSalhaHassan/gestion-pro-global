@@ -32,7 +32,7 @@ export type Invoice = {
 export class InvoiceService {
   constructor(private supabase: SupabaseClient) {}
 
-  async getInvoices(userId?: number) {
+  async getInvoices(userId?: number, username?: string) {
     let query = this.supabase
       .from('factures')
       .select('*, clients(nom)')
@@ -42,7 +42,11 @@ export class InvoiceService {
       .limit(1000);
 
     if (userId) {
-      query = query.eq('user_id', userId);
+      if (username) {
+        query = query.or(`user_id.eq.${userId},created_by.eq.${userId},vendeur.eq.${username}`);
+      } else {
+        query = query.or(`user_id.eq.${userId},created_by.eq.${userId}`);
+      }
     }
 
     const { data, error } = await query;
@@ -50,19 +54,23 @@ export class InvoiceService {
     return data;
   }
 
-  async getInvoiceById(id: number, userId?: number) {
+  async getInvoiceById(id: number, userId?: number, username?: string) {
     let query = this.supabase
       .from('factures')
       .select('*, facture_items(*), clients(nom, adresse, nif)')
       .eq('id', id);
     
     if (userId) {
-      query = query.eq('user_id', userId);
+      if (username) {
+        query = query.or(`user_id.eq.${userId},created_by.eq.${userId},vendeur.eq.${username}`);
+      } else {
+        query = query.or(`user_id.eq.${userId},created_by.eq.${userId}`);
+      }
     }
 
     const { data, error } = await query.single();
     
-    if (error) throw new Error(error.message);
+    if (error) return null; // Return null instead of throwing to handle 'not found' or 'denied' gracefully
     return data;
   }
 

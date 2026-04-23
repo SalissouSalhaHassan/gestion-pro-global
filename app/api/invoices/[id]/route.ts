@@ -17,7 +17,7 @@ export async function GET(
     const invoiceService = new InvoiceService(supabase);
     
     // Admins see everything, Sellers only their own
-    const invoice = await invoiceService.getInvoiceById(Number(id), isAdmin ? undefined : Number(session.id));
+    const invoice = await invoiceService.getInvoiceById(Number(id), isAdmin ? undefined : Number(session.id), session.username);
     
     if (!invoice) {
         return NextResponse.json({ error: "Facture introuvable ou accès refusé" }, { status: 404 });
@@ -45,7 +45,7 @@ export async function PATCH(
     // Check if invoice exists and belongs to user if they are not admin
     const { data: existing, error: fetchError } = await supabase
         .from('factures')
-        .select('user_id')
+        .select('user_id, created_by, vendeur')
         .eq('id', id)
         .single();
     
@@ -53,7 +53,13 @@ export async function PATCH(
         return NextResponse.json({ error: "Facture introuvable" }, { status: 404 });
     }
 
-    if (!isAdmin && String(existing.user_id) !== String(session.id)) {
+    const isOwner = (
+      String(existing.user_id) === String(session.id) || 
+      String(existing.created_by) === String(session.id) || 
+      existing.vendeur === session.username
+    );
+
+    if (!isAdmin && !isOwner) {
         return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
@@ -89,7 +95,7 @@ export async function DELETE(
     // Check ownership
     const { data: existing, error: fetchError } = await supabase
         .from('factures')
-        .select('user_id')
+        .select('user_id, created_by, vendeur')
         .eq('id', id)
         .single();
     
@@ -97,7 +103,13 @@ export async function DELETE(
         return NextResponse.json({ error: "Facture introuvable" }, { status: 404 });
     }
 
-    if (!isAdmin && String(existing.user_id) !== String(session.id)) {
+    const isOwner = (
+      String(existing.user_id) === String(session.id) || 
+      String(existing.created_by) === String(session.id) || 
+      existing.vendeur === session.username
+    );
+
+    if (!isAdmin && !isOwner) {
         return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 

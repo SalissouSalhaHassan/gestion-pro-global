@@ -13,7 +13,7 @@ export async function GET() {
     const invoiceService = new InvoiceService(supabase);
     
     // Admin sees all, Seller sees only their own
-    const invoices = await invoiceService.getInvoices(isAdmin ? undefined : Number(session.id));
+    const invoices = await invoiceService.getInvoices(isAdmin ? undefined : Number(session.id), session.username);
     
     return NextResponse.json(invoices);
   } catch (error: any) {

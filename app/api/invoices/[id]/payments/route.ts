@@ -20,8 +20,19 @@ export async function GET(
   // Ownership check
   const isAdmin = await isAdminOrManager(session);
   if (!isAdmin) {
-    const { data: inv } = await supabase.from("factures").select("user_id").eq("id", invoiceId).single();
-    if (!inv || String(inv.user_id) !== String(session.id)) {
+    const { data: inv } = await supabase
+      .from("factures")
+      .select("user_id, created_by, vendeur")
+      .eq("id", invoiceId)
+      .single();
+    
+    const isOwner = inv && (
+      String(inv.user_id) === String(session.id) || 
+      String(inv.created_by) === String(session.id) || 
+      inv.vendeur === session.username
+    );
+
+    if (!isOwner) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
   }
@@ -54,8 +65,19 @@ export async function POST(
   // Ownership check
   const isAdmin = await isAdminOrManager(session);
   if (!isAdmin) {
-    const { data: inv } = await supabase.from("factures").select("user_id").eq("id", invoiceId).single();
-    if (!inv || String(inv.user_id) !== String(session.id)) {
+    const { data: inv } = await supabase
+      .from("factures")
+      .select("user_id, created_by, vendeur")
+      .eq("id", invoiceId)
+      .single();
+    
+    const isOwner = inv && (
+      String(inv.user_id) === String(session.id) || 
+      String(inv.created_by) === String(session.id) || 
+      inv.vendeur === session.username
+    );
+
+    if (!isOwner) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
   }
