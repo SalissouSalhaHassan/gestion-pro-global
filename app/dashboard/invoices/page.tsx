@@ -126,29 +126,20 @@ export default function InvoicesPage() {
     
     try {
       setLoading(true);
-      // Call the safe delete RPC
-      const { data: result, error } = await supabase.rpc('delete_invoice_safe', { 
-        p_invoice_id: invoiceId,
-        p_user_id: currentUserId,
-        p_username: currentUsername || 'System'
-      });
       
-      if (error) {
-        // Fallback if RPC isn't defined yet - simple soft delete
-        console.warn("RPC delete_invoice_safe failed or not found, falling back to simple soft delete.");
-        const { error: softErr } = await supabase
-          .from("factures")
-          .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-          .eq("id", invoiceId);
-        if (softErr) throw softErr;
-      } else if (result && result.ok === false) {
-        alert("Erreur: " + (result.error || "Impossible de supprimer cette facture."));
+      const response = await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Erreur lors de la suppression");
       }
       
       setRefreshKey(prev => prev + 1);
     } catch (err) {
       console.error("Error deleting invoice:", err);
-      alert("Erreur lors de la suppression.");
+      alert(err instanceof Error ? err.message : "Erreur lors de la suppression.");
     } finally {
       setLoading(false);
     }

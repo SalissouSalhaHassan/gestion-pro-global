@@ -1,17 +1,29 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth_helper";
+import { getServerSession, isAdminOrManager } from "@/lib/auth_helper";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = await createClient();
+  const session = await getServerSession();
+  if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+
   const { id: rawId } = await params;
   const invoiceId = parseInt(rawId);
 
   if (isNaN(invoiceId)) {
     return NextResponse.json({ error: `ID de facture invalide: ${rawId}` }, { status: 400 });
+  }
+
+  // Ownership check
+  const isAdmin = await isAdminOrManager(session);
+  if (!isAdmin) {
+    const { data: inv } = await supabase.from("factures").select("user_id").eq("id", invoiceId).single();
+    if (!inv || inv.user_id !== Number(session.id)) {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+    }
   }
 
   const { data, error } = await supabase
@@ -29,11 +41,23 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const supabase = await createClient();
+  const session = await getServerSession();
+  if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+
   const { id: rawId } = await params;
   const invoiceId = parseInt(rawId);
 
   if (isNaN(invoiceId)) {
     return NextResponse.json({ error: `ID de facture invalide: ${rawId}` }, { status: 400 });
+  }
+
+  // Ownership check
+  const isAdmin = await isAdminOrManager(session);
+  if (!isAdmin) {
+    const { data: inv } = await supabase.from("factures").select("user_id").eq("id", invoiceId).single();
+    if (!inv || inv.user_id !== Number(session.id)) {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+    }
   }
 
   const body = await request.json();

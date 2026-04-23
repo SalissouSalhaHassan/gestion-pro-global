@@ -30,18 +30,19 @@ export default function EditInvoiceModal({ invoiceId, onClose, onRefresh }: Edit
     async function loadData() {
       try {
         setLoading(true);
-        // 1. Fetch Invoice
-        const { data: inv, error: invErr } = await supabase
-          .from("factures")
-          .select("*")
-          .eq("id", invoiceId)
-          .single();
-        if (invErr) throw invErr;
+        // 1. Fetch Invoice via secure API
+        const response = await fetch(`/api/invoices/${invoiceId}`);
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Impossible de charger la facture");
+        }
+        
+        const inv = await response.json();
 
         if (inv) {
           setFormData({
             client_id: inv.client_id || "",
-            date_facture: inv.date_facture || "",
+            date_facture: inv.date_facture ? inv.date_facture.split('T')[0] : "", // Ensure date format YYYY-MM-DD
             mode_paiement: inv.mode_paiement || "",
             statut: inv.statut || "Non Payée",
             total_ttc: Number(inv.total_ttc) || 0,
@@ -60,6 +61,8 @@ export default function EditInvoiceModal({ invoiceId, onClose, onRefresh }: Edit
 
       } catch (err) {
         console.error("Error loading invoice for edit:", err);
+        alert(err instanceof Error ? err.message : "Erreur de chargement");
+        onClose();
       } finally {
         setLoading(false);
       }
@@ -75,27 +78,30 @@ export default function EditInvoiceModal({ invoiceId, onClose, onRefresh }: Edit
       const totalTtcNum = Number(formData.total_ttc);
       const montantRestant = Math.max(0, totalTtcNum - montantPayeNum);
 
-      const { error } = await supabase
-        .from("factures")
-        .update({
+      const response = await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           client_id: formData.client_id || null,
           date_facture: formData.date_facture,
           mode_paiement: formData.mode_paiement,
           statut: formData.statut,
           montant_paye: montantPayeNum,
           montant_restant: montantRestant,
-          observation: formData.observation,
-          updated_at: new Date().toISOString()
+          observation: formData.observation
         })
-        .eq("id", invoiceId);
+      });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Erreur lors de la mise à jour");
+      }
 
       onRefresh();
       onClose();
     } catch (err) {
       console.error("Error updating invoice:", err);
-      alert("Erreur lors de la mise à jour de la facture.");
+      alert(err instanceof Error ? err.message : "Erreur lors de la mise à jour de la facture.");
     } finally {
       setSaving(false);
     }
