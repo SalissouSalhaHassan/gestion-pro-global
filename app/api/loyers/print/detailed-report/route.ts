@@ -70,6 +70,14 @@ export async function GET(request: NextRequest) {
           .join(", ");
       }
       
+      const monthsPaid = Math.floor(totalPaid / (c.loyer_mensuel || 1));
+      const echeanceDate = new Date(startYear, startMonth - 1 + monthsPaid, 1);
+      const echeance = echeanceDate.toLocaleDateString('fr-FR');
+      const annee = echeanceDate.getFullYear().toString();
+      
+      let paymentStatus = 'Payé';
+      if (retards > 0) paymentStatus = 'Impayé';
+
       return {
         locataire: c.locataire_nom_complet,
         ref: c.ref_locataire,
@@ -77,6 +85,9 @@ export async function GET(request: NextRequest) {
         total_paye: totalPaid,
         retards: retards,
         mois_impayes: moisImpayesText,
+        etat: paymentStatus,
+        annee: annee,
+        echeance: echeance,
         statut_contrat: c.statut
       };
     });
@@ -97,6 +108,9 @@ export async function GET(request: NextRequest) {
         <td class="text-center font-black ${row.mois_impayes !== 'À jour' ? 'text-rose-600' : 'text-slate-300'}">
           ${row.mois_impayes}
         </td>
+        <td class="text-center font-black">${row.annee}</td>
+        <td class="text-center font-black ${row.etat === 'Payé' ? 'text-emerald-600' : 'text-rose-600'}">${row.etat}</td>
+        <td class="text-center font-black">${row.echeance}</td>
         <td class="text-center text-xs uppercase font-bold">${row.statut_contrat}</td>
       </tr>
     `).join('');
@@ -157,11 +171,14 @@ export async function GET(request: NextRequest) {
                     <th class="text-right">TOTAL PAYÉ</th>
                     <th class="text-right">RETARDS (F)</th>
                     <th class="text-center">MOIS IMPAYÉS</th>
+                    <th class="text-center">ANNÉE</th>
+                    <th class="text-center">ÉTAT</th>
+                    <th class="text-center">ÉCHÉANCE</th>
                     <th class="text-center">CONTRAT</th>
                 </tr>
             </thead>
             <tbody>
-                ${rowsHtml || '<tr><td colspan="6" class="text-center">Aucune donnée trouvée.</td></tr>'}
+                ${rowsHtml || '<tr><td colspan="9" class="text-center">Aucune donnée trouvée.</td></tr>'}
             </tbody>
         </table>
         <div style="margin-top: 50px; text-align: center; font-size: 9px; font-weight: 900; text-transform: uppercase; color: #94a3b8; letter-spacing: 2px;">
