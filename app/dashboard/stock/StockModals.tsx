@@ -94,13 +94,15 @@ export function AdjustmentModal({ isOpen, onClose, item, depotId, depotNom, onSu
     setError(null);
 
     try {
+      const depotName = depotId ? depotNom : depotsList.find(d => d.id === Number(selectedDepotId))?.nom;
+
       const res = await fetch("/api/stock/adjust", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           article_id: item.id,
           qty_adj: Number(qtyAdj),
-          depot_id: Number(selectedDepotId), // Switched to ID
+          depot_nom: depotName,
           notes
         })
       });
@@ -274,14 +276,17 @@ export function TransferModal({ isOpen, onClose, item, sourceDepotId, sourceDepo
     setError(null);
 
     try {
+      const srcName = sourceDepotId ? sourceDepotNom : depots.find(d => d.id === Number(actualSourceId))?.nom;
+      const dstName = depots.find(d => d.id === Number(destDepotId))?.nom;
+
       const res = await fetch("/api/stock/transfer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           article_id: item.id,
           qty: Number(qty),
-          source_depot_id: Number(actualSourceId),
-          dest_depot_id: Number(destDepotId)
+          source_depot: srcName,
+          dest_depot: dstName
         })
       });
 
@@ -494,7 +499,7 @@ export function AddArticleModal({ isOpen, onClose, onSuccess, currentDepotId, cu
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          depot_id: currentDepotId // Switched to ID
+          depot_nom: currentDepotNom
         })
       });
 
