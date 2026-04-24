@@ -29,7 +29,7 @@ export type CimentShipment = {
   created_at: string;
 };
 
-import { CimentEntryModal, CimentPaymentModal } from "./CimentModals";
+import { CimentEntryModal, CimentPaymentModal, CimentPrintModal } from "./CimentModals";
 
 export default function CimentPage() {
   const [session, setSession] = useState<any>(null);
@@ -41,6 +41,7 @@ export default function CimentPage() {
 
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [selectedShipment, setSelectedShipment] = useState<CimentShipment | null>(null);
 
   const [stats, setStats] = useState({
@@ -125,6 +126,11 @@ export default function CimentPage() {
   const openPayment = (shipment: CimentShipment) => {
     setSelectedShipment(shipment);
     setIsPaymentModalOpen(true);
+  };
+
+  const openPrint = (shipment: CimentShipment) => {
+    setSelectedShipment(shipment);
+    setIsPrintModalOpen(true);
   };
 
   return (
@@ -252,7 +258,7 @@ export default function CimentPage() {
                       <button onClick={() => openPayment(s)} title="Paiements" className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors">
                         <CreditCard size={18} />
                       </button>
-                      <button title="Imprimer" className="p-2 bg-orange-50 text-orange-600 hover:bg-orange-100 rounded-lg transition-colors">
+                      <button onClick={() => openPrint(s)} title="Imprimer" className="p-2 bg-orange-50 text-orange-600 hover:bg-orange-100 rounded-lg transition-colors">
                         <Printer size={18} />
                       </button>
                       <button onClick={() => openEditEntry(s)} title="Modifier" className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
@@ -280,12 +286,19 @@ export default function CimentPage() {
         onSuccess={fetchShipments} 
       />
 
-      {selectedShipment && (
+      {selectedShipment && isPaymentModalOpen && (
         <CimentPaymentModal 
           isOpen={isPaymentModalOpen} 
           onClose={() => setIsPaymentModalOpen(false)} 
           shipmentId={selectedShipment.id} 
           onSuccess={fetchShipments} 
+        />
+      )}
+
+      {selectedShipment && isPrintModalOpen && (
+        <CimentPrintModal
+          shipment={selectedShipment}
+          onClose={() => setIsPrintModalOpen(false)}
         />
       )}
     </div>

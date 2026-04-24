@@ -413,6 +413,217 @@ export function StockSelectorModal({ onClose, onSelect }: { onClose: () => void;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   PRINT MODAL
+   ═══════════════════════════════════════════════════════════════════ */
+export function CimentPrintModal({ shipment, onClose }: { shipment: any; onClose: () => void }) {
+  const [format, setFormat] = useState<'A4' | 'A5' | 'Ticket'>('A4');
+
+  const numberToWordsFr = (total: number) => {
+    if (total === 0) return "zéro";
+    const ones = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf'];
+    const teens = ['dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
+    const tens = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante', 'quatre-vingt', 'quatre-vingt'];
+
+    const convert = (n: number): string => {
+      if (n < 10) return ones[n];
+      if (n < 20) return teens[n - 10];
+      if (n < 70) {
+        const t = Math.floor(n / 10);
+        const r = n % 10;
+        return tens[t] + (r === 1 ? ' et ' : (r > 0 ? '-' : '')) + ones[r];
+      }
+      if (n < 80) return "soixante-" + convert(n - 60);
+      if (n < 100) {
+        const t = Math.floor(n / 10);
+        const r = n % 10;
+        return (t === 8 ? "quatre-vingt" : "quatre-vingt-") + (r > 0 ? (t === 8 ? "-" : "") + convert(r) : "");
+      }
+      if (n < 1000) {
+        const c = Math.floor(n / 100);
+        const r = n % 100;
+        return (c === 1 ? "cent" : ones[c] + " cent") + (r > 0 ? " " + convert(r) : "");
+      }
+      const m = Math.floor(n / 1000);
+      const r = n % 1000;
+      return (m === 1 ? "mille" : convert(m) + " mille") + (r > 0 ? " " + convert(r) : "");
+    };
+
+    return convert(Math.floor(total)).charAt(0).toUpperCase() + convert(Math.floor(total)).slice(1);
+  };
+
+  const actualRemaining = Math.max(0, Number(shipment.total) - Number(shipment.montant_paye || 0));
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-hidden print:p-0 print:bg-white print:backdrop-blur-none">
+      
+      <div className="absolute top-6 right-6 flex flex-col items-end gap-3 print:hidden z-[110]">
+        <div className="flex items-center gap-2 bg-white/80 backdrop-blur p-2 rounded-2xl shadow-lg border border-white/20">
+          {(['A4', 'A5', 'Ticket'] as const).map((fmt) => (
+            <button
+              key={fmt}
+              onClick={() => setFormat(fmt)}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                format === fmt 
+                ? 'bg-indigo-600 text-white shadow-md' 
+                : 'text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              {fmt}
+            </button>
+          ))}
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => window.print()}
+            className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black shadow-xl shadow-indigo-500/30 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all"
+          >
+            <Printer size={20} />
+            Imprimer
+          </button>
+          <button 
+            onClick={onClose}
+            className="bg-white text-slate-400 p-3 rounded-2xl shadow-lg border border-slate-100 hover:text-rose-500 transition-colors"
+          >
+            <X size={24} />
+          </button>
+        </div>
+      </div>
+
+      <div className={`bg-white h-auto overflow-y-auto custom-scrollbar shadow-2xl print:shadow-none print:rounded-none print:w-full print:h-auto print:overflow-visible ${
+        format === 'Ticket' ? 'w-[320px] rounded-lg' : 
+        format === 'A5' ? 'w-[145mm] rounded-[24px]' : 
+        'w-full max-w-[190mm] rounded-[32px]'
+      }`}>
+        
+        <div id="printable-invoice" className="p-4 md:p-6 text-black font-sans leading-tight">
+          
+          <div className="mb-2">
+            <h1 className="text-xl font-black uppercase tracking-tight">CIMENT & LOGISTIQUE</h1>
+            <div className="w-full h-[1.5px] bg-black mt-2"></div>
+          </div>
+
+          <div className="bg-[#ebebeb] p-1.5 text-center mb-4 border border-black">
+            <h2 className="text-lg font-black uppercase tracking-[0.2em]">FACTURE DE CHARGEMENT</h2>
+          </div>
+
+          <div className="flex justify-between items-start mb-4 text-[11px]">
+            <div className="w-1/2 pr-2">
+              <h3 className="font-black text-sm mb-1 border-b border-black pb-0.5">Détails de l'Opération</h3>
+              <div className="grid grid-cols-[80px_1fr] gap-x-1 gap-y-0.5">
+                <span className="font-black">Date:</span> <span>{new Date(shipment.created_at).toLocaleDateString("fr-FR")}</span>
+                <span className="font-black">Utilisateur:</span> <span>{shipment.utilisateur || "Admin"}</span>
+                <span className="font-black">Camion:</span> <span>{shipment.camion_no}</span>
+                <span className="font-black">Transporteur:</span> <span>{shipment.transporteur || "-"}</span>
+                <span className="font-black">Chauffeur:</span> <span>{shipment.chauffeur || "-"} {shipment.chauffeur_tel ? `(${shipment.chauffeur_tel})` : ""}</span>
+              </div>
+            </div>
+            <div className="w-1/2 pl-2">
+              <h3 className="font-black text-sm mb-1 border-b border-black pb-0.5">Client</h3>
+              <p className="font-black text-sm">{shipment.client_tel}</p>
+              <div className="mt-2 grid grid-cols-[80px_1fr] gap-x-1 gap-y-0.5">
+                <span className="font-black">Destination:</span> <span>{shipment.destination}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-3">
+            <table className="w-full border border-black border-collapse table-fixed">
+              <thead>
+                <tr className="bg-[#ebebeb] border-b border-black text-[11px]">
+                  <th className="border-r border-black p-1 text-left font-black w-[45%]">Désignation</th>
+                  <th className="border-r border-black p-1 text-center w-[15%] font-black">Tonnage</th>
+                  <th className="border-r border-black p-1 text-right w-[20%] font-black">P.U</th>
+                  <th className="p-1 text-right w-[20%] font-black">Montant</th>
+                </tr>
+              </thead>
+              <tbody className="font-medium text-[11px]">
+                <tr className="border-b border-black last:border-b-0">
+                  <td className="border-r border-black p-1 break-words leading-tight">{shipment.type_ciment}</td>
+                  <td className="border-r border-black p-1 text-center font-bold">{Number(shipment.tonnage).toFixed(2)} t</td>
+                  <td className="border-r border-black p-1 text-right">{Number(shipment.pu).toLocaleString('fr-FR')}</td>
+                  <td className="p-1 text-right font-bold">{(Number(shipment.tonnage) * Number(shipment.pu)).toLocaleString('fr-FR')}</td>
+                </tr>
+                {Number(shipment.frais_ciment) > 0 && (
+                  <tr className="border-b border-black last:border-b-0">
+                    <td className="border-r border-black p-1 break-words leading-tight">Frais Ciment</td>
+                    <td className="border-r border-black p-1 text-center">-</td>
+                    <td className="border-r border-black p-1 text-right">-</td>
+                    <td className="p-1 text-right font-bold">{Number(shipment.frais_ciment).toLocaleString('fr-FR')}</td>
+                  </tr>
+                )}
+                {Number(shipment.frais_transport) > 0 && (
+                  <tr className="border-b border-black last:border-b-0">
+                    <td className="border-r border-black p-1 break-words leading-tight">Frais Transport</td>
+                    <td className="border-r border-black p-1 text-center">-</td>
+                    <td className="border-r border-black p-1 text-right">-</td>
+                    <td className="p-1 text-right font-bold">{Number(shipment.frais_transport).toLocaleString('fr-FR')}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="italic mb-3 text-[10px] font-medium leading-tight">
+            Arrêtée à la somme de : <span className="font-black uppercase">{numberToWordsFr(shipment.total)}</span> francs CFA.
+          </p>
+
+          <div className="flex flex-row w-full mb-4 border border-black min-h-[40px]">
+            <div className="flex-1 border-r border-black p-1 text-center bg-[#ebebeb] flex flex-col justify-center overflow-hidden">
+              <span className="font-black uppercase text-[8px] leading-none shrink-0">TOTAL TTC</span>
+              <span className="text-[11px] font-[900] mt-0.5 truncate">{Number(shipment.total).toLocaleString('fr-FR')}</span>
+            </div>
+            <div className="flex-1 border-r border-black p-1 text-center bg-[#f9f9f9] flex flex-col justify-center overflow-hidden">
+              <span className="font-black uppercase text-[8px] leading-none shrink-0">MONTANT PAYÉ</span>
+              <span className="text-[11px] font-[900] mt-0.5 truncate">{Number(shipment.montant_paye).toLocaleString('fr-FR')}</span>
+            </div>
+            <div className="flex-1 p-1 text-center bg-white flex flex-col justify-center overflow-hidden">
+              <span className="font-black uppercase text-[8px] leading-none shrink-0">RESTE À PAYER</span>
+              <span className="text-[11px] font-[900] mt-0.5 truncate">{actualRemaining.toLocaleString('fr-FR')}</span>
+            </div>
+          </div>
+
+          <div className="mt-12 flex justify-between items-start text-[10px] font-black px-2">
+            <div className="text-center w-[140px] border-t border-black pt-2">
+              Le Responsable
+            </div>
+            <div className="text-center w-[180px] border-t border-black pt-2 flex flex-col items-center">
+              <span>Cachet et Signature du Client</span>
+              <span className="italic font-bold mt-1 text-[9px]">(Reçu en bon état)</span>
+            </div>
+          </div>
+
+          <div className="mt-8 text-center ticket-hide">
+             <p className="text-[9px] font-bold text-slate-400">Page 1/1</p>
+          </div>
+        </div>
+      </div>
+
+      <style jsx global>{`
+        @media print {
+          body * { visibility: hidden; background: none !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          #printable-invoice, #printable-invoice * { visibility: visible; }
+          #printable-invoice {
+            position: absolute; left: 0; top: 0; 
+            width: 100% !important;
+            padding: ${format === 'Ticket' ? '0' : '5mm'} !important;
+            margin: 0 !important; border: none !important;
+          }
+          .ticket-hide { display: ${format === 'Ticket' ? 'none' : 'block'} !important; }
+          @page { 
+            size: ${format === 'Ticket' ? '80mm auto' : format === 'A5' ? 'A5 portrait' : 'A4 portrait'}; 
+            margin: 0; 
+          }
+          .bg-[#ebebeb] { background-color: #ebebeb !important; }
+          .bg-[#f9f9f9] { background-color: #f9f9f9 !important; }
+          .bg-[#f0f0f0] { background-color: #f0f0f0 !important; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    PAYMENT MODAL
    ═══════════════════════════════════════════════════════════════════ */
 export function CimentPaymentModal({
