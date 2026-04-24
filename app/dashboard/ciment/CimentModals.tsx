@@ -720,7 +720,7 @@ export function CimentPaymentModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
-      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl overflow-hidden animate-in zoom-in-95 duration-300">
+      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-5xl overflow-hidden animate-in zoom-in-95 duration-300">
         <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-900 text-white">
           <h2 className="text-xl font-black flex items-center gap-3">
             <CreditCard size={24} className="text-emerald-400" />
