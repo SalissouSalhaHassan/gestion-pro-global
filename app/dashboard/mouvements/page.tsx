@@ -221,7 +221,7 @@ export default function MouvementsPage() {
   const handlePrint = () => setShowPrintJournal(true);
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="space-y-8 max-w-[1600px] mx-auto pb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
       
       {/* ── Page Header ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 print:hidden">
@@ -435,9 +435,10 @@ export default function MouvementsPage() {
 
 function AuditTable({ items, loading, fetchData, onPrintTransfer }: any) {
     return (
-        <table className="w-full text-left">
-            <thead>
-                <tr className="bg-slate-50/50 border-b border-slate-100">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] custom-scrollbar">
+            <table className="w-full text-left relative">
+                <thead className="sticky top-0 z-10 bg-white/90 backdrop-blur-md shadow-sm">
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
                     <HeaderCell label="Audit Info" />
                     <HeaderCell label="Produit / Réf" />
                     <HeaderCell label="Nature" />
@@ -464,6 +465,7 @@ function AuditTable({ items, loading, fetchData, onPrintTransfer }: any) {
                 )}
             </tbody>
         </table>
+        </div>
     );
 }
 

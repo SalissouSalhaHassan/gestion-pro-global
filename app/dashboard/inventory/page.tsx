@@ -220,7 +220,7 @@ export default function InventoryPage() {
   }, 0);
 
   return (
-    <div className="max-w-6xl mx-auto pb-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-[1600px] mx-auto pb-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
@@ -333,7 +333,7 @@ export default function InventoryPage() {
         <div className="lg:col-span-3">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden h-full min-h-[600px] flex flex-col">
              
-             <div className="flex-1 overflow-x-auto overflow-y-auto">
+             <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar">
                 <table className="w-full text-left" ref={tableRef}>
                    <thead className="sticky top-0 bg-slate-50/90 backdrop-blur-sm z-10 shadow-sm">
                       <tr>

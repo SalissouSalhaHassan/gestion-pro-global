@@ -192,7 +192,7 @@ export default function ClientsPage() {
   };
 
   return (
-    <div className="space-y-10 max-w-7xl mx-auto pb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="space-y-10 max-w-[1600px] mx-auto pb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
       
       {/* Toast Notification */}
       {toast && (
@@ -270,9 +270,9 @@ export default function ClientsPage() {
 
       {/* Main Table Card */}
       <div className="rounded-[48px] border border-white/80 bg-white/60 backdrop-blur-3xl shadow-2xl shadow-indigo-100/40 flex flex-col overflow-hidden transition-all duration-300">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-600">
-            <thead className="bg-[#F8FAFC] text-slate-500 font-bold border-b border-slate-200">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] custom-scrollbar">
+          <table className="w-full text-left text-sm text-slate-600 relative">
+            <thead className="bg-slate-50/90 backdrop-blur-md text-slate-500 font-bold border-b border-slate-200 sticky top-0 z-10 shadow-sm">
               <tr>
                 <th 
                   className="cursor-pointer px-6 py-5 hover:bg-slate-200/50 transition-colors whitespace-nowrap"

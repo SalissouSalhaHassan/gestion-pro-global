@@ -136,7 +136,7 @@ export default function ExpensesPage() {
 
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="space-y-8 max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Header Area */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-5">
@@ -201,9 +201,9 @@ export default function ExpensesPage() {
 
       {/* Main Table */}
       <div className="bg-white rounded-[40px] border border-slate-100 shadow-xl overflow-hidden">
-         <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-               <thead>
+         <div className="overflow-x-auto overflow-y-auto max-h-[70vh] custom-scrollbar">
+            <table className="w-full text-left border-collapse relative">
+               <thead className="sticky top-0 z-10 bg-white/90 backdrop-blur-md shadow-sm">
                   <tr className="bg-slate-50/50 border-b border-slate-100">
                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Libellé / Détails</th>
