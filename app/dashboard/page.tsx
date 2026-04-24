@@ -44,7 +44,7 @@ export default function DashboardPage() {
   const stats = [
     {
       label: "Ventes du jour",
-      value: loading ? "..." : `${new Intl.NumberFormat("fr-FR").format(data?.todaySales || 0)} F CFA`,
+      value: loading ? "..." : `${Number(data?.todaySales || 0).toLocaleString("fr-FR").replace(/\u202f/g, ' ')} F CFA`,
       change: "+", 
       icon: Wallet,
       bg: "linear-gradient(135deg, #4f46e5, #7c3aed)",
@@ -155,12 +155,12 @@ export default function DashboardPage() {
                             </div>
                             <div>
                                <p className="font-black text-slate-800 text-sm">{act.designation}</p>
-                               <p className="text-[10px] font-bold text-slate-400 uppercase">{act.type} • {act.date}</p>
+                               <p className="text-[10px] font-bold text-slate-400 uppercase">{act.type.replace(/_/g, ' ')} • {new Date(act.date).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</p>
                             </div>
                          </div>
                          <div className="text-right">
                             <p className={`font-black ${act.type.includes("VENTE") || act.type.includes("SORTIE") ? "text-rose-500" : "text-emerald-500"}`}>
-                               {act.type.includes("VENTE") || act.type.includes("SORTIE") ? "-" : "+"}{act.quantite}
+                               {act.type.includes("VENTE") || act.type.includes("SORTIE") ? "-" : "+"}{Math.abs(act.quantite)}
                             </p>
                          </div>
                       </div>

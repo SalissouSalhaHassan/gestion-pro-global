@@ -81,10 +81,12 @@ export async function GET() {
       return d.toISOString().split('T')[0];
     }).reverse();
 
+    const earliestDate = last7Days[0]; // the oldest day since it was reversed
+    
     let performanceQuery = supabase
       .from("mouvements")
       .select("date_mouvement, sortie")
-      .in("date_mouvement", last7Days)
+      .gte("date_mouvement", earliestDate)
       .filter("type", "ilike", "VENTE%");
 
     performanceQuery = applyUserScope(performanceQuery as any, user, 'mouvements');
@@ -93,7 +95,7 @@ export async function GET() {
     if (perfError) throw perfError;
 
     const chartData = last7Days.map(date => {
-       const dailyVolume = performanceRes?.filter(m => m.date_mouvement?.toString().split('T')[0] === date)
+       const dailyVolume = performanceRes?.filter(m => m.date_mouvement && m.date_mouvement.startsWith(date))
                                      .reduce((sum, m) => sum + Number(m.sortie || 0), 0) || 0;
        return dailyVolume;
     });
