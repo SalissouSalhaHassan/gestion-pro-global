@@ -37,17 +37,9 @@ export async function GET(request: NextRequest) {
       
       const expectedAmount = monthsToCalculate * (c.loyer_mensuel || 0);
       
-      // Total paid until the end of the selected month
-      // We filter payments that happened before or during the selected month/year
-      // Actually, usually total paid is total paid, but if the user wants a report "AS OF" a date:
+      // Calculate total paid across all time to determine if rent obligations up to the selected month are met
       const totalPaid = payments
-        .filter(p => {
-          if (p.contrat_id !== c.id) return false;
-          const pDate = new Date(p.date_paiement);
-          const pYear = pDate.getFullYear();
-          const pMonth = pDate.getMonth() + 1;
-          return (pYear < year) || (pYear === year && pMonth <= month);
-        })
+        .filter(p => p.contrat_id === c.id)
         .reduce((sum, p) => sum + (p.montant || 0), 0);
 
       const retards = Math.max(0, expectedAmount - totalPaid);

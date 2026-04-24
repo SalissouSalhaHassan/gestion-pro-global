@@ -33,14 +33,9 @@ export async function GET(request: NextRequest) {
       const monthsToCalculate = Math.max(0, totalMonthsElapsed);
       const expectedAmount = monthsToCalculate * (c.loyer_mensuel || 0);
       
+      // Calculate total paid across all time to determine if rent obligations up to the selected month are met
       const totalPaid = payments
-        .filter(p => {
-          if (p.contrat_id !== c.id) return false;
-          const pDate = new Date(p.date_paiement);
-          const pYear = pDate.getFullYear();
-          const pMonth = pDate.getMonth() + 1;
-          return (pYear < year) || (pYear === year && pMonth <= month);
-        })
+        .filter(p => p.contrat_id === c.id)
         .reduce((sum, p) => sum + (p.montant || 0), 0);
 
       const retards = Math.max(0, expectedAmount - totalPaid);
