@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Search, Plus, CreditCard, Trash2, Loader2, AlertCircle } from "lucide-react";
+import { X, Search, Plus, CreditCard, Trash2, Loader2, AlertCircle, Printer } from "lucide-react";
 import type { CimentShipment } from "./page";
 
 /* ═══════════════════════════════════════════════════════════════════
