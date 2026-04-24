@@ -265,9 +265,11 @@ export function TransferModal({ isOpen, onClose, item, sourceDepotId, sourceDepo
 
   if (!isOpen || !item) return null;
 
+  const srcName = sourceDepotId ? sourceDepotNom : depots.find(d => d.id === Number(actualSourceId))?.nom;
+
   // Calculate specific stock for the selected source depot
   const sourceStock = item.stocks?.find(s => 
-    s.depot_id === Number(actualSourceId)
+    s.depot_nom?.toLowerCase() === srcName?.toLowerCase()
   )?.quantite || 0;
 
   const handleTransfer = async (e: React.FormEvent) => {
@@ -276,7 +278,6 @@ export function TransferModal({ isOpen, onClose, item, sourceDepotId, sourceDepo
     setError(null);
 
     try {
-      const srcName = sourceDepotId ? sourceDepotNom : depots.find(d => d.id === Number(actualSourceId))?.nom;
       const dstName = depots.find(d => d.id === Number(destDepotId))?.nom;
 
       const res = await fetch("/api/stock/transfer", {
