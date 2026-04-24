@@ -326,6 +326,7 @@ export function ClientSelectorModal({ onClose, onSelect }: { onClose: () => void
 export function StockSelectorModal({ onClose, onSelect }: { onClose: () => void; onSelect: (product: any) => void }) {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const fetchCementStock = async () => {
@@ -333,12 +334,7 @@ export function StockSelectorModal({ onClose, onSelect }: { onClose: () => void;
         const res = await fetch("/api/articles");
         const data = await res.json();
         if (Array.isArray(data)) {
-          // Filter to show only cement related items
-          const cementProducts = data.filter(a => 
-            a.designation.toLowerCase().includes('ciment') || 
-            (a.famille && a.famille.toLowerCase().includes('ciment'))
-          );
-          setProducts(cementProducts);
+          setProducts(data);
         }
       } catch (err) {
         console.error("Error fetching stock:", err);
@@ -349,20 +345,39 @@ export function StockSelectorModal({ onClose, onSelect }: { onClose: () => void;
     fetchCementStock();
   }, []);
 
+  const filtered = products.filter(p => 
+    p.designation?.toLowerCase().includes(search.toLowerCase()) || 
+    p.reference?.toLowerCase().includes(search.toLowerCase()) ||
+    (p.famille && p.famille.toLowerCase().includes(search.toLowerCase()))
+  );
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
-      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl overflow-hidden animate-in zoom-in-95 duration-300">
+      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[80vh]">
         <div className="flex justify-between items-center p-6 border-b border-slate-100">
-          <h2 className="text-xl font-black text-slate-800">Sélectionner un Produit Ciment</h2>
+          <h2 className="text-xl font-black text-slate-800">Sélectionner un Produit</h2>
           <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full"><X size={24} /></button>
         </div>
         
-        <div className="p-6 max-h-[60vh] overflow-y-auto">
+        <div className="p-4 border-b border-slate-100 bg-slate-50">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+            <input 
+              type="text" 
+              placeholder="Rechercher par nom, référence..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            />
+          </div>
+        </div>
+
+        <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
           {loading ? (
              <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
           ) : (
-            <div className="grid grid-cols-1 gap-3">
-              {products.map(p => {
+            <div className="grid grid-cols-1 gap-2">
+              {filtered.map(p => {
                 const totalStock = p.stocks?.reduce((acc: number, s: any) => acc + Number(s.quantite || 0), 0) || 0;
                 // Just use the first depot for simplified display
                 const depot = p.stocks?.[0]?.depot_nom || 'Magasin';
@@ -379,13 +394,13 @@ export function StockSelectorModal({ onClose, onSelect }: { onClose: () => void;
                     </div>
                     <div className="text-right">
                       <p className="font-black text-emerald-600">{p.p_vente_ht} FCFA</p>
-                      <p className="text-xs font-bold text-slate-500 mt-1">Stock: {totalStock} t</p>
+                      <p className="text-xs font-bold text-slate-500 mt-1">Stock: {totalStock}</p>
                     </div>
                   </button>
                 );
               })}
-              {products.length === 0 && (
-                <div className="text-center p-8 text-slate-500 font-bold">Aucun produit ciment trouvé dans le stock.</div>
+              {filtered.length === 0 && (
+                <div className="text-center p-8 text-slate-500 font-bold">Aucun produit trouvé.</div>
               )}
             </div>
           )}
