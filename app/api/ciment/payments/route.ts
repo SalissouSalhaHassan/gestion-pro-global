@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth_helper";
-import { v4 as uuidv4 } from "uuid";
+
 
 export async function GET(request: Request) {
   try {
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Données de paiement invalides" }, { status: 400 });
     }
 
-    const paymentId = uuidv4();
+    const paymentId = crypto.randomUUID();
     const datePay = date || new Date().toISOString().split('T')[0];
 
     // AVANCE CLIENT LOGIC
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
         if (errUpd) throw errUpd;
 
         // Log usage
-        const usageId = uuidv4();
+        const usageId = crypto.randomUUID();
         const { error: errUsage } = await supabase
           .from("paiements")
           .insert({

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { 
   Plus, Search, Edit2, Trash2, Printer, DollarSign, Loader2, Package, Scale, CreditCard, Clock, AlertTriangle
 } from "lucide-react";
-import { useSession } from "next-auth/react";
 
 // Types
 export type CimentShipment = {
@@ -33,7 +32,8 @@ export type CimentShipment = {
 import { CimentEntryModal, CimentPaymentModal } from "./CimentModals";
 
 export default function CimentPage() {
-  const { data: session } = useSession();
+  const [session, setSession] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [shipments, setShipments] = useState<CimentShipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchCamion, setSearchCamion] = useState("");
@@ -49,6 +49,19 @@ export default function CimentPage() {
     totalEncaisse: 0,
     resteAPayer: 0
   });
+
+  useEffect(() => {
+    const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
+    if (cookie) {
+      try {
+        const decoded = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
+        setSession(decoded);
+        setIsAdmin(decoded?.admin === "Oui" || decoded?.role === 1 || decoded?.role === "1");
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, []);
 
   const fetchShipments = async () => {
     setLoading(true);
@@ -245,7 +258,7 @@ export default function CimentPage() {
                       <button onClick={() => openEditEntry(s)} title="Modifier" className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
                         <Edit2 size={18} />
                       </button>
-                      {session?.user?.role === "ADMIN" && (
+                      {isAdmin && (
                         <button title="Supprimer" onClick={() => handleDelete(s.id)} className="p-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg transition-colors">
                           <Trash2 size={18} />
                         </button>
