@@ -335,6 +335,8 @@ export function StockSelectorModal({ onClose, onSelect }: { onClose: () => void;
         const data = await res.json();
         if (Array.isArray(data)) {
           setProducts(data);
+        } else if (data && Array.isArray(data.items)) {
+          setProducts(data.items);
         }
       } catch (err) {
         console.error("Error fetching stock:", err);
