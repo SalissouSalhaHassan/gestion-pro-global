@@ -2,8 +2,10 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { getServerSession, isAdminOrManager } from "@/lib/auth_helper";
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
   try {
+    const params = await props.params;
+    const shipmentId = params.id;
     const supabase = await createClient();
     const user = await getServerSession();
     
@@ -16,7 +18,6 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       return NextResponse.json({ error: "Action réservée aux administrateurs" }, { status: 403 });
     }
 
-    const shipmentId = params.id;
     if (!shipmentId) {
       return NextResponse.json({ error: "ID manquant" }, { status: 400 });
     }
