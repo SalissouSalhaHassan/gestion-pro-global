@@ -21,7 +21,8 @@ import {
   Shield,
   ScanLine,
   Truck,
-  Home
+  Home,
+  Construction
 } from "lucide-react";
 import UnifiedSearch from "@/components/UnifiedSearch";
 
@@ -62,6 +63,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/stock", label: "Gestion du Stock", icon: Boxes },
     { href: "/dashboard/stock/transit", label: "Suivi Transits", icon: Truck },
     { href: "/dashboard/inventory", label: "Jeu d'Inventaire", icon: ScanLine },
+    { href: "/dashboard/ciment", label: "Gestion Ciment", icon: Construction },
     { href: "/dashboard/mouvements", label: "Journal d'Audit", icon: ArrowRightLeft },
     { href: "/dashboard/clients", label: "Clients", icon: Users },
     { href: "/dashboard/invoices", label: "Factures", icon: FileText },
