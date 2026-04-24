@@ -74,7 +74,12 @@ export async function GET(request: NextRequest) {
           .join(", ");
       }
       
-      let paymentStatus = 'À jour';
+      const monthsPaid = Math.floor(totalPaid / (c.loyer_mensuel || 1));
+      const echeanceDate = new Date(startYear, startMonth - 1 + monthsPaid, 1);
+      const echeance = echeanceDate.toLocaleDateString('fr-FR');
+      const annee = echeanceDate.getFullYear().toString();
+      
+      let paymentStatus = 'Payé';
       if (retards > 0) paymentStatus = 'Impayé';
 
       return {
@@ -86,6 +91,9 @@ export async function GET(request: NextRequest) {
         retards: retards,
         mois_impayes: moisImpayesText,
         statut_paiement: paymentStatus,
+        etat: paymentStatus,
+        annee: annee,
+        echeance: echeance,
         statut_contrat: c.statut
       };
     });

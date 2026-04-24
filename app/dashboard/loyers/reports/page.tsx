@@ -207,19 +207,22 @@ export default function LoyerReportsPage() {
                 <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Total Payé</th>
                 <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest text-rose-600">Retards (F)</th>
                 <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest text-rose-600">Mois Impayés</th>
+                <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest text-indigo-600">Année</th>
+                <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest text-indigo-600">État</th>
+                <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest text-indigo-600">Échéance</th>
                 <th className="px-6 py-4 font-black uppercase text-[10px] tracking-widest">Statut</th>
               </tr>
             </thead>
             <tbody>
               {loadingDetailed ? (
                 <tr>
-                  <td colSpan={6} className="py-20 text-center">
+                  <td colSpan={9} className="py-20 text-center">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto text-rose-500" />
                   </td>
                 </tr>
               ) : detailedReport.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-20 text-center text-slate-400 font-bold">Aucune donnée trouvée pour cette période.</td>
+                  <td colSpan={9} className="py-20 text-center text-slate-400 font-bold">Aucune donnée trouvée pour cette période.</td>
                 </tr>
               ) : (
                 detailedReport.map((row, i) => (
@@ -234,9 +237,9 @@ export default function LoyerReportsPage() {
                       {fmt(row.retards)} F
                     </td>
                     <td className="px-6 py-4">
-                      {row.mois_impayes > 0 ? (
+                      {row.mois_impayes !== 'À jour' ? (
                         <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-600 px-3 py-1 rounded-full font-black text-[10px] uppercase">
-                          <AlertCircle size={12} /> {row.mois_impayes} mois
+                          <AlertCircle size={12} /> {row.mois_impayes}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full font-black text-[10px] uppercase">
@@ -244,6 +247,15 @@ export default function LoyerReportsPage() {
                         </span>
                       )}
                     </td>
+                    <td className="px-6 py-4 font-black text-slate-700">{row.annee}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                        row.etat === 'Payé' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                      }`}>
+                        {row.etat}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-black text-slate-700">{row.echeance}</td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
                         row.statut_contrat === 'Actif' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500'
