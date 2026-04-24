@@ -95,13 +95,24 @@ export default function DepotManagementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.nom) return;
+    const trimmedNom = formData.nom.trim();
+    if (!trimmedNom) return;
 
     setIsSubmitting(true);
     try {
+      // Check for duplicates before submitting (excluding current record)
+      const duplicate = depots.find(d => 
+        d.nom.toLowerCase() === trimmedNom.toLowerCase() && 
+        d.id !== formData.id
+      );
+
+      if (duplicate) {
+        throw new Error(`Le nom "${trimmedNom}" est déjà utilisé par un autre dépôt.`);
+      }
+
       const payload = {
-        nom: formData.nom,
-        emplacement: formData.emplacement,
+        nom: trimmedNom,
+        emplacement: formData.emplacement.trim(),
         responsable: formData.responsable,
         is_active: formData.is_active,
         updated_at: new Date().toISOString()
@@ -123,7 +134,11 @@ export default function DepotManagementPage() {
       handleCloseModal();
       loadData();
     } catch (err: any) {
-      alert("Erreur: " + err.message);
+      if (err.message?.includes("unique_constraint") || err.message?.includes("duplicate key")) {
+        alert("Erreur: Ce nom de dépôt existe déjà.");
+      } else {
+        alert("Erreur: " + err.message);
+      }
     } finally {
       setIsSubmitting(false);
     }
