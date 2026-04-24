@@ -19,6 +19,7 @@ export function CimentEntryModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stockSelectorOpen, setStockSelectorOpen] = useState(false);
+  const [clientSelectorOpen, setClientSelectorOpen] = useState(false);
   const [totalCalculated, setTotalCalculated] = useState(0);
 
   useEffect(() => {
@@ -59,6 +60,14 @@ export function CimentEntryModal({
       pu: product.p_vente_ht
     }));
     setStockSelectorOpen(false);
+  };
+
+  const handleClientSelect = (client: any) => {
+    setFormData(prev => ({
+      ...prev,
+      client_tel: client.nom + (client.tel ? ` / ${client.tel}` : "")
+    }));
+    setClientSelectorOpen(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -117,7 +126,12 @@ export function CimentEntryModal({
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">Téléphone/Nom Client *</label>
-                    <input required type="text" name="client_tel" value={formData.client_tel || ""} onChange={handleChange} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all font-medium" />
+                    <div className="flex gap-2">
+                      <input required type="text" name="client_tel" value={formData.client_tel || ""} onChange={handleChange} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all font-medium" />
+                      <button type="button" onClick={() => setClientSelectorOpen(true)} className="px-4 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors shrink-0">
+                        <Search size={20} />
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">Ciment / Destination *</label>
@@ -214,6 +228,94 @@ export function CimentEntryModal({
       {stockSelectorOpen && (
         <StockSelectorModal onClose={() => setStockSelectorOpen(false)} onSelect={handleProductSelect} />
       )}
+
+      {clientSelectorOpen && (
+        <ClientSelectorModal onClose={() => setClientSelectorOpen(false)} onSelect={handleClientSelect} />
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CLIENT SELECTOR MODAL
+   ═══════════════════════════════════════════════════════════════════ */
+export function ClientSelectorModal({ onClose, onSelect }: { onClose: () => void; onSelect: (client: any) => void }) {
+  const [clients, setClients] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        const res = await fetch("/api/clients");
+        const data = await res.json();
+        if (Array.isArray(data)) setClients(data);
+      } catch (err) {
+        console.error("Error fetching clients:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchClients();
+  }, []);
+
+  const filtered = clients.filter(c => 
+    c.nom?.toLowerCase().includes(search.toLowerCase()) || 
+    c.tel?.toLowerCase().includes(search.toLowerCase()) ||
+    c.ref_client?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[80vh]">
+        <div className="flex justify-between items-center p-6 border-b border-slate-100">
+          <h2 className="text-xl font-black text-slate-800">Sélectionner un Client</h2>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full"><X size={24} /></button>
+        </div>
+        
+        <div className="p-4 border-b border-slate-100 bg-slate-50">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+            <input 
+              type="text" 
+              placeholder="Rechercher par nom, téléphone..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-medium focus:border-blue-500 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+            />
+          </div>
+        </div>
+
+        <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
+          {loading ? (
+             <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
+          ) : (
+            <div className="grid grid-cols-1 gap-2">
+              {filtered.map(c => (
+                <button 
+                  key={c.id}
+                  onClick={() => onSelect(c)}
+                  className="flex justify-between items-center p-4 bg-white hover:bg-blue-50 border border-slate-100 hover:border-blue-200 rounded-2xl transition-all text-left group"
+                >
+                  <div>
+                    <p className="font-bold text-slate-800 text-lg group-hover:text-blue-700">{c.nom}</p>
+                    <p className="text-sm font-bold text-slate-400 mt-1">{c.tel || "Pas de téléphone"}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-slate-400 uppercase">Solde Débiteur</p>
+                    <p className={`font-black text-sm mt-1 ${c.credit_facture > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                      {Number(c.credit_facture || 0).toLocaleString('fr-FR')} F
+                    </p>
+                  </div>
+                </button>
+              ))}
+              {filtered.length === 0 && (
+                <div className="text-center p-8 text-slate-500 font-bold">Aucun client trouvé.</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
