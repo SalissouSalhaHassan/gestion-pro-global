@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { X, Search, Plus, CreditCard, Trash2, Loader2, AlertCircle, Printer } from "lucide-react";
 import type { CimentShipment } from "./page";
+import { createClient } from "@/lib/supabase/client";
 
 /* ═══════════════════════════════════════════════════════════════════
    CIMENT ENTRY MODAL
@@ -417,6 +418,16 @@ export function StockSelectorModal({ onClose, onSelect }: { onClose: () => void;
    ═══════════════════════════════════════════════════════════════════ */
 export function CimentPrintModal({ shipment, onClose }: { shipment: any; onClose: () => void }) {
   const [format, setFormat] = useState<'A4' | 'A5' | 'Ticket'>('A4');
+  const [company, setCompany] = useState<any>(null);
+
+  useEffect(() => {
+    async function fetchCompany() {
+      const supabase = createClient();
+      const { data } = await supabase.from("informations_entreprise").select("*").limit(1);
+      if (data && data.length > 0) setCompany(data[0]);
+    }
+    fetchCompany();
+  }, []);
 
   const numberToWordsFr = (total: number) => {
     if (total === 0) return "zéro";
@@ -498,8 +509,13 @@ export function CimentPrintModal({ shipment, onClose }: { shipment: any; onClose
         
         <div id="printable-invoice" className="p-4 md:p-6 text-black font-sans leading-tight">
           
+          {/* TOP LOGO/INFO */}
           <div className="mb-2">
-            <h1 className="text-xl font-black uppercase tracking-tight">CIMENT & LOGISTIQUE</h1>
+            <h1 className="text-xl font-black uppercase tracking-tight">{company?.nom_entreprise || "CIMENT & LOGISTIQUE"}</h1>
+            <p className="text-xs font-black uppercase mt-0.5">{company?.adresse || ""}</p>
+            <div className="text-[10px] font-medium mt-0.5">
+              <p>Tél: {company?.telephone || ""} | NIF: {company?.nif || ""} | RC: {company?.rc || ""}</p>
+            </div>
             <div className="w-full h-[1.5px] bg-black mt-2"></div>
           </div>
 
