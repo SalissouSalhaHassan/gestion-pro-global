@@ -27,6 +27,7 @@ import {
   BarChart3
 } from "lucide-react";
 import UnifiedSearch from "@/components/UnifiedSearch";
+import NotificationBell from "@/components/NotificationBell";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -164,8 +165,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </>
         )}
 
-        <div className="relative z-[60] mb-8 print:hidden">
-          {!isPos && <UnifiedSearch />}
+        <div className="relative z-[60] mb-8 print:hidden flex items-center gap-4">
+          {!isPos && (
+            <>
+              <div className="flex-1">
+                <UnifiedSearch />
+              </div>
+              <NotificationBell />
+            </>
+          )}
         </div>
         
         <div className="relative z-10">

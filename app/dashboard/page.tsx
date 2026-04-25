@@ -11,8 +11,19 @@ import {
   Calendar as CalendarIcon,
   Database,
   Loader2,
-  Package
+  Package,
+  ArrowRightLeft
 } from "lucide-react";
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  Cell
+} from "recharts";
 
 export default function DashboardPage() {
   const [data, setData] = useState<{
@@ -170,33 +181,79 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-[#0f172a] rounded-[40px] p-8 shadow-2xl overflow-hidden relative group">
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+        <div className="bg-[#0f172a] rounded-[40px] p-8 shadow-2xl overflow-hidden relative group min-h-[400px]">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
           <div className="relative z-10 h-full flex flex-col">
-            <h2 className="text-xl font-black text-white mb-2">Performance du Stock</h2>
-            <p className="text-slate-400 text-sm font-medium mb-8">Analyse des sorties (ventes) sur les 7 derniers jours.</p>
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-xl font-black text-white mb-1">Performance du Stock</h2>
+                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Sorties sur 7 jours</p>
+              </div>
+              <div className="p-3 bg-white/5 rounded-2xl border border-white/10">
+                <TrendingUp size={20} className="text-indigo-400" />
+              </div>
+            </div>
             
-            <div className="flex-1 flex items-end gap-3 pb-4">
+            <div className="flex-1 w-full">
               {loading ? (
-                 <div className="w-full h-32 flex items-center justify-center opacity-20">
+                 <div className="w-full h-full flex items-center justify-center opacity-20">
                     <Database size={48} className="text-white animate-pulse" />
                  </div>
-              ) : data?.chartData.map((val, i) => (
-                <div 
-                  key={i} 
-                  className="flex-1 bg-gradient-to-t from-indigo-600 to-purple-600 rounded-t-xl transition-all duration-700 hover:brightness-125 cursor-pointer relative group/bar"
-                  style={{ height: `${(val / maxVal) * 100}%`, minHeight: '4px' }}
-                >
-                   <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white text-[10px] font-black text-slate-900 px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity">
-                      {val}
-                   </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-between mt-2 pt-4 border-t border-white/5">
-                {['J-6','J-5','J-4','J-3','J-2','Hier','Auj.'].map((label, i) => (
-                   <span key={i} className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">{label}</span>
-                ))}
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={(data?.chartData || []).map((val, i) => ({
+                      name: ['J-6','J-5','J-4','J-3','J-2','Hier','Auj.'][i],
+                      value: val
+                    }))}
+                    margin={{ top: 0, right: 0, left: -20, bottom: 0 }}
+                  >
+                    <defs>
+                      <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#818cf8" />
+                        <stop offset="100%" stopColor="#4f46e5" />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#64748b', fontSize: 10, fontWeight: 900 }}
+                      dy={10}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#64748b', fontSize: 10, fontWeight: 900 }}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: 'rgba(255,255,255,0.05)', radius: 12 }}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-white p-3 rounded-2xl shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{payload[0].payload.name}</p>
+                              <p className="text-lg font-black text-slate-900">{payload[0].value} <span className="text-xs text-slate-400">Unités</span></p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar 
+                      dataKey="value" 
+                      radius={[10, 10, 0, 0]} 
+                      fill="url(#barGradient)"
+                      barSize={40}
+                    >
+                      {(data?.chartData || []).map((entry, index) => (
+                        <Cell key={`cell-${index}`} className="hover:brightness-125 transition-all duration-300" />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
         </div>
