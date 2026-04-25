@@ -79,13 +79,34 @@ export default function RecordFormDialog({ open, onClose, onSuccess, type, vehic
 
     setLoading(true);
     try {
+      // Nettoyage des données pour éviter les erreurs de type dans la DB
+      const submissionData = { ...formData, record_type: type };
+      
+      // Convertir en nombres ou null
+      if (submissionData.amount === "") delete submissionData.amount;
+      else submissionData.amount = Number(submissionData.amount);
+      
+      if (submissionData.km_departure === "") delete submissionData.km_departure;
+      else submissionData.km_departure = Number(submissionData.km_departure);
+      
+      if (submissionData.km_arrival === "") delete submissionData.km_arrival;
+      else submissionData.km_arrival = Number(submissionData.km_arrival);
+
+      // Supprimer l'ID s'il est vide (cas d'une nouvelle insertion)
+      if (!submissionData.id || submissionData.id === "") {
+        delete submissionData.id;
+      }
+
       const res = await fetch("/api/vehicles/records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, record_type: type }),
+        body: JSON.stringify(submissionData),
       });
 
-      if (!res.ok) throw new Error("Erreur lors de l'enregistrement");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Erreur lors de l'enregistrement");
+      }
       
       toast.success("Enregistrement réussi");
       onSuccess();

@@ -47,7 +47,10 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
       
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase vehicle_records POST error:', error);
+      throw error;
+    }
 
     // Auto-update administrative dates in vehicle profile
     const cat = (data.category || '').toLowerCase();
@@ -62,12 +65,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (Object.keys(vehicleUpdates).length > 0) {
-      await supabase.from('voitures').update(vehicleUpdates).eq('id', data.voiture_id);
+      const { error: updateError } = await supabase.from('voitures').update(vehicleUpdates).eq('id', data.voiture_id);
+      if (updateError) console.error('Vehicle auto-update error:', updateError);
     }
 
     return NextResponse.json(result);
   } catch (error: any) {
-    console.error('Vehicle records POST error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Vehicle records POST full error:', error);
+    return NextResponse.json({ 
+      error: error.message || 'Erreur inconnue',
+      details: error.details || error.hint || null
+    }, { status: 500 });
   }
 }
