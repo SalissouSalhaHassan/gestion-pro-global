@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { 
   Plus, Search, Car, Truck, Wrench, Wallet, AlertTriangle, 
-  Trash2, Edit3, Filter, Loader2, Info, CheckCircle2, XCircle
+  Trash2, Edit3, Filter, Loader2, Info, CheckCircle2, XCircle, Hash
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
