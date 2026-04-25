@@ -135,7 +135,7 @@ export default function ContractFormDialog({ open, onClose, onSaved, contractId 
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-y-auto overflow-x-hidden bg-gradient-to-br from-white via-slate-50/80 to-indigo-50/30 border-white/60 backdrop-blur-2xl shadow-2xl rounded-[28px] p-0">
+      <DialogContent className="w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-y-auto overflow-x-hidden bg-gradient-to-br from-white via-slate-50/80 to-indigo-50/30 border-white/60 backdrop-blur-2xl shadow-2xl rounded-[28px] p-0">
         <DialogHeader className="px-8 pt-8 pb-4 border-b border-slate-100">
           <DialogTitle className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
             <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl shadow-lg shadow-indigo-500/30">
