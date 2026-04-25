@@ -419,15 +419,22 @@ export function StockSelectorModal({ onClose, onSelect }: { onClose: () => void;
 export function CimentPrintModal({ shipment, onClose }: { shipment: any; onClose: () => void }) {
   const [format, setFormat] = useState<'A4' | 'A5' | 'Ticket'>('A4');
   const [company, setCompany] = useState<any>(null);
+  const [payments, setPayments] = useState<any[]>([]);
 
   useEffect(() => {
-    async function fetchCompany() {
+    async function fetchData() {
       const supabase = createClient();
-      const { data } = await supabase.from("informations_entreprise").select("*").limit(1);
-      if (data && data.length > 0) setCompany(data[0]);
+      
+      const { data: comp } = await supabase.from("informations_entreprise").select("*").limit(1);
+      if (comp && comp.length > 0) setCompany(comp[0]);
+
+      if (shipment?.id) {
+        const { data: pays } = await supabase.from("ciment_paiements").select("*").eq("ciment_id", shipment.id).order("date_paiement", { ascending: true });
+        if (pays) setPayments(pays);
+      }
     }
-    fetchCompany();
-  }, []);
+    fetchData();
+  }, [shipment?.id]);
 
   const numberToWordsFr = (total: number) => {
     if (total === 0) return "zéro";
@@ -597,6 +604,37 @@ export function CimentPrintModal({ shipment, onClose }: { shipment: any; onClose
               <span className="font-black uppercase text-[8px] leading-none shrink-0">RESTE À PAYER</span>
               <span className="text-[11px] font-[900] mt-0.5 truncate">{actualRemaining.toLocaleString('fr-FR')}</span>
             </div>
+          </div>
+
+          {/* PAYMENTS HISTORY */}
+          <div className="mb-4">
+            <h4 className="font-black uppercase text-xs mb-1 underline">Historique des Règlements</h4>
+            <table className="w-full border border-black border-collapse text-[10px] table-fixed">
+              <thead>
+                <tr className="bg-[#ebebeb] border-b border-black">
+                  <th className="border-r border-black p-0.5 w-[25%] font-black">Date</th>
+                  <th className="border-r border-black p-0.5 w-[35%] font-black">Moyen</th>
+                  <th className="border-r border-black p-0.5 w-[15%] font-black">Réf</th>
+                  <th className="p-0.5 w-[25%] font-black">Montant</th>
+                </tr>
+              </thead>
+              <tbody className="font-bold">
+                {payments.length > 0 ? (
+                  payments.map((p, i) => (
+                    <tr key={i} className="border-b border-black last:border-b-0">
+                      <td className="border-r border-black p-0.5 text-center">{new Date(p.date_paiement).toLocaleDateString("fr-FR")}</td>
+                      <td className="border-r border-black p-0.5 text-center break-words leading-tight">{p.moyen_paiement || "Espèces"}</td>
+                      <td className="border-r border-black p-0.5 text-center break-words leading-tight">{p.reference || "-"}</td>
+                      <td className="p-0.5 text-right px-2 whitespace-nowrap">
+                        {Number(p.montant).toLocaleString('fr-FR')}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr className="border-b border-black italic"><td colSpan={4} className="p-1 text-center">Aucun règlement</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
 
           <div className="mt-12 flex justify-between items-start text-[10px] font-black px-2">
