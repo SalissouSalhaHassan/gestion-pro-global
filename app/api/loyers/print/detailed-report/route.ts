@@ -115,6 +115,23 @@ export async function GET(request: NextRequest) {
       </tr>
     `).join('');
 
+    // Totals calculations
+    const totalEncaisseMois = payments
+      .filter(p => {
+        if (!p.date_paiement) return false;
+        const d = new Date(p.date_paiement);
+        return d.getFullYear() === year && (d.getMonth() + 1) === month;
+      })
+      .reduce((sum, p) => sum + (p.montant || 0), 0);
+
+    const totalExpectedMois = contracts
+      .filter(c => c.statut === 'Actif')
+      .reduce((sum, c) => sum + (c.loyer_mensuel || 0), 0);
+
+    const totalImpayeMois = Math.max(0, totalExpectedMois - totalEncaisseMois);
+
+    const totalArrieres = filtered.reduce((sum, r) => sum + r.retards, 0);
+
     const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -181,6 +198,22 @@ export async function GET(request: NextRequest) {
                 ${rowsHtml || '<tr><td colspan="9" class="text-center">Aucune donnée trouvée.</td></tr>'}
             </tbody>
         </table>
+
+        <div style="display: flex; justify-content: space-between; margin-top: 20px; margin-bottom: 50px;">
+            <div style="background: #f8fafc; border: 2px solid #0f172a; padding: 10px 15px; width: 30%; text-align: center;">
+                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #64748b; margin: 0 0 5px 0;">TOTAL ENCAISSÉ (${monthName.toUpperCase()})</p>
+                <p style="font-size: 14px; font-weight: 900; color: #059669; margin: 0;">${Number(totalEncaisseMois).toLocaleString('fr-FR')} F</p>
+            </div>
+            <div style="background: #f8fafc; border: 2px solid #0f172a; padding: 10px 15px; width: 30%; text-align: center;">
+                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #64748b; margin: 0 0 5px 0;">TOTAL IMPAYÉ (${monthName.toUpperCase()})</p>
+                <p style="font-size: 14px; font-weight: 900; color: #e11d48; margin: 0;">${Number(totalImpayeMois).toLocaleString('fr-FR')} F</p>
+            </div>
+            <div style="background: #0f172a; border: 2px solid #0f172a; padding: 10px 15px; width: 30%; text-align: center;">
+                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #94a3b8; margin: 0 0 5px 0;">TOTAL ARRIÉRÉS ${year}</p>
+                <p style="font-size: 14px; font-weight: 900; color: #ffffff; margin: 0;">${Number(totalArrieres).toLocaleString('fr-FR')} F</p>
+            </div>
+        </div>
+
         <div style="margin-top: 50px; text-align: center; font-size: 9px; font-weight: 900; text-transform: uppercase; color: #94a3b8; letter-spacing: 2px;">
             Document de Gestion Interne • ${company?.nom_entreprise || "GESTION PRO"}
         </div>
