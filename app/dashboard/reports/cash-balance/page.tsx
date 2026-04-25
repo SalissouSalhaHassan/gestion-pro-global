@@ -31,7 +31,8 @@ export default function CashBalancePage() {
   const [filters, setFilters] = useState({ 
     start: new Date().toISOString().split("T")[0], 
     end: new Date().toISOString().split("T")[0], 
-    cashier: "Tous"
+    cashier: "Tous",
+    type: "Tous"
   });
 
   const [userSession, setUserSession] = useState<any>(null);
@@ -177,6 +178,23 @@ export default function CashBalancePage() {
                 <User size={18} className="text-slate-400" />
                 <span className="font-black text-slate-700 uppercase tracking-tight">{userSession?.username}</span>
              </div>
+             <div className="h-8 w-px bg-slate-100 mx-2 hidden md:block"></div>
+             <div className="flex items-center gap-3">
+                <Filter size={18} className="text-slate-400" />
+                <select 
+                   className="bg-transparent font-black text-slate-700 outline-none cursor-pointer"
+                   value={filters.type}
+                   onChange={(e) => setFilters({...filters, type: e.target.value})}
+                >
+                   <option value="Tous">Tous les types</option>
+                   <option value="Vente (Caisse)">Ventes</option>
+                   <option value="Paiement Ciment">Ciment</option>
+                   <option value="Paiement Loyer">Loyers</option>
+                   <option value="Dépense (Administrative)">Dépenses</option>
+                   <option value="Avance Client">Avances</option>
+                   <option value="Retrait">Retraits</option>
+                </select>
+             </div>
            </>
          )}
       </div>
@@ -223,6 +241,7 @@ export default function CashBalancePage() {
                   <tr className="bg-white border-b border-slate-50">
                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Opération</th>
                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Référence</th>
+                     <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Type</th>
                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Caissier / Lieu</th>
                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Entrée</th>
                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Sortie</th>
@@ -231,7 +250,7 @@ export default function CashBalancePage() {
                <tbody className="divide-y divide-slate-50">
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="py-32 text-center">
+                      <td colSpan={6} className="py-32 text-center">
                          <div className="relative w-20 h-20 mx-auto mb-6">
                             <div className="absolute inset-0 border-4 border-indigo-100 rounded-full"></div>
                             <div className="absolute inset-0 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div>
@@ -240,15 +259,17 @@ export default function CashBalancePage() {
                          <p className="font-black text-slate-400 animate-pulse">Calcul de la position financière...</p>
                       </td>
                     </tr>
-                  ) : data?.entries.length === 0 ? (
+                  ) : (data?.entries || []).filter(e => filters.type === "Tous" || e.type === filters.type).length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-32 text-center opacity-30 grayscale">
+                      <td colSpan={6} className="py-32 text-center opacity-30 grayscale">
                          <Scale size={64} className="mx-auto mb-4" />
-                         <p className="font-black text-lg">Aucun mouvement financier sur cette période.</p>
+                         <p className="font-black text-lg">Aucun mouvement financier trouvé.</p>
                       </td>
                     </tr>
                   ) : (
-                    data?.entries.map((entry, i) => (
+                    (data?.entries || [])
+                    .filter(e => filters.type === "Tous" || e.type === filters.type)
+                    .map((entry, i) => (
                       <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-8 py-6">
                            <div className="flex items-center gap-4">
@@ -256,7 +277,7 @@ export default function CashBalancePage() {
                                  {entry.entree > 0 ? <ArrowUpRight size={18}/> : <ArrowDownRight size={18}/>}
                               </div>
                               <div>
-                                 <p className="font-black text-slate-800 text-sm italic">{entry.type}</p>
+                                 <p className="font-black text-slate-800 text-sm tracking-tight italic">Transaction</p>
                                  <p className="text-[10px] font-bold text-slate-400 uppercase">{new Date(entry.date).toLocaleDateString('fr-FR')} • {entry.moyen}</p>
                               </div>
                            </div>
@@ -266,6 +287,15 @@ export default function CashBalancePage() {
                               <FileText size={14} className="text-slate-300" />
                               <span className="font-black text-slate-600 text-[13px] tracking-tight">{entry.ref}</span>
                            </div>
+                        </td>
+                        <td className="px-8 py-6 text-center">
+                           <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${
+                              entry.type.includes("Vente") || entry.type.includes("Paiement") ? "bg-emerald-100 text-emerald-700" :
+                              entry.type.includes("Dépense") || entry.type.includes("Retrait") ? "bg-rose-100 text-rose-700" :
+                              "bg-indigo-100 text-indigo-700"
+                           }`}>
+                              {entry.type}
+                           </span>
                         </td>
                         <td className="px-8 py-6">
                            <div className="flex items-center gap-2 mb-1">
@@ -285,6 +315,7 @@ export default function CashBalancePage() {
                         </td>
                       </tr>
                     ))
+                    )
                   )}
                </tbody>
             </table>

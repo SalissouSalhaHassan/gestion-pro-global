@@ -65,16 +65,33 @@ export async function GET(request: Request) {
     
     const { data: eData } = await eQuery;
 
+    // 5. Cement Payments (Ciment)
+    let cimData: any[] = [];
+    try {
+        let cimQuery = supabase.from("ciment_paiements").select("*");
+        if (start) cimQuery = cimQuery.gte("date_paiement", start);
+        if (end) cimQuery = cimQuery.lte("date_paiement", end);
+        if (cashier && cashier !== "Tous") cimQuery = cimQuery.eq("utilisateur", cashier);
+        const { data } = await cimQuery;
+        cimData = data || [];
+    } catch(e) {}
+
     // MAPPING AND COMBINING
     const entries: any[] = [];
 
     pData?.forEach(p => {
        const fact = Array.isArray(p.factures) ? p.factures[0] : p.factures;
        const adv = Array.isArray(p.avances_clients) ? p.avances_clients[0] : p.avances_clients;
+       
+       let displayType = "Paiement";
+       if (p.montant_regle < 0) displayType = "Retrait";
+       else if (fact) displayType = "Vente (Caisse)";
+       else if (adv) displayType = "Avance Client";
+
        entries.push({
           date: p.date_operation,
           ref: fact?.bl_number || adv?.reference_paiement || "TRANS",
-          type: p.montant_regle < 0 ? "Retrait" : "Paiement",
+          type: displayType,
           moyen: p.moyen_reglement,
           entree: p.montant_regle > 0 ? p.montant_regle : 0,
           sortie: p.montant_regle < 0 ? Math.abs(p.montant_regle) : 0,
@@ -119,6 +136,19 @@ export async function GET(request: Request) {
            sortie: e.montant,
            user: e.operateur,
            emplacement: e.emplacement
+        });
+    });
+
+    cimData?.forEach(cim => {
+        entries.push({
+            date: cim.date_paiement,
+            ref: cim.reference || `CIM-${cim.id.slice(0, 8)}`,
+            type: "Paiement Ciment",
+            moyen: cim.moyen_paiement,
+            entree: cim.montant,
+            sortie: 0,
+            user: cim.utilisateur,
+            emplacement: ""
         });
     });
 

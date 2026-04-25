@@ -184,6 +184,7 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
                     <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider">
                         <th className="p-3 text-left w-20">Date</th>
                         <th className="p-3 text-left">Référence</th>
+                        <th className="p-3 text-left">Type</th>
                         <th className="p-3 text-left">Opération</th>
                         <th className="p-3 text-left">Mode</th>
                         <th className="p-3 text-right">Entrée</th>
@@ -196,15 +197,16 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
                         <tr key={i} className={`border-b border-slate-100 last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
                             <td className="p-3 text-slate-500">{new Date(item.date).toLocaleDateString('fr-FR')}</td>
                             <td className="p-3 text-slate-900">{item.ref}</td>
-                            <td className="p-3">
-                                <span className={`px-2 py-0.5 rounded-full text-[9px] ${
-                                    item.type.includes('Dépense') ? 'bg-rose-100 text-rose-600' : 
-                                    item.type.includes('Dépôt') ? 'bg-emerald-100 text-emerald-600' : 
-                                    'bg-indigo-100 text-indigo-600'
+                            <td className="p-3 text-center">
+                                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter ${
+                                    item.type.includes('Vente') || item.type.includes('Paiement') ? 'bg-emerald-100 text-emerald-700' : 
+                                    item.type.includes('Dépense') || item.type.includes('Retrait') ? 'bg-rose-100 text-rose-700' : 
+                                    'bg-indigo-100 text-indigo-700'
                                 }`}>
                                     {item.type}
                                 </span>
                             </td>
+                            <td className="p-3 text-slate-500 italic">Transaction</td>
                             <td className="p-3 text-slate-600 font-medium">{item.moyen}</td>
                             <td className="p-3 text-right text-emerald-600">
                                 {item.entree > 0 ? `+${new Intl.NumberFormat('fr-FR').format(item.entree)}` : '-'}
