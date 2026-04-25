@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     if (statusFilter === 'Paid') filtered = reports.filter(r => r.retards <= 0);
     else if (statusFilter === 'Unpaid') filtered = reports.filter(r => r.retards > 0);
 
-    const monthName = new Date(year, month - 1).toLocaleString('fr-FR', { month: 'long' });
+    const monthName = monthParam === 'All' ? 'ANNÉE' : (month === 1 ? 'Janvier' : month === 2 ? 'Février' : month === 3 ? 'Mars' : month === 4 ? 'Avril' : month === 5 ? 'Mai' : month === 6 ? 'Juin' : month === 7 ? 'Juillet' : month === 8 ? 'Août' : month === 9 ? 'Septembre' : month === 10 ? 'Octobre' : month === 11 ? 'Novembre' : 'Décembre');
     const today = new Date();
 
     const rowsHtml = filtered.map((row) => `
@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
 
     const totalArrieres = filtered.reduce((sum, r) => sum + r.retards, 0);
 
-    const monthName = monthParam === 'All' ? 'ANNÉE' : (month === 1 ? 'Janvier' : month === 2 ? 'Février' : month === 3 ? 'Mars' : month === 4 ? 'Avril' : month === 5 ? 'Mai' : month === 6 ? 'Juin' : month === 7 ? 'Juillet' : month === 8 ? 'Août' : month === 9 ? 'Septembre' : month === 10 ? 'Octobre' : month === 11 ? 'Novembre' : 'Décembre');
+
 
     let periodLabel = "";
     if (yearParam === 'All') periodLabel = "GLOBAL";
