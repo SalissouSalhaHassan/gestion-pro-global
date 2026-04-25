@@ -22,7 +22,8 @@ import {
   ScanLine,
   Truck,
   Home,
-  Layers
+  Layers,
+  Car
 } from "lucide-react";
 import UnifiedSearch from "@/components/UnifiedSearch";
 
