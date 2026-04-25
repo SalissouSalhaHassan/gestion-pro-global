@@ -92,6 +92,10 @@ export default function RecordFormDialog({ open, onClose, onSuccess, type, vehic
       if (submissionData.km_arrival === "") delete submissionData.km_arrival;
       else submissionData.km_arrival = Number(submissionData.km_arrival);
 
+      // Nettoyer les dates vides pour éviter l'erreur "invalid input syntax for type date"
+      if (!submissionData.start_date || submissionData.start_date === "") delete submissionData.start_date;
+      if (!submissionData.end_date || submissionData.end_date === "") delete submissionData.end_date;
+
       // Supprimer l'ID s'il est vide (cas d'une nouvelle insertion)
       if (!submissionData.id || submissionData.id === "") {
         delete submissionData.id;
