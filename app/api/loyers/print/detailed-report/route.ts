@@ -83,6 +83,7 @@ export async function GET(request: NextRequest) {
       if (retards > 0) paymentStatus = 'Impayé';
 
       return {
+        id: c.id,
         locataire: c.locataire_nom_complet,
         ref: c.ref_locataire,
         loyer: c.loyer_mensuel,
@@ -120,9 +121,11 @@ export async function GET(request: NextRequest) {
     `).join('');
 
     // Totals calculations
+    const filteredTenantIds = new Set(filtered.map(r => r.id));
     const totalEncaisse = payments
       .filter(p => {
         if (!p.date_paiement) return false;
+        if (!filteredTenantIds.has(p.contrat_id)) return false;
         const d = new Date(p.date_paiement);
         const matchY = yearParam === 'All' || d.getFullYear() === parseInt(yearParam);
         const matchM = monthParam === 'All' || (d.getMonth() + 1) === parseInt(monthParam);
