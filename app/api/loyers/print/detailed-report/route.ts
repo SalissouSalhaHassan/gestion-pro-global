@@ -4,9 +4,13 @@ import { createClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
-    const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString());
+    const yearParam = searchParams.get('year') || new Date().getFullYear().toString();
+    const monthParam = searchParams.get('month') || (new Date().getMonth() + 1).toString();
     const statusFilter = searchParams.get('status') || 'All';
+
+    // Parse for calculation bounds
+    const year = yearParam === 'All' ? new Date().getFullYear() : parseInt(yearParam);
+    const month = monthParam === 'All' ? 12 : parseInt(monthParam);
 
     const supabase = await createClient();
     
@@ -116,27 +120,42 @@ export async function GET(request: NextRequest) {
     `).join('');
 
     // Totals calculations
-    const totalEncaisseMois = payments
+    const totalEncaisse = payments
       .filter(p => {
         if (!p.date_paiement) return false;
         const d = new Date(p.date_paiement);
-        return d.getFullYear() === year && (d.getMonth() + 1) === month;
+        const matchY = yearParam === 'All' || d.getFullYear() === parseInt(yearParam);
+        const matchM = monthParam === 'All' || (d.getMonth() + 1) === parseInt(monthParam);
+        return matchY && matchM;
       })
       .reduce((sum, p) => sum + (p.montant || 0), 0);
 
-    const totalExpectedMois = contracts
+    const totalExpected = contracts
       .filter(c => c.statut === 'Actif')
-      .reduce((sum, c) => sum + (c.loyer_mensuel || 0), 0);
+      .reduce((sum, c) => {
+        let months = 1;
+        if (yearParam === 'All') months = 12 * 5; // Rough estimate for global
+        else if (monthParam === 'All') months = 12;
+        return sum + (c.loyer_mensuel || 0) * months;
+      }, 0);
 
-    const totalImpayeMois = Math.max(0, totalExpectedMois - totalEncaisseMois);
+    const totalImpaye = Math.max(0, totalExpected - totalEncaisse);
 
     const totalArrieres = filtered.reduce((sum, r) => sum + r.retards, 0);
+
+    let periodLabel = "";
+    if (yearParam === 'All') periodLabel = "GLOBAL";
+    else if (monthParam === 'All') periodLabel = yearParam;
+    else periodLabel = new Date(year, month - 1).toLocaleString('fr-FR', { month: 'long' }).toUpperCase() + " " + yearParam;
+
+    const monthName = monthParam === 'All' ? 'ANNÉE' : new Date(year, month - 1).toLocaleString('fr-FR', { month: 'long' });
+    const periodHeader = yearParam === 'All' ? 'TOUTES LES ANNÉES' : (monthParam === 'All' ? `ANNÉE : ${yearParam}` : `PÉRIODE : ${monthName.toUpperCase()} ${yearParam}`);
 
     const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Rapport Détaillé des Impayés - ${monthName} ${year}</title>
+    <title>Rapport Détaillé des Impayés - ${periodLabel}</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; background: #f1f5f9; padding: 15px; color: #0f172a; }
@@ -175,7 +194,7 @@ export async function GET(request: NextRequest) {
         <div class="divider"></div>
         <div class="title">
             <h2>RAPPORT DÉTAILLÉ DES IMPAYÉS</h2>
-            <p style="font-size: 11px; font-weight: 700; margin-top: 5px;">PÉRIODE : ${monthName.toUpperCase()} ${year}</p>
+            <p style="font-size: 11px; font-weight: 700; margin-top: 5px;">${periodHeader}</p>
         </div>
         <div class="meta">
             Filtre appliqué : ${statusFilter === 'All' ? 'Tous les locataires' : statusFilter === 'Paid' ? 'Locataires à jour' : 'Locataires avec impayés'}
@@ -201,15 +220,15 @@ export async function GET(request: NextRequest) {
 
         <div style="display: flex; justify-content: space-between; margin-top: 20px; margin-bottom: 50px;">
             <div style="background: #f8fafc; border: 2px solid #0f172a; padding: 10px 15px; width: 30%; text-align: center;">
-                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #64748b; margin: 0 0 5px 0;">TOTAL ENCAISSÉ (${monthName.toUpperCase()})</p>
-                <p style="font-size: 14px; font-weight: 900; color: #059669; margin: 0;">${Number(totalEncaisseMois).toLocaleString('fr-FR')} F</p>
+                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #64748b; margin: 0 0 5px 0;">TOTAL ENCAISSÉ (${periodLabel})</p>
+                <p style="font-size: 14px; font-weight: 900; color: #059669; margin: 0;">${Number(totalEncaisse).toLocaleString('fr-FR')} F</p>
             </div>
             <div style="background: #f8fafc; border: 2px solid #0f172a; padding: 10px 15px; width: 30%; text-align: center;">
-                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #64748b; margin: 0 0 5px 0;">TOTAL IMPAYÉ (${monthName.toUpperCase()})</p>
-                <p style="font-size: 14px; font-weight: 900; color: #e11d48; margin: 0;">${Number(totalImpayeMois).toLocaleString('fr-FR')} F</p>
+                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #64748b; margin: 0 0 5px 0;">TOTAL IMPAYÉ (${periodLabel})</p>
+                <p style="font-size: 14px; font-weight: 900; color: #e11d48; margin: 0;">${Number(totalImpaye).toLocaleString('fr-FR')} F</p>
             </div>
             <div style="background: #0f172a; border: 2px solid #0f172a; padding: 10px 15px; width: 30%; text-align: center;">
-                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #94a3b8; margin: 0 0 5px 0;">TOTAL ARRIÉRÉS ${year}</p>
+                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #94a3b8; margin: 0 0 5px 0;">TOTAL ARRIÉRÉS ${yearParam === 'All' ? 'GLOBAL' : yearParam}</p>
                 <p style="font-size: 14px; font-weight: 900; color: #ffffff; margin: 0;">${Number(totalArrieres).toLocaleString('fr-FR')} F</p>
             </div>
         </div>

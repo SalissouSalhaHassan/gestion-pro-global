@@ -34,7 +34,7 @@ export default function LoyerReportsPage() {
 
   // Detailed Report Filters
   const [fYear, setFYear] = useState(new Date().getFullYear().toString());
-  const [fMonth, setFMonth] = useState((new Date().getMonth() + 1).toString());
+  const [fMonth, setFMonth] = useState("All");
   const [fStatus, setFStatus] = useState("All"); // All, Paid, Unpaid
 
   const fetchStats = async () => {
@@ -156,6 +156,7 @@ export default function LoyerReportsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="All">Toutes</SelectItem>
                   {["2024", "2025", "2026", "2027"].map(y => (
                     <SelectItem key={y} value={y}>{y}</SelectItem>
                   ))}
@@ -170,6 +171,7 @@ export default function LoyerReportsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="All">Tous</SelectItem>
                   {Array.from({length: 12}).map((_, i) => (
                     <SelectItem key={i+1} value={(i+1).toString()}>
                       {new Date(2024, i).toLocaleString('fr-FR', { month: 'long' })}
