@@ -47,7 +47,7 @@ export default function VehiclePrintModal({ open, onClose, vehicles }: VehiclePr
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-xl bg-white rounded-[32px] p-0 overflow-hidden border-none shadow-2xl">
+      <DialogContent className="sm:max-w-4xl bg-white rounded-[40px] p-0 overflow-hidden border-none shadow-2xl transition-all duration-500">
         <DialogHeader className="p-8 pb-4 bg-slate-50/50">
           <DialogTitle className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
             <div className="p-2.5 bg-indigo-600 rounded-xl shadow-lg text-white">
