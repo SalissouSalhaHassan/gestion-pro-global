@@ -68,6 +68,9 @@ export async function GET(request: Request) {
       }
 
       const totalQty = articleStocks.reduce((sum, s) => sum + Number(s.quantite || 0), 0);
+      const qteParColis = Number((art as any).qte_par_colis || 1);
+      const nbrColis = totalQty / (qteParColis || 1);
+      
       const valAchat = totalQty * Number(art.p_achat_ht || 0);
       const valVente = totalQty * Number(art.p_vente_ttc || 0);
 
@@ -77,6 +80,8 @@ export async function GET(request: Request) {
         designation: art.designation,
         p_achat_ht: Number(art.p_achat_ht || 0),
         p_vente_ttc: Number(art.p_vente_ttc || 0),
+        qte_par_colis: qteParColis,
+        nbr_colis: nbrColis,
         unite: art.unite,
         famille: (art.categories as any)?.nom || "Non classé",
         quantite: totalQty,

@@ -101,22 +101,26 @@ export async function GET(request: NextRequest) {
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 10%;">Référence</th>
-                        <th style="width: 35%;">Désignation</th>
-                        <th style="width: 15%;">Famille</th>
+                        <th style="width: 8%;">Code</th>
+                        <th style="width: 25%;">Description</th>
+                        <th style="width: 8%;" class="text-center">Nb Colis</th>
+                        <th style="width: 8%;" class="text-center">Qte/Col</th>
                         <th style="width: 10%;" class="text-center">Quantité</th>
-                        <th style="width: 15%;" class="text-right">P. Achat HT</th>
+                        <th style="width: 13%;" class="text-right">P. Achat HT</th>
+                        <th style="width: 13%;" class="text-right">P. Vente TTC</th>
                         <th style="width: 15%;" class="text-right">Total Achat</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${(items || []).map((item: any) => `
                         <tr>
-                            <td style="font-family: monospace; font-size: 9px;">${item.reference}</td>
+                            <td style="font-family: monospace; font-size: 8px;">${item.reference}</td>
                             <td>${item.designation}</td>
-                            <td>${item.famille}</td>
+                            <td class="text-center">${item.nbr_colis.toFixed(2)}</td>
+                            <td class="text-center">${item.qte_par_colis}</td>
                             <td class="text-center">${item.quantite} ${item.unite}</td>
                             <td class="text-right">${item.p_achat_ht.toLocaleString('fr-FR')}</td>
+                            <td class="text-right">${item.p_vente_ttc.toLocaleString('fr-FR')}</td>
                             <td class="text-right">${item.total_valeur_achat.toLocaleString('fr-FR')}</td>
                         </tr>
                     `).join('')}

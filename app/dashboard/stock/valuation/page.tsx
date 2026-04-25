@@ -177,35 +177,42 @@ export default function StockValuationPage() {
           <Table>
             <TableHeader className="bg-slate-50/50">
               <TableRow className="hover:bg-transparent border-slate-100">
-                <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest px-6 h-14">Référence</TableHead>
-                <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest h-14">Désignation</TableHead>
-                <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest h-14">Famille</TableHead>
+                <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest px-6 h-14">Code stock</TableHead>
+                <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest h-14">Description</TableHead>
+                <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest h-14 text-center">Nbr Colis</TableHead>
+                <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest h-14 text-center">Qte/Colis</TableHead>
                 <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest h-14 text-center">Quantité</TableHead>
                 <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest h-14 text-right">P. Achat HT</TableHead>
-                <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest h-14 text-right pr-8">Valeur Totale</TableHead>
+                <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest h-14 text-right">P. Vente TTC</TableHead>
+                <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest h-14 text-right">Total Achat</TableHead>
+                <TableHead className="font-black text-slate-400 uppercase text-[10px] tracking-widest h-14 pr-8 text-right">Famille</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={6} className="h-60 text-center"><Loader2 className="animate-spin mx-auto text-indigo-500" size={40} /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="h-60 text-center"><Loader2 className="animate-spin mx-auto text-indigo-500" size={40} /></TableCell></TableRow>
               ) : filteredItems.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="h-60 text-center text-slate-400 font-bold">Aucune donnée trouvée.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="h-60 text-center text-slate-400 font-bold">Aucune donnée trouvée.</TableCell></TableRow>
               ) : filteredItems.map((item: any) => (
                 <TableRow key={item.id} className="hover:bg-slate-50/30 transition-colors border-slate-50">
                   <TableCell className="px-6 py-5 font-black text-slate-900">{item.reference}</TableCell>
                   <TableCell className="font-bold text-slate-700">{item.designation}</TableCell>
-                  <TableCell>
-                    <span className="px-3 py-1 rounded-lg bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-wider">{item.famille}</span>
-                  </TableCell>
+                  <TableCell className="text-center font-bold text-slate-500">{item.nbr_colis.toFixed(2)}</TableCell>
+                  <TableCell className="text-center font-bold text-slate-500">{item.qte_par_colis}</TableCell>
                   <TableCell className="text-center font-black text-indigo-600">
                     {new Intl.NumberFormat().format(item.quantite)} <small className="text-[10px] text-slate-400">{item.unite}</small>
                   </TableCell>
                   <TableCell className="text-right font-bold text-slate-600">
                     {new Intl.NumberFormat().format(item.p_achat_ht)} F
                   </TableCell>
+                  <TableCell className="text-right font-bold text-emerald-600">
+                    {new Intl.NumberFormat().format(item.p_vente_ttc)} F
+                  </TableCell>
+                  <TableCell className="text-right font-black text-slate-900">
+                    {new Intl.NumberFormat().format(item.total_valeur_achat)} F
+                  </TableCell>
                   <TableCell className="text-right pr-8">
-                    <div className="font-black text-slate-900">{new Intl.NumberFormat().format(item.total_valeur_achat)} F</div>
-                    <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">Vente: {new Intl.NumberFormat().format(item.total_valeur_vente)} F</div>
+                    <span className="px-3 py-1 rounded-lg bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-wider">{item.famille}</span>
                   </TableCell>
                 </TableRow>
               ))}
