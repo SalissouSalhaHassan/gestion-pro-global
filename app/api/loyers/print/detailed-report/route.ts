@@ -130,16 +130,17 @@ export async function GET(request: NextRequest) {
       })
       .reduce((sum, p) => sum + (p.montant || 0), 0);
 
-    const totalExpected = contracts
-      .filter(c => c.statut === 'Actif')
-      .reduce((sum, c) => {
-        let months = 1;
-        if (yearParam === 'All') months = 12 * 5; // Rough estimate for global
-        else if (monthParam === 'All') months = 12;
-        return sum + (c.loyer_mensuel || 0) * months;
-      }, 0);
-
-    const totalImpaye = Math.max(0, totalExpected - totalEncaisse);
+    const totalImpaye = filtered.reduce((sum, r) => {
+        let max_expected_for_period = Number(r.loyer) || 0;
+        
+        if (yearParam === 'All') {
+            max_expected_for_period = Number(r.retards) || 0;
+        } else if (monthParam === 'All') {
+            max_expected_for_period = (Number(r.loyer) || 0) * 12;
+        }
+        
+        return sum + Math.min(max_expected_for_period, Number(r.retards) || 0);
+    }, 0);
 
     const totalArrieres = filtered.reduce((sum, r) => sum + r.retards, 0);
 
