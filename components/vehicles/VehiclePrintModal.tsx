@@ -13,7 +13,11 @@ import { Input } from "@/components/ui/input";
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from "@/components/ui/select";
-import { toast } from "sonner";
+// import { toast } from "sonner";
+const toast = {
+  error: (msg: string) => alert(msg),
+  success: (msg: string) => alert(msg)
+};
 
 type VehiclePrintModalProps = {
   open: boolean;

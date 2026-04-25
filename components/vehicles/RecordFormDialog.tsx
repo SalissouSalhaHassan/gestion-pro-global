@@ -15,7 +15,11 @@ import {
   Truck, Wrench, Wallet, Calendar, MapPin, Gauge, 
   Package, Hash, Loader2, Save
 } from "lucide-react";
-import { toast } from "sonner";
+// import { toast } from "sonner";
+const toast = {
+  error: (msg: string) => alert(msg),
+  success: (msg: string) => alert(msg)
+};
 
 type RecordFormDialogProps = {
   open: boolean;

@@ -11,7 +11,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table";
-import { toast } from "sonner";
+// import { toast } from "sonner";
+const toast = {
+  error: (msg: string) => alert(msg),
+  success: (msg: string) => alert(msg)
+};
 import VehicleFormDialog from "@/components/vehicles/VehicleFormDialog";
 import RecordFormDialog from "@/components/vehicles/RecordFormDialog";
 import VehiclePrintModal from "@/components/vehicles/VehiclePrintModal";
