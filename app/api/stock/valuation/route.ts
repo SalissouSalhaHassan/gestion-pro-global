@@ -78,7 +78,7 @@ export async function GET(request: Request) {
         p_achat_ht: Number(art.p_achat_ht || 0),
         p_vente_ttc: Number(art.p_vente_ttc || 0),
         unite: art.unite,
-        famille: art.categories?.nom || "Non classé",
+        famille: (art.categories as any)?.nom || "Non classé",
         quantite: totalQty,
         total_valeur_achat: valAchat,
         total_valeur_vente: valVente
