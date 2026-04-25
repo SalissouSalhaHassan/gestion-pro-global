@@ -73,6 +73,9 @@ export async function GET(request: Request) {
       
       const valAchat = totalQty * Number(art.p_achat_ht || 0);
       const valVente = totalQty * Number(art.p_vente_ttc || 0);
+      
+      const pMoyen = (Number(art.p_achat_ht || 0) + Number(art.p_vente_ttc || 0)) / 2;
+      const valMoyenne = totalQty * pMoyen;
 
       return {
         id: art.id,
@@ -80,22 +83,25 @@ export async function GET(request: Request) {
         designation: art.designation,
         p_achat_ht: Number(art.p_achat_ht || 0),
         p_vente_ttc: Number(art.p_vente_ttc || 0),
+        p_moyen: pMoyen,
         qte_par_colis: qteParColis,
         nbr_colis: nbrColis,
         unite: art.unite,
         famille: (art.categories as any)?.nom || "Non classé",
         quantite: totalQty,
         total_valeur_achat: valAchat,
-        total_valeur_vente: valVente
+        total_valeur_vente: valVente,
+        total_valeur_moyenne: valMoyenne
       };
-    }).filter(item => item.quantite !== 0); // Only show items with stock if needed, or all? Python script shows all. 
-    // Actually, Python script usually shows items with stock or just all filtered.
+    }).filter(item => item.quantite !== 0);
 
     const summary = {
       total_items: valuationItems.length,
       total_qte: valuationItems.reduce((sum, i) => sum + i.quantite, 0),
       total_valeur_achat: valuationItems.reduce((sum, i) => sum + i.total_valeur_achat, 0),
-      total_valeur_vente: valuationItems.reduce((sum, i) => sum + i.total_valeur_vente, 0)
+      total_valeur_vente: valuationItems.reduce((sum, i) => sum + i.total_valeur_vente, 0),
+      total_valeur_moyenne: valuationItems.reduce((sum, i) => sum + i.total_valeur_moyenne, 0),
+      marge_latente: valuationItems.reduce((sum, i) => sum + (i.total_valeur_vente - i.total_valeur_achat), 0)
     };
 
     return NextResponse.json({

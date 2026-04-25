@@ -34,27 +34,29 @@ export async function GET(request: NextRequest) {
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
             body { font-family: 'Inter', sans-serif; color: #0f172a; margin: 0; padding: 0; background: #f1f5f9; }
-            .container { background: white; width: 210mm; min-height: 297mm; margin: 20px auto; padding: 20mm; box-sizing: border-box; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
-            .header { display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 2px solid #0f172a; padding-bottom: 20px; }
-            .company-name { font-size: 24px; font-weight: 900; text-transform: uppercase; margin: 0; }
-            .company-info { font-size: 10px; color: #64748b; font-weight: 700; margin-top: 5px; }
-            .document-title { text-align: center; border: 4px solid #0f172a; padding: 15px; margin-bottom: 40px; background: #f8fafc; }
-            .document-title h2 { margin: 0; font-size: 22px; font-weight: 900; letter-spacing: 0.2em; text-transform: uppercase; }
-            .filter-info { font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 20px; text-transform: uppercase; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
-            th { background: #f1f5f9; border: 2px solid #0f172a; padding: 10px; font-size: 9px; font-weight: 900; text-transform: uppercase; text-align: left; }
-            td { border: 2px solid #0f172a; padding: 8px 10px; font-size: 10px; font-weight: 700; }
+            .container { background: white; width: 297mm; min-height: 210mm; margin: 10px auto; padding: 15mm; box-sizing: border-box; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); }
+            .header { display: flex; justify-content: space-between; margin-bottom: 20px; border-bottom: 2px solid #0f172a; padding-bottom: 15px; }
+            .company-name { font-size: 20px; font-weight: 900; text-transform: uppercase; margin: 0; }
+            .company-info { font-size: 9px; color: #64748b; font-weight: 700; margin-top: 3px; }
+            .document-title { text-align: center; border: 3px solid #0f172a; padding: 10px; margin-bottom: 25px; background: #f8fafc; }
+            .document-title h2 { margin: 0; font-size: 18px; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; }
+            
+            table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            th { background: #f1f5f9; border: 1.5px solid #0f172a; padding: 8px; font-size: 8px; font-weight: 900; text-transform: uppercase; text-align: left; }
+            td { border: 1.5px solid #0f172a; padding: 6px 8px; font-size: 9px; font-weight: 700; }
             .text-right { text-align: right; }
             .text-center { text-align: center; }
-            .summary-box { display: grid; grid-template-cols: repeat(4, 1fr); border: 2px solid #0f172a; margin-bottom: 40px; background: #f8fafc; }
-            .summary-item { padding: 15px; text-align: center; border-right: 2px solid #0f172a; }
-            .summary-item:last-child { border-right: none; }
-            .summary-label { font-size: 8px; font-weight: 900; color: #64748b; text-transform: uppercase; margin-bottom: 5px; }
-            .summary-value { font-size: 14px; font-weight: 900; color: #0f172a; }
-            .footer { margin-top: auto; padding-top: 20px; border-top: 1px solid #f1f5f9; display: flex; justify-content: space-between; font-size: 9px; font-weight: 700; color: #94a3b8; }
+            .bg-moyen { background-color: #f5f3ff; }
+            
+            .summary-cards { display: grid; grid-template-cols: repeat(5, 1fr); gap: 10px; margin-bottom: 25px; }
+            .summary-card { padding: 10px; text-align: center; border: 1.5px solid #0f172a; background: #fff; }
+            .summary-label { font-size: 7px; font-weight: 900; color: #64748b; text-transform: uppercase; margin-bottom: 3px; }
+            .summary-value { font-size: 11px; font-weight: 900; color: #0f172a; }
+            
+            .footer { margin-top: auto; padding-top: 15px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 8px; font-weight: 700; color: #94a3b8; }
             @media print {
                 body { background: white; }
-                .container { margin: 0; padding: 10mm; box-shadow: none; width: 100%; }
+                .container { margin: 0; padding: 5mm; box-shadow: none; width: 100%; }
                 @page { size: A4 landscape; margin: 0; }
             }
         </style>
@@ -66,12 +68,13 @@ export async function GET(request: NextRequest) {
                     <h1 class="company-name">${company?.nom_entreprise || "LOGICIEL EASY"}</h1>
                     <div class="company-info">
                         ${company?.adresse || "MARADI-NIGER"}<br>
-                        Tél: ${company?.telephone || "—"} | NIF: ${company?.nif || "—"}
+                        Tél: ${company?.telephone || "—"}
                     </div>
                 </div>
                 <div style="text-align: right;">
-                    <div style="font-size: 12px; font-weight: 900;">DATE: ${new Date().toLocaleDateString('fr-FR')}</div>
-                    <div style="font-size: 10px; font-weight: 700; color: #64748b;">DEPOT: ${depot}</div>
+                    <div style="font-size: 11px; font-weight: 900;">RAPPORT DE VALORISATION</div>
+                    <div style="font-size: 9px; font-weight: 700; color: #64748b;">DATE: ${new Date().toLocaleString('fr-FR')}</div>
+                    <div style="font-size: 9px; font-weight: 700; color: #64748b;">DEPOT: ${depot}</div>
                 </div>
             </div>
 
@@ -79,36 +82,41 @@ export async function GET(request: NextRequest) {
                 <h2>État et Valorisation du Stock</h2>
             </div>
 
-            <div class="summary-box">
-                <div class="summary-item">
-                    <div class="summary-label">Articles</div>
-                    <div class="summary-value">${summary.total_items}</div>
-                </div>
-                <div class="summary-item">
+            <div class="summary-cards">
+                <div class="summary-card">
                     <div class="summary-label">Quantité Totale</div>
                     <div class="summary-value">${summary.total_qte.toLocaleString('fr-FR')}</div>
                 </div>
-                <div class="summary-item">
-                    <div class="summary-label">Valeur Achat HT</div>
+                <div class="summary-card">
+                    <div class="summary-label">Valeur Achat</div>
                     <div class="summary-value">${summary.total_valeur_achat.toLocaleString('fr-FR')} F</div>
                 </div>
-                <div class="summary-item">
-                    <div class="summary-label">Valeur Vente TTC</div>
+                <div class="summary-card">
+                    <div class="summary-label">Valeur Moyenne</div>
+                    <div class="summary-value">${summary.total_valeur_moyenne.toLocaleString('fr-FR')} F</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Valeur Vente</div>
                     <div class="summary-value">${summary.total_valeur_vente.toLocaleString('fr-FR')} F</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Marge Latente</div>
+                    <div class="summary-value">${summary.marge_latente.toLocaleString('fr-FR')} F</div>
                 </div>
             </div>
 
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 8%;">Code</th>
-                        <th style="width: 25%;">Description</th>
-                        <th style="width: 8%;" class="text-center">Nb Colis</th>
-                        <th style="width: 8%;" class="text-center">Qte/Col</th>
-                        <th style="width: 10%;" class="text-center">Quantité</th>
-                        <th style="width: 13%;" class="text-right">P. Achat HT</th>
-                        <th style="width: 13%;" class="text-right">P. Vente TTC</th>
-                        <th style="width: 15%;" class="text-right">Total Achat</th>
+                        <th style="width: 10%;">Réf Stock</th>
+                        <th style="width: 20%;">Désignation</th>
+                        <th style="width: 8%;" class="text-center">Qté En Stock</th>
+                        <th style="width: 10%;" class="text-right">P. Achat</th>
+                        <th style="width: 10%;" class="text-right">P. Moyen</th>
+                        <th style="width: 10%;" class="text-right">P. Vente</th>
+                        <th style="width: 11%;" class="text-right">Total Achat</th>
+                        <th style="width: 11%;" class="text-right">Total Moyen</th>
+                        <th style="width: 10%;" class="text-right">Total Vente</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -116,20 +124,21 @@ export async function GET(request: NextRequest) {
                         <tr>
                             <td style="font-family: monospace; font-size: 8px;">${item.reference}</td>
                             <td>${item.designation}</td>
-                            <td class="text-center">${item.nbr_colis.toFixed(2)}</td>
-                            <td class="text-center">${item.qte_par_colis}</td>
-                            <td class="text-center">${item.quantite} ${item.unite}</td>
+                            <td class="text-center">${item.quantite.toLocaleString('fr-FR')}</td>
                             <td class="text-right">${item.p_achat_ht.toLocaleString('fr-FR')}</td>
+                            <td class="text-right bg-moyen">${item.p_moyen.toLocaleString('fr-FR')}</td>
                             <td class="text-right">${item.p_vente_ttc.toLocaleString('fr-FR')}</td>
                             <td class="text-right">${item.total_valeur_achat.toLocaleString('fr-FR')}</td>
+                            <td class="text-right bg-moyen">${item.total_valeur_moyenne.toLocaleString('fr-FR')}</td>
+                            <td class="text-right">${item.total_valeur_vente.toLocaleString('fr-FR')}</td>
                         </tr>
                     `).join('')}
                 </tbody>
             </table>
 
             <div class="footer">
-                <span>Imprimé le ${new Date().toLocaleString('fr-FR')}</span>
-                <span>GestionPro - Valorisation du Stock</span>
+                <span>Document généré automatiquement par GestionPro</span>
+                <span>Date d'impression: ${new Date().toLocaleString('fr-FR')}</span>
                 <span>Page 1 / 1</span>
             </div>
         </div>
