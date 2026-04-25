@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { round } from '../utils/finance';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -129,7 +130,7 @@ export class ContractService {
       const totalMonthsExpected = (currentYearReal - startYear) * 12 + (currentMonthReal - startMonth + 1);
       
       // 2. Calculate months paid based on total amount
-      const monthsPaid = Math.floor(paid / (c.loyer_mensuel || 1));
+      const monthsPaid = Math.floor(round(paid) / (c.loyer_mensuel || 1));
       
       // 3. Calculate delays
       const unpaidMonthsCount = Math.max(0, totalMonthsExpected - monthsPaid);

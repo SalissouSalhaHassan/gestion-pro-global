@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getServerSession, isAdminOrManager } from "@/lib/auth_helper";
 import { AdvanceService } from "@/lib/services/advance.service";
+import { isGreaterOrEqual, round } from "@/lib/utils/finance";
 
 type CheckoutItem = {
   id: number | string;
@@ -209,14 +210,14 @@ async function reconcileInvoicePricing(params: {
 
   if (finalItemsError) throw finalItemsError;
 
-  const totals = (finalItems || []).reduce(
-    (acc: { ht: number; ttc: number }, row: any) => {
-      acc.ht += Number(row.total_item_ht || 0);
-      acc.ttc += Number(row.total_item_ttc || 0);
-      return acc;
-    },
-    { ht: 0, ttc: 0 }
-  );
+    const totals = (finalItems || []).reduce(
+      (acc: { ht: number; ttc: number }, row: any) => {
+        acc.ht = round(acc.ht + Number(row.total_item_ht || 0));
+        acc.ttc = round(acc.ttc + Number(row.total_item_ttc || 0));
+        return acc;
+      },
+      { ht: 0, ttc: 0 }
+    );
 
   const totalTva = totals.ttc - totals.ht;
 
@@ -280,7 +281,7 @@ async function syncInvoicePaymentsAndStatus(params: {
   }, 0);
 
   const status =
-    totalPaid >= totalTTC
+    isGreaterOrEqual(totalPaid, totalTTC)
       ? "Payée"
       : totalPaid > 0
         ? "Partiellement Payée"
@@ -718,11 +719,11 @@ export async function POST(request: Request) {
         }
 
         // Finalize invoice totals after Cash + Advance
-        const totalPaid = totalTTC - (remainingToSettle > 0 ? remainingToSettle : 0);
+        const totalPaid = round(totalTTC - (remainingToSettle > 0 ? remainingToSettle : 0));
         await supabase.from("factures").update({
-          statut: totalPaid >= totalTTC ? "Payée" : (totalPaid > 0 ? "Partiellement Payée" : "Non Payée"),
+          statut: isGreaterOrEqual(totalPaid, totalTTC) ? "Payée" : (totalPaid > 0 ? "Partiellement Payée" : "Non Payée"),
           montant_paye: totalPaid,
-          montant_restant: Math.max(0, totalTTC - totalPaid)
+          montant_restant: Math.max(0, round(totalTTC - totalPaid))
         }).eq("id", extractedId);
       } else if (moyenReglement === "Crédit") {
         // Just Update with Cash part if any

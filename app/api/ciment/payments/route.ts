@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth_helper";
+import { isGreaterOrEqual, round } from "@/lib/utils/finance";
 
 
 export async function GET(request: Request) {
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
       if (errAdv) throw errAdv;
 
       const totalAvailable = (advances || []).reduce((sum, a) => sum + Number(a.montant_restant || 0), 0);
-      if (amount > totalAvailable + 0.01) {
+      if (!isGreaterOrEqual(totalAvailable, amount)) {
         return NextResponse.json({ error: `Solde insuffisant. Disponible: ${totalAvailable} FCFA` }, { status: 400 });
       }
 
@@ -90,8 +91,8 @@ export async function POST(request: Request) {
         
         const advRem = Number(adv.montant_restant);
         const deduct = Math.min(remainingToPay, advRem);
-        const newRem = advRem - deduct;
-        const newStat = newRem < 0.01 ? "Utilisée" : "Partiellement utilisée";
+        const newRem = round(advRem - deduct);
+        const newStat = newRem <= 0 ? "Utilisée" : "Partiellement utilisée";
         
         // Update advance
         const { error: errUpd } = await supabase
@@ -149,7 +150,7 @@ export async function POST(request: Request) {
     const totalShipment = Number(ship2?.total || 0);
 
     let status = "Non Payé";
-    if (totalPaid >= totalShipment - 0.1) status = "Payé";
+    if (isGreaterOrEqual(totalPaid, totalShipment)) status = "Payé";
     else if (totalPaid > 0) status = "Partiel";
 
     const { error: errUpdShip } = await supabase

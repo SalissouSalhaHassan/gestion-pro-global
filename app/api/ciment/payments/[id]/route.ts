@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession, isAdminOrManager } from "@/lib/auth_helper";
+import { isGreaterOrEqual, round } from "@/lib/utils/finance";
 
 export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   try {
@@ -47,8 +48,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
           // Get current advance state
           const { data: adv } = await supabase.from("avances_clients").select("montant_restant, montant_initial").eq("id", advId).single();
           if (adv) {
-            const newRem = Number(adv.montant_restant) + uMnt;
-            const newStat = newRem >= Number(adv.montant_initial) - 0.1 ? "Disponible" : "Partiellement utilisée";
+            const newRem = round(Number(adv.montant_restant) + uMnt);
+            const newStat = isGreaterOrEqual(newRem, Number(adv.montant_initial)) ? "Disponible" : "Partiellement utilisée";
             
             // Refund
             await supabase.from("avances_clients").update({ montant_restant: newRem, statut: newStat }).eq("id", advId);
@@ -72,7 +73,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
     const totalShipment = Number(ship?.total || 0);
 
     let status = "Non Payé";
-    if (totalPaid >= totalShipment - 0.1) status = "Payé";
+    if (isGreaterOrEqual(totalPaid, totalShipment)) status = "Payé";
     else if (totalPaid > 0) status = "Partiel";
 
     await supabase.from("gestion_ciment").update({ montant_paye: totalPaid, statut_paiement: status }).eq("id", shipmentId);
