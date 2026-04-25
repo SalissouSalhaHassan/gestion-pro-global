@@ -282,7 +282,7 @@ export default function PaymentFormDialog({ open, onClose, onSaved, contract, pa
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto bg-gradient-to-br from-white via-slate-50/80 to-amber-50/20 border-white/60 backdrop-blur-2xl shadow-2xl rounded-[28px] p-0">
+      <DialogContent className="sm:max-w-4xl max-h-[92vh] overflow-y-auto bg-gradient-to-br from-white via-slate-50/80 to-amber-50/20 border-white/60 backdrop-blur-2xl shadow-2xl rounded-[28px] p-0">
         <DialogHeader className="px-8 pt-8 pb-4 border-b border-slate-100">
           <DialogTitle className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
             <div className="p-2.5 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-lg shadow-amber-500/30">
