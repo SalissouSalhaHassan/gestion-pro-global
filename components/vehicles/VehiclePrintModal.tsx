@@ -117,19 +117,19 @@ export default function VehiclePrintModal({ open, onClose, vehicles }: VehiclePr
           )}
         </div>
 
-        <DialogFooter className="p-8 pt-0 flex flex-col gap-2">
+        <DialogFooter className="p-8 pt-6 bg-slate-50/50 flex flex-row-reverse gap-4 border-t border-slate-100">
           <Button 
             onClick={handlePrint}
             disabled={loading}
-            className="w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-700 font-black text-lg shadow-xl shadow-indigo-100 transition-all active:scale-95"
+            className="flex-1 h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-700 font-black text-lg shadow-xl shadow-indigo-100 transition-all active:scale-95 text-white"
           >
             {loading ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2" size={20} />}
             Générer le PDF
           </Button>
           <Button 
-            variant="ghost" 
+            variant="outline" 
             onClick={onClose}
-            className="w-full h-12 rounded-xl font-bold text-slate-400 hover:bg-slate-50"
+            className="flex-1 h-14 rounded-2xl font-bold border-slate-200 hover:bg-white text-slate-500"
           >
             Annuler
           </Button>
