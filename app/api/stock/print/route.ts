@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
                     </tr>
                 </thead>
                 <tbody>
-                    ${(items || []).map(item => `
+                    ${(items || []).map((item: any) => `
                         <tr>
                             <td style="font-family: monospace; font-size: 9px;">${item.reference}</td>
                             <td>${item.designation}</td>
