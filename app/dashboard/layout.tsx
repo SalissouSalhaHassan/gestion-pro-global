@@ -23,7 +23,8 @@ import {
   Truck,
   Home,
   Layers,
-  Car
+  Car,
+  BarChart3
 } from "lucide-react";
 import UnifiedSearch from "@/components/UnifiedSearch";
 
@@ -62,6 +63,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/pos", label: "Point de vente (POS)", icon: ShoppingCart, highlight: true },
     { href: "/dashboard/articles", label: "Articles", icon: Package },
     { href: "/dashboard/stock", label: "Gestion du Stock", icon: Boxes },
+    { href: "/dashboard/stock/valuation", label: "Valorisation Stock", icon: BarChart3 },
     { href: "/dashboard/stock/transit", label: "Suivi Transits", icon: Truck },
     { href: "/dashboard/inventory", label: "Jeu d'Inventaire", icon: ScanLine },
     { href: "/dashboard/ciment", label: "Gestion Ciment", icon: Layers },
