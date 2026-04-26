@@ -30,6 +30,7 @@ export default function ClientsPage() {
   const [toast, setToast] = useState<{message: string, type: "success" | "error"} | null>(null);
   
   // Debt Details State
+  const [selectedClientForDebt, setSelectedClientForDebt] = useState<Client | null>(null);
   const [clientInvoices, setClientInvoices] = useState<any[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
