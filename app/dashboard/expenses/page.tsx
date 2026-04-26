@@ -17,8 +17,10 @@ import {
   MapPin,
   User,
   MoreVertical,
-  RefreshCw
+  RefreshCw,
+  Printer
 } from "lucide-react";
+import ExpenseJournalModal from "./ExpenseJournalModal";
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -28,6 +30,8 @@ export default function ExpensesPage() {
   const [editingExpense, setEditingExpense] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [userSession, setUserSession] = useState<any>(null);
 
   const [form, setForm] = useState({
     date_depense: new Date().toISOString().split("T")[0],
@@ -74,8 +78,22 @@ export default function ExpensesPage() {
   };
 
   useEffect(() => {
-    fetchExpenses();
-  }, [filters]);
+    const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
+    if (cookie) {
+      try {
+        const session = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
+        setUserSession(session);
+        const isAdmin = session?.admin === "Oui" || session?.role === 1 || session?.role === "1";
+        if (!isAdmin) {
+          setFilters(f => ({ ...f, oper: session.username || "Tous" }));
+        }
+      } catch (e) { console.error(e); }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (userSession) fetchExpenses();
+  }, [filters, userSession]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,19 +162,39 @@ export default function ExpensesPage() {
             <TrendingDown size={32} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Journal des Dépenses</h1>
-            <p className="text-slate-500 font-medium">Suivi et gestion des sorties de caisse administratives.</p>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight">
+               {userSession?.admin === "Oui" || userSession?.role === 1 || userSession?.role === "1" ? "Journal des Dépenses" : "Mes Dépenses"}
+            </h1>
+            <p className="text-slate-500 font-medium">
+               {userSession?.admin === "Oui" || userSession?.role === 1 || userSession?.role === "1" ? "Suivi et gestion des sorties de caisse administratives." : "Suivi de vos dépenses et sorties de caisse."}
+            </p>
           </div>
         </div>
 
-        <button 
-          onClick={() => { setEditingExpense(null); setIsModalOpen(true); }}
-          className="bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-2xl font-black flex items-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-slate-200"
-        >
-          <Plus size={22} />
-          Nouvelle Dépense
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => setIsPrintModalOpen(true)}
+            className="bg-white border border-slate-200 text-slate-700 px-6 py-4 rounded-2xl font-black flex items-center gap-3 transition-all hover:bg-slate-50 active:scale-95 shadow-sm"
+          >
+            <Printer size={20} />
+            Imprimer
+          </button>
+          <button 
+            onClick={() => { setEditingExpense(null); setIsModalOpen(true); }}
+            className="bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-2xl font-black flex items-center gap-3 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-slate-200"
+          >
+            <Plus size={22} />
+            Nouvelle Dépense
+          </button>
+        </div>
       </div>
+
+      {isPrintModalOpen && (
+        <ExpenseJournalModal 
+          filters={filters} 
+          onClose={() => setIsPrintModalOpen(false)} 
+        />
+      )}
 
       {/* Stats Quick View */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

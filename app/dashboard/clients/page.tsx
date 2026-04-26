@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Users, Search, Plus, UserCircle2, ArrowUpDown, Banknote, ShieldAlert, Loader2, X, Save, FileText } from "lucide-react";
+import { Users, Search, Plus, UserCircle2, ArrowUpDown, Banknote, ShieldAlert, Loader2, X, Save, FileText, Printer } from "lucide-react";
+import ClientListModal from "./ClientListModal";
 import { createClient } from "@/lib/supabase/client";
 
 type Client = {
@@ -29,9 +30,9 @@ export default function ClientsPage() {
   const [toast, setToast] = useState<{message: string, type: "success" | "error"} | null>(null);
   
   // Debt Details State
-  const [selectedClientForDebt, setSelectedClientForDebt] = useState<Client | null>(null);
   const [clientInvoices, setClientInvoices] = useState<any[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,20 +208,33 @@ export default function ClientsPage() {
             <div className="p-3 bg-white/50 backdrop-blur-md rounded-2xl border border-white/50 shadow-sm">
               <Users className="text-indigo-600" size={32} />
             </div>
-            Gestion des Clients
+            Base de Données Clients
           </h1>
-          <p className="mt-2 text-slate-500 font-medium ml-1">
-            Gérez votre base de données clients et suivez leurs crédits en temps réel.
+          <p className="mt-2 text-slate-500 font-medium ml-1 italic font-outfit">
+            Répertoire complet des partenaires et suivi dynamique des encours.
           </p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-3 text-white px-8 py-4 rounded-[22px] font-black shadow-xl shadow-indigo-500/30 transition-all hover:scale-105 active:scale-95 group bg-indigo-600 whitespace-nowrap"
-        >
-          <Plus size={22} className="transition-transform group-hover:rotate-90" />
-          Nouveau Client
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setIsPrintModalOpen(true)}
+            className="flex items-center gap-3 text-slate-600 bg-white border border-slate-200 px-6 py-4 rounded-[22px] font-black shadow-sm transition-all hover:bg-slate-50 active:scale-95"
+          >
+            <Printer size={20} />
+            Imprimer Liste
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-3 text-white px-8 py-4 rounded-[22px] font-black shadow-xl shadow-indigo-500/30 transition-all hover:scale-105 active:scale-95 group bg-indigo-600 whitespace-nowrap"
+          >
+            <Plus size={22} className="transition-transform group-hover:rotate-90" />
+            Nouveau Client
+          </button>
+        </div>
       </div>
+
+      {isPrintModalOpen && (
+        <ClientListModal onClose={() => setIsPrintModalOpen(false)} />
+      )}
 
       {/* KPIs Cards */}
       <div className="grid grid-cols-1 gap-8 md:grid-cols-3">

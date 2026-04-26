@@ -105,9 +105,9 @@ export default function VehiclesPage() {
             <div className="p-3 bg-indigo-600 rounded-3xl shadow-xl shadow-indigo-200 text-white">
               <Car size={32} />
             </div>
-            Gestion des Véhicules
+            Parc Automobile & Logistique
           </h1>
-          <p className="text-slate-500 font-medium mt-2 uppercase text-[10px] tracking-widest ml-1">Suivi de la Flotte, Transports et Maintenance</p>
+          <p className="text-slate-500 font-medium mt-2 uppercase text-[10px] tracking-widest ml-1 font-outfit">Suivi de la Flotte, Transports et Maintenance Préventive</p>
         </div>
         <div className="flex gap-3">
           <Button 
