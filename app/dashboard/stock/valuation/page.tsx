@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react";
 import { 
   BarChart3, Search, Filter, Printer, Download, 
-  Loader2, Wallet, Boxes, TrendingUp, Info
+  Loader2, Wallet, Boxes, TrendingUp, Info,
+  X
 } from "lucide-react";
+import StockValuationModal from "./StockValuationModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -18,6 +20,8 @@ export default function StockValuationPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [userSession, setUserSession] = useState<any>(null);
   const [filters, setFilters] = useState({
     depot: "Tous",
     categoryId: "all"
@@ -57,12 +61,27 @@ export default function StockValuationPage() {
   };
 
   useEffect(() => {
+    const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
+    if (cookie) {
+      try {
+        const session = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
+        setUserSession(session);
+        const isAdmin = session?.admin === "Oui" || session?.role === 1 || session?.role === "1";
+        // If seller has a specific emplacement/depot, lock it
+        if (!isAdmin && session.emplacement) {
+          setFilters(f => ({ ...f, depot: session.emplacement }));
+        }
+      } catch (e) { console.error(e); }
+    }
+  }, []);
+
+  useEffect(() => {
     fetchFilters();
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [filters]);
+    if (userSession) fetchData();
+  }, [filters, userSession]);
 
   const filteredItems = data?.items?.filter((item: any) => 
     item.reference.toLowerCase().includes(search.toLowerCase()) ||
@@ -70,12 +89,7 @@ export default function StockValuationPage() {
   ) || [];
 
   const handlePrint = () => {
-    const query = new URLSearchParams({
-      depot: filters.depot,
-      categoryId: filters.categoryId,
-      type: "valuation"
-    }).toString();
-    window.open(`/api/stock/print?${query}`, "_blank");
+    setIsPrintModalOpen(true);
   };
 
   return (
@@ -107,6 +121,13 @@ export default function StockValuationPage() {
         </div>
       </div>
 
+      {isPrintModalOpen && (
+        <StockValuationModal 
+          filters={filters} 
+          onClose={() => setIsPrintModalOpen(false)} 
+        />
+      )}
+
       {/* KPI Cards */}
       {data && (
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -134,7 +155,11 @@ export default function StockValuationPage() {
           <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
             <div className="w-full lg:w-48">
               <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Dépôt</Label>
-              <Select value={filters.depot} onValueChange={(v) => setFilters({ ...filters, depot: v })}>
+              <Select 
+                value={filters.depot} 
+                onValueChange={(v) => setFilters({ ...filters, depot: v })}
+                disabled={!(userSession?.admin === "Oui" || userSession?.role === 1 || userSession?.role === "1")}
+              >
                 <SelectTrigger className="h-12 rounded-xl border-slate-100 bg-slate-50/50 font-bold transition-all">
                   <SelectValue />
                 </SelectTrigger>
