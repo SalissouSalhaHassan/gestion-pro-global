@@ -110,8 +110,12 @@ export default function CashBalancePage() {
             <Scale size={32} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Bilan de Caisse</h1>
-            <p className="text-slate-500 font-medium italic font-outfit">Réconciliation financière et analyse des flux de trésorerie.</p>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight">
+               {isAdmin ? "Bilan de Caisse Global" : "Mon Bilan de Caisse"}
+            </h1>
+            <p className="text-slate-500 font-medium italic font-outfit">
+               {isAdmin ? "Réconciliation financière de tous les points de vente." : "Suivi personnel de vos flux de trésorerie."}
+            </p>
           </div>
         </div>
 
