@@ -17,7 +17,8 @@ import {
   CheckCircle2,
   ChevronDown,
   Search,
-  X
+  X,
+  AlertCircle
 } from "lucide-react";
 
 type Supplier = { id: number; nom: string };

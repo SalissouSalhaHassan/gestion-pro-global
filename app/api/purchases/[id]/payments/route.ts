@@ -5,9 +5,10 @@ import { getServerSession } from '@/lib/auth_helper';
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const supabase = await createClient();
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
@@ -20,7 +21,7 @@ export async function POST(
     }
 
     const payment = await purchaseService.addPayment(
-      Number(params.id),
+      Number(id),
       body.amount,
       body.method || 'Espèces',
       body.reference || '',

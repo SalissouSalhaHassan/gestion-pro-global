@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, 
@@ -38,7 +38,8 @@ type Purchase = {
   paiements: Payment[];
 };
 
-export default function PurchasePaymentsPage({ params }: { params: { id: string } }) {
+export default function PurchasePaymentsPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
   const router = useRouter();
   const [purchase, setPurchase] = useState<Purchase | null>(null);
   const [loading, setLoading] = useState(true);
