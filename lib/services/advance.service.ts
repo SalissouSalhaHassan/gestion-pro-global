@@ -1,4 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { applyUserScope } from '../utils/scoping';
+import { CustomSession } from '../auth_helper';
 
 export type Advance = {
   id: number;
@@ -17,24 +19,31 @@ export type Advance = {
 export class AdvanceService {
   constructor(private supabase: SupabaseClient) {}
 
-  async getAllAdvances() {
-    const { data, error } = await this.supabase
+  async getAllAdvances(session?: CustomSession) {
+    let query = this.supabase
       .from('avances_clients')
       .select('*, clients(nom)')
       .order('date_creation', { ascending: false });
+
+    if (session) {
+        query = applyUserScope(query as any, session, 'avances');
+    }
+
+    const { data, error } = await query;
 
     if (error) throw new Error(error.message);
     return data;
   }
 
-  async createAdvance(advanceData: Omit<Advance, 'id' | 'statut' | 'montant_restant'>) {
+  async createAdvance(advanceData: Omit<Advance, 'id' | 'statut' | 'montant_restant'>, session?: CustomSession) {
     const payload = {
         ...advanceData,
         montant_restant: advanceData.montant_initial,
         statut: 'Disponible',
+        utilisateur: session?.username || advanceData.utilisateur,
+        emplacement: session?.emplacement || advanceData.emplacement
     };
     
-    // Nullify empty reference_paiement to avoid UNIQUE constraint violations
     if (payload.reference_paiement === "") {
         payload.reference_paiement = null as any;
     }
@@ -46,11 +55,13 @@ export class AdvanceService {
       .single();
 
     if (error) throw new Error(error.message);
+    
+    await this.logAction(data.id, 'CREATE', data.montant_initial, session?.username, "Création du dépôt initial");
+
     return data;
   }
 
   async withdrawAdvance(advanceId: number, amount: number, notes?: string, username?: string) {
-    // Transaction-like behavior
     const { data: advance, error: fetchError } = await this.supabase
       .from('avances_clients')
       .select('*')
@@ -81,28 +92,28 @@ export class AdvanceService {
 
     if (updateError) throw new Error(updateError.message);
 
-    // Optional: Log the withdrawal into a history or `paiements` table if needed
-    // Example: insert into paiements table as an advance usage or withdrawal.
+    await this.logAction(advanceId, 'WITHDRAW', amount, username, notes || "Retrait de fonds");
 
     return updatedAdvance;
   }
 
-  async cancelAdvance(advanceId: number) {
+  async cancelAdvance(advanceId: number, username?: string) {
     const { data, error } = await this.supabase
       .from('avances_clients')
       .update({ statut: 'Annulée' })
       .eq('id', advanceId)
-      .eq('statut', 'Disponible') // Can only cancel available ones
+      .eq('statut', 'Disponible')
       .select()
       .single();
 
     if (error) throw new Error("Cannot cancel advance, might already be used or an error occurred.");
+    
+    await this.logAction(advanceId, 'CANCEL', data.montant_initial, username, "Annulation du dépôt");
+    
     return data;
   }
 
-  async updateAdvance(advanceId: number, updateData: Partial<Omit<Advance, 'id'>>) {
-    // Note: If montant_initial changes, we might need to adjust montant_restant. 
-    // To keep it simple, we assume edits are for metadata or fixing typos before it's used.
+  async updateAdvance(advanceId: number, updateData: Partial<Omit<Advance, 'id'>>, username?: string) {
     if (updateData.reference_paiement === "") {
        updateData.reference_paiement = null as any;
     }
@@ -114,7 +125,36 @@ export class AdvanceService {
       .single();
 
     if (error) throw new Error(error.message);
+    
+    await this.logAction(advanceId, 'UPDATE', 0, username, "Mise à jour des informations");
+
     return data;
+  }
+
+  async getAdvanceHistory(advanceId: number) {
+    const { data, error } = await this.supabase
+        .from('avances_history')
+        .select('*')
+        .eq('advance_id', advanceId)
+        .order('date_action', { ascending: false });
+    
+    if (error) return [];
+    return data;
+  }
+
+  private async logAction(advanceId: number, action: string, amount: number, user?: string, notes?: string) {
+    try {
+        await this.supabase.from('avances_history').insert({
+            advance_id: advanceId,
+            action,
+            amount,
+            utilisateur: user,
+            notes,
+            date_action: new Date().toISOString()
+        });
+    } catch (e) {
+        console.error("Audit log failed:", e);
+    }
   }
 
   async deleteAdvance(advanceId: number) {
@@ -133,10 +173,9 @@ export class AdvanceService {
       .select('*')
       .eq('client_id', clientId)
       .in('statut', ['Disponible', 'Partiellement utilisée'])
-      .order('date_avance', { ascending: true }); // FIFO: oldest first
+      .order('date_avance', { ascending: true });
 
     if (error) throw new Error(error.message);
     return data;
   }
 }
-

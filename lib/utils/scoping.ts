@@ -17,7 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, any>>(
   query: T,
   session: CustomSession,
-  entityType: 'factures' | 'mouvements' | 'stocks' | 'clients' | 'fournisseurs' | 'expenses' | 'articles' | 'loyers'
+  entityType: 'factures' | 'mouvements' | 'stocks' | 'clients' | 'fournisseurs' | 'expenses' | 'articles' | 'loyers' | 'avances'
 ): T {
   // 1. Admin/Manager: No filters (sees everything).
   const isAdmin = (session.admin === "Oui" || session.admin === "oui" || session.admin === "true" || (session as any).admin === true) || 
@@ -64,6 +64,10 @@ export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, a
     }
     
     return (query as any).or(filter);
+  }
+
+  if (entityType === 'avances') {
+    return (query as any).eq('utilisateur', session.username);
   }
 
   return query;
