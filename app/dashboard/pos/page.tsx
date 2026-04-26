@@ -935,6 +935,7 @@ function PosPage() {
     priceDrafts: Record<string, string>;
   }[]>([]);
   const [query, setQuery] = useState("");
+  const [isListening, setIsListening] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | number>(1);
   const [selectedDepot, setSelectedDepot] = useState<string>("");
   const [cashierName, setCashierName] = useState("Admin");
@@ -2070,7 +2071,30 @@ function PosPage() {
                   placeholder="Recherche..."
                   style={S.searchInput}
                 />
-                <Mic size={16} style={{ marginRight: 8, color: "#95a5a6", cursor: "pointer" }} />
+                <button
+                  onClick={() => {
+                    if (isListening) return;
+                    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+                    if (!SpeechRecognition) { alert("Votre navigateur ne supporte pas la reconnaissance vocale."); return; }
+                    const recognition = new SpeechRecognition();
+                    recognition.lang = "fr-FR";
+                    recognition.interimResults = false;
+                    recognition.maxAlternatives = 1;
+                    setIsListening(true);
+                    recognition.onresult = (event: any) => {
+                      const transcript = event.results[0][0].transcript;
+                      setQuery(transcript);
+                      setIsListening(false);
+                    };
+                    recognition.onerror = () => setIsListening(false);
+                    recognition.onend = () => setIsListening(false);
+                    recognition.start();
+                  }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 8, display: 'flex', alignItems: 'center' }}
+                  title="Recherche vocale"
+                >
+                  <Mic size={16} style={{ color: isListening ? '#ef4444' : '#95a5a6', animation: isListening ? 'pulse 1s infinite' : 'none' }} />
+                </button>
               </div>
 
               {/* Product Grid */}
