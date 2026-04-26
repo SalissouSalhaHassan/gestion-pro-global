@@ -178,25 +178,26 @@ export default function CashBalancePage() {
                 <User size={18} className="text-slate-400" />
                 <span className="font-black text-slate-700 uppercase tracking-tight">{userSession?.username}</span>
              </div>
-             <div className="h-8 w-px bg-slate-100 mx-2 hidden md:block"></div>
-             <div className="flex items-center gap-3">
-                <Filter size={18} className="text-slate-400" />
-                <select 
-                   className="bg-transparent font-black text-slate-700 outline-none cursor-pointer"
-                   value={filters.type}
-                   onChange={(e) => setFilters({...filters, type: e.target.value})}
-                >
-                   <option value="Tous">Tous les types</option>
-                   <option value="Vente (Caisse)">Ventes</option>
-                   <option value="Paiement Ciment">Ciment</option>
-                   <option value="Paiement Loyer">Loyers</option>
-                   <option value="Dépense (Administrative)">Dépenses</option>
-                   <option value="Avance Client">Avances</option>
-                   <option value="Retrait">Retraits</option>
-                </select>
-             </div>
            </>
          )}
+
+         <div className="h-8 w-px bg-slate-100 mx-2 hidden md:block"></div>
+         <div className="flex items-center gap-3">
+            <Filter size={18} className="text-slate-400" />
+            <select 
+               className="bg-transparent font-black text-slate-700 outline-none cursor-pointer"
+               value={filters.type}
+               onChange={(e) => setFilters({...filters, type: e.target.value})}
+            >
+               <option value="Tous">Tous les types</option>
+               <option value="Vente (Caisse)">Ventes</option>
+               <option value="Paiement Ciment">Ciment</option>
+               <option value="Paiement Loyer">Loyers</option>
+               <option value="Dépense (Administrative)">Dépenses</option>
+               <option value="Avance Client">Avances</option>
+               <option value="Retrait">Retraits</option>
+            </select>
+         </div>
       </div>
 
       {/* Summary Cards */}
@@ -315,7 +316,6 @@ export default function CashBalancePage() {
                         </td>
                       </tr>
                     ))
-                    )
                   )}
                </tbody>
             </table>
