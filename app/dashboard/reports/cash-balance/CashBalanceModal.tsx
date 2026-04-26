@@ -9,7 +9,11 @@ import {
   TrendingDown,
   Scale,
   Calendar,
-  User
+  User,
+  ShieldCheck,
+  FileText,
+  MapPin,
+  ClipboardList
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -24,14 +28,14 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
   const [company, setCompany] = useState<any>(null);
-  const [printFormat, setPrintFormat] = useState<'A4' | 'A4-L'>('A4');
+  const [pageSize, setPageSize] = useState<'A4' | 'A5' | 'Ticket'>('A4');
+  const [docType, setDocType] = useState<'Journal' | 'Bilan Recap'>('Journal');
 
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
         
-        // 1. Fetch Company Info
         const { data: comp } = await supabase
           .from("informations_entreprise")
           .select("*")
@@ -39,7 +43,6 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
           .single();
         setCompany(comp);
 
-        // 2. Fetch Report Data
         const params = new URLSearchParams({
             start: filters.start,
             end: filters.end,
@@ -67,8 +70,8 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
         <div className="bg-white p-8 rounded-3xl shadow-xl flex flex-col items-center">
-          <Loader2 className="animate-spin text-emerald-600 mb-4" size={40} />
-          <p className="font-bold text-slate-600 font-outfit">Génération du bilan en cours...</p>
+          <Loader2 className="animate-spin text-indigo-600 mb-4" size={40} />
+          <p className="font-bold text-slate-600 font-outfit text-sm">Génération du rapport financier...</p>
         </div>
       </div>
     );
@@ -79,88 +82,121 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 bg-slate-900/60 backdrop-blur-md overflow-hidden print:p-0 print:bg-white print:backdrop-blur-none">
       
-      {/* Action Bar (Hidden on Print) */}
-      <div className="absolute top-6 right-6 flex flex-col items-end gap-3 print:hidden z-[110]">
-        <div className="flex items-center gap-2 bg-white/80 backdrop-blur p-2 rounded-2xl shadow-lg border border-white/20">
-          {(['A4', 'A4-L'] as const).map((fmt) => (
-            <button
-              key={fmt}
-              onClick={() => setPrintFormat(fmt)}
-              className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${
-                printFormat === fmt 
-                ? 'bg-emerald-600 text-white shadow-md' 
-                : 'text-slate-500 hover:bg-slate-100'
-              }`}
+      {/* Action Bar - Modernized Toggle Buttons */}
+      <div className="absolute top-6 right-6 flex flex-col items-end gap-6 print:hidden z-[110]">
+          {/* Paper Size Toggle */}
+          <div className="bg-slate-200/80 backdrop-blur-md p-1.5 rounded-[24px] flex items-center shadow-lg border border-white/20">
+             {['A4', 'A5', 'Ticket'].map((size) => (
+               <button
+                 key={size}
+                 onClick={() => setPageSize(size as any)}
+                 className={`px-6 py-2 rounded-2xl text-xs font-black transition-all ${
+                   pageSize === size 
+                   ? 'bg-indigo-600 text-white shadow-md scale-105' 
+                   : 'text-slate-500 hover:text-slate-800'
+                 }`}
+               >
+                 {size}
+               </button>
+             ))}
+          </div>
+
+          {/* Doc Type Toggle */}
+          <div className="bg-slate-200/80 backdrop-blur-md p-1.5 rounded-[24px] flex items-center shadow-lg border border-white/20">
+             <button
+                onClick={() => setDocType('Journal')}
+                className={`px-6 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
+                  docType === 'Journal' 
+                  ? 'bg-emerald-600 text-white shadow-md scale-105' 
+                  : 'text-slate-500 hover:text-slate-800'
+                }`}
+             >
+                <ClipboardList size={14} /> Journal
+             </button>
+             <button
+                onClick={() => setDocType('Bilan Recap')}
+                className={`px-6 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
+                  docType === 'Bilan Recap' 
+                  ? 'bg-slate-300 text-slate-600 shadow-md scale-105' 
+                  : 'text-slate-500 hover:text-slate-800'
+                }`}
+             >
+                <FileText size={14} /> Récap
+             </button>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={handlePrint}
+              className="bg-indigo-600 text-white px-10 py-5 rounded-[28px] font-black shadow-2xl shadow-indigo-500/40 flex items-center gap-3 hover:scale-105 active:scale-95 transition-all text-lg"
             >
-              {fmt === 'A4' ? 'Portrait' : 'Paysage'}
+              <Printer size={24} />
+              Imprimer
             </button>
-          ))}
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={handlePrint}
-            className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black shadow-xl shadow-emerald-500/30 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all"
-          >
-            <Printer size={20} />
-            Imprimer
-          </button>
-          <button 
-            onClick={onClose}
-            className="bg-white text-slate-400 p-3 rounded-2xl shadow-lg border border-slate-100 hover:text-rose-500 transition-colors"
-          >
-            <X size={24} />
-          </button>
-        </div>
+            <button 
+              onClick={onClose}
+              className="bg-white text-slate-400 p-5 rounded-[28px] shadow-xl border border-slate-100 hover:text-rose-500 hover:scale-110 transition-all active:scale-95"
+            >
+              <X size={28} />
+            </button>
+          </div>
       </div>
 
       {/* Report Paper Component */}
       <div className={`bg-white h-auto overflow-y-auto custom-scrollbar shadow-2xl print:shadow-none print:rounded-none print:w-full print:h-auto print:overflow-visible transition-all duration-500 ${
-        printFormat === 'A4-L' ? 'max-w-[280mm] w-full rounded-[32px]' : 'max-w-[190mm] w-full rounded-[32px]'
-      }`}>
+        pageSize === 'A4' ? 'max-w-[210mm]' : pageSize === 'Ticket' ? 'max-w-[80mm]' : 'max-w-[148mm]'
+      } w-full rounded-[40px] border border-slate-100 print:border-none`}>
         
-        <div id="printable-report" className="p-8 text-black font-outfit leading-tight">
+        <div id="printable-report" className={`p-10 text-slate-900 font-outfit leading-tight relative overflow-hidden ${
+           pageSize === 'Ticket' ? 'px-4 py-6' : 'p-10'
+        }`}>
           
           {/* HEADER */}
-          <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6 mb-6">
-            <div>
-                <h1 className="text-2xl font-black uppercase text-slate-900 leading-none mb-1">{company?.nom_entreprise || "LOGICIEL EASY"}</h1>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{company?.adresse || "Siège Social - Maradi, Niger"}</p>
-                <div className="flex gap-4 mt-3 text-[10px] font-bold">
-                    <span className="flex items-center gap-1"><Phone size={10}/> {company?.telephone}</span>
-                    <span className="flex items-center gap-1 font-black">NIF: {company?.nif}</span>
-                    <span className="flex items-center gap-1 font-black">RC: {company?.rc}</span>
-                </div>
+          <div className={`flex justify-between items-start mb-8 pb-6 border-b-2 border-slate-900 ${
+             pageSize === 'Ticket' ? 'flex-col items-center text-center gap-4' : ''
+          }`}>
+            <div className={pageSize === 'Ticket' ? 'text-center' : 'text-left'}>
+              <h1 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{company?.nom_entreprise || "ETS SOUNO"}</h1>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">
+                {company?.adresse || "MARADI, NIGER"}
+              </p>
+              <div className={`flex items-center gap-4 mt-3 text-[9px] font-black text-slate-400 ${pageSize === 'Ticket' ? 'justify-center' : ''}`}>
+                 <span className="flex items-center gap-1">NIF: {company?.nif}</span>
+                 <span className="flex items-center gap-1">RC: {company?.rc}</span>
+              </div>
             </div>
-            <div className="text-right">
+            {pageSize !== 'Ticket' && (
+              <div className="text-right">
                 <div className="bg-slate-900 text-white px-4 py-2 rounded-xl mb-2">
                     <h2 className="text-xs font-black uppercase tracking-[0.2em]">BILAN DE CAISSE</h2>
                 </div>
                 <div className="text-[10px] font-bold text-slate-500 space-y-0.5">
-                    <p>Période: {new Date(filters.start).toLocaleDateString('fr-FR')} - {new Date(filters.end).toLocaleDateString('fr-FR')}</p>
-                    <p>Caissier: {filters.cashier}</p>
-                    <p>Imprimé le: {new Date().toLocaleString('fr-FR')}</p>
+                    <p>Du: {new Date(filters.start).toLocaleDateString()}</p>
+                    <p>Au: {new Date(filters.end).toLocaleDateString()}</p>
+                    <p>User: {filters.cashier}</p>
                 </div>
-            </div>
+              </div>
+            )}
           </div>
 
-          {/* SUMMARY CARDS (HORIZONTAL ON PRINT) */}
-          <div className="grid grid-cols-3 gap-4 mb-8">
+          {/* SUMMARY CARDS */}
+          <div className={`grid ${pageSize === 'Ticket' ? 'grid-cols-1' : 'grid-cols-3'} gap-4 mb-8`}>
             <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex items-center gap-3">
-                <div className="p-2 bg-emerald-500 text-white rounded-lg shadow-lg shadow-emerald-200">
+                <div className="p-2 bg-emerald-500 text-white rounded-lg shadow-lg">
                     <TrendingUp size={18} />
                 </div>
                 <div>
-                    <p className="text-[9px] font-black text-emerald-600 uppercase tracking-wider">Total Recettes</p>
+                    <p className="text-[9px] font-black text-emerald-600 uppercase tracking-wider">Entrées</p>
                     <p className="text-lg font-black text-emerald-900">+{new Intl.NumberFormat('fr-FR').format(data.summary.totalIncome)}</p>
                 </div>
             </div>
             <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-center gap-3">
-                <div className="p-2 bg-rose-500 text-white rounded-lg shadow-lg shadow-rose-200">
+                <div className="p-2 bg-rose-500 text-white rounded-lg shadow-lg">
                     <TrendingDown size={18} />
                 </div>
                 <div>
-                    <p className="text-[9px] font-black text-rose-600 uppercase tracking-wider">Total Dépenses</p>
+                    <p className="text-[9px] font-black text-rose-600 uppercase tracking-wider">Sorties</p>
                     <p className="text-lg font-black text-rose-900">-{new Intl.NumberFormat('fr-FR').format(data.summary.totalExpenses)}</p>
                 </div>
             </div>
@@ -169,7 +205,7 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
                     <Scale size={18} />
                 </div>
                 <div>
-                    <p className={`text-[9px] font-black uppercase tracking-wider ${data.summary.netBalance >= 0 ? 'text-indigo-600' : 'text-amber-600'}`}>Solde Net</p>
+                    <p className={`text-[9px] font-black uppercase tracking-wider ${data.summary.netBalance >= 0 ? 'text-indigo-600' : 'text-amber-600'}`}>Net</p>
                     <p className={`text-lg font-black ${data.summary.netBalance >= 0 ? 'text-indigo-900' : 'text-amber-900'}`}>
                         {new Intl.NumberFormat('fr-FR').format(data.summary.netBalance)}
                     </p>
@@ -178,59 +214,47 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
           </div>
 
           {/* MAIN TABLE */}
-          <div className="border border-slate-900 rounded-xl overflow-hidden mb-8">
-            <table className="w-full border-collapse">
-                <thead>
-                    <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider">
-                        <th className="p-3 text-left w-20">Date</th>
-                        <th className="p-3 text-left">Référence</th>
-                        <th className="p-3 text-left">Type</th>
-                        <th className="p-3 text-left">Opération</th>
-                        <th className="p-3 text-left">Mode</th>
-                        <th className="p-3 text-right">Entrée</th>
-                        <th className="p-3 text-right">Sortie</th>
-                        <th className="p-3 text-center">User</th>
-                    </tr>
-                </thead>
-                <tbody className="text-[10px] font-bold">
-                    {data.entries.map((item: any, i: number) => (
-                        <tr key={i} className={`border-b border-slate-100 last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-                            <td className="p-3 text-slate-500">{new Date(item.date).toLocaleDateString('fr-FR')}</td>
-                            <td className="p-3 text-slate-900">{item.ref}</td>
-                            <td className="p-3 text-center">
-                                <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter ${
-                                    item.type.includes('Vente') || item.type.includes('Paiement') ? 'bg-emerald-100 text-emerald-700' : 
-                                    item.type.includes('Dépense') || item.type.includes('Retrait') ? 'bg-rose-100 text-rose-700' : 
-                                    'bg-indigo-100 text-indigo-700'
-                                }`}>
-                                    {item.type}
-                                </span>
-                            </td>
-                            <td className="p-3 text-slate-500 italic">Transaction</td>
-                            <td className="p-3 text-slate-600 font-medium">{item.moyen}</td>
-                            <td className="p-3 text-right text-emerald-600">
-                                {item.entree > 0 ? `+${new Intl.NumberFormat('fr-FR').format(item.entree)}` : '-'}
-                            </td>
-                            <td className="p-3 text-right text-rose-600">
-                                {item.sortie > 0 ? `-${new Intl.NumberFormat('fr-FR').format(item.sortie)}` : '-'}
-                            </td>
-                            <td className="p-3 text-center text-slate-400">@{item.user}</td>
+          {docType === 'Journal' && (
+            <div className="border border-slate-100 rounded-2xl overflow-hidden mb-12">
+               <table className="w-full text-left border-collapse">
+                  <thead>
+                     <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-wider">
+                        <th className="p-3">Date</th>
+                        <th className="p-3">Référence</th>
+                        <th className="p-3">Détails</th>
+                        <th className="p-3 text-right">E</th>
+                        <th className="p-3 text-right">S</th>
+                     </tr>
+                  </thead>
+                  <tbody className="text-[9px] font-bold">
+                     {data.entries.map((item: any, i: number) => (
+                        <tr key={i} className={`border-b border-slate-50 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                           <td className="p-3 text-slate-400">{new Date(item.date).toLocaleDateString('fr-FR').split('/').slice(0,2).join('/')}</td>
+                           <td className="p-3 text-slate-800">{item.ref}</td>
+                           <td className="p-3 text-slate-500 italic truncate max-w-[100px]">{item.type}</td>
+                           <td className="p-3 text-right text-emerald-600">
+                              {item.entree > 0 ? `+${new Intl.NumberFormat('fr-FR').format(item.entree)}` : '—'}
+                           </td>
+                           <td className="p-3 text-right text-rose-600">
+                              {item.sortie > 0 ? `-${new Intl.NumberFormat('fr-FR').format(item.sortie)}` : '—'}
+                           </td>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
-          </div>
+                     ))}
+                  </tbody>
+               </table>
+            </div>
+          )}
 
           {/* SIGNATURES */}
-          <div className="mt-12 flex justify-between">
-            <div className="w-48 text-center">
-                <p className="text-[10px] font-black uppercase border-b border-slate-900 pb-1 mb-16">Signature Caissier</p>
-                <div className="h-0.5 bg-slate-100"></div>
-            </div>
-            <div className="w-48 text-center">
-                <p className="text-[10px] font-black uppercase border-b border-slate-900 pb-1 mb-16">Cachet & Signature Direction</p>
-                <div className="h-0.5 bg-slate-100"></div>
-            </div>
+          <div className={`grid ${pageSize === 'Ticket' ? 'grid-cols-1 gap-8' : 'grid-cols-2 gap-16'} mt-auto pt-10`}>
+             <div className="text-center">
+                <p className="text-[10px] font-black uppercase text-slate-300 mb-8">Caissier</p>
+                <div className="h-px bg-slate-100"></div>
+             </div>
+             <div className="text-center">
+                <p className="text-[10px] font-black uppercase text-slate-300 mb-8">Contrôle / Direction</p>
+                <div className="h-px bg-slate-100"></div>
+             </div>
           </div>
 
         </div>
@@ -250,25 +274,23 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
             visibility: visible;
           }
           #printable-report {
-            position: absolute;
-            left: 0;
-            top: 0;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
             width: 100% !important;
-            padding: 0 !important;
+            padding: ${pageSize === 'Ticket' ? '4mm' : '10mm'} !important;
             margin: 0 !important;
             font-family: 'Outfit', sans-serif !important;
           }
           @page {
-            size: ${printFormat === 'A4-L' ? 'A4 landscape' : 'A4 portrait'};
-            margin: 10mm;
+            size: ${pageSize === 'Ticket' ? '80mm 200mm' : pageSize === 'A4' ? 'A4 portrait' : 'A5 portrait'};
+            margin: 0;
           }
-          /* Ensure backgrounds work on print */
+          .bg-slate-900 { background-color: #0f172a !important; color: #fff !important; }
+          .bg-indigo-600 { background-color: #4f46e5 !important; color: #fff !important; }
           .bg-emerald-50 { background-color: #ecfdf5 !important; }
           .bg-rose-50 { background-color: #fff1f2 !important; }
           .bg-indigo-50 { background-color: #eef2ff !important; }
-          .bg-slate-900 { background-color: #0f172a !important; color: #fff !important; }
-          .bg-slate-50 { background-color: #f8fafc !important; }
-          .text-white { color: #fff !important; }
           .text-emerald-600 { color: #059669 !important; }
           .text-rose-600 { color: #e11d48 !important; }
         }
