@@ -14,7 +14,8 @@ import {
   Mail,
   Info,
   Package,
-  ClipboardList
+  ClipboardList,
+  MessageCircle
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -158,6 +159,21 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
     window.print();
   };
 
+  const handleWhatsAppShare = () => {
+    if (!invoice) return;
+    
+    const clientTel = invoice.client_telephone || "";
+    // Remove non-numeric characters for WhatsApp link
+    const cleanTel = clientTel.replace(/\D/g, '');
+    
+    const message = `*ETS SALISSOU SALHA*\n\nBonjour ${invoice.client_nom},\n\nVoici votre facture *${invoice.bl_number}* du ${new Date(invoice.date_facture).toLocaleDateString("fr-FR")}.\n\n*Détails:*\n- Total TTC: ${Number(invoice.total_ttc).toLocaleString()} F CFA\n- Montant Payé: ${Number(invoice.montant_paye).toLocaleString()} F CFA\n- Reste à payer: ${Number(invoice.montant_restant).toLocaleString()} F CFA\n\nMerci de votre confiance !`;
+    
+    const encodedMsg = encodeURIComponent(message);
+    const waUrl = cleanTel ? `https://wa.me/${cleanTel}?text=${encodedMsg}` : `https://wa.me/?text=${encodedMsg}`;
+    
+    window.open(waUrl, '_blank');
+  };
+
   if (loading) {
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
@@ -237,6 +253,13 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
         </div>
         
         <div className="flex items-center gap-3">
+          <button 
+            onClick={handleWhatsAppShare}
+            className="bg-emerald-500 text-white px-6 py-3 rounded-2xl font-black shadow-xl shadow-emerald-500/30 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all"
+          >
+            <MessageCircle size={20} />
+            WhatsApp
+          </button>
           <button 
             onClick={handlePrint}
             className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black shadow-xl shadow-indigo-500/30 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all"

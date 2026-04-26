@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Bell, Package, Home, ArrowRight, Loader2, Info } from "lucide-react";
+import { Bell, Package, Home, ArrowRight, Loader2, Info, Banknote } from "lucide-react";
 import Link from "next/link";
 
 export default function NotificationBell() {
@@ -89,12 +89,18 @@ export default function NotificationBell() {
                     className="flex items-start gap-4 p-4 rounded-2xl hover:bg-slate-50 transition-all group/item"
                   >
                     <div className={`p-2.5 rounded-xl ${
-                      notif.type === "stock" ? "bg-amber-50 text-amber-600" : "bg-rose-50 text-rose-600"
+                      notif.type === "stock" ? "bg-amber-50 text-amber-600" : 
+                      notif.type === "debt" ? "bg-rose-50 text-rose-600" :
+                      "bg-indigo-50 text-indigo-600"
                     }`}>
-                      {notif.type === "stock" ? <Package size={18} /> : <Home size={18} />}
+                      {notif.type === "stock" ? <Package size={18} /> : 
+                       notif.type === "debt" ? <Banknote size={18} /> :
+                       <ArrowRight size={18} />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">{notif.title}</p>
+                      <p className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${
+                        notif.priority === 'high' ? 'text-rose-500' : 'text-slate-400'
+                      }`}>{notif.title}</p>
                       <p className="text-xs font-bold text-slate-800 leading-relaxed truncate">{notif.message}</p>
                     </div>
                     <ArrowRight size={14} className="mt-1 text-slate-300 opacity-0 group-hover/item:opacity-100 group-hover/item:translate-x-1 transition-all" />

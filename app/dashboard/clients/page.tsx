@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Users, Search, Plus, UserCircle2, ArrowUpDown, Banknote, ShieldAlert, Loader2, X, Save, FileText, Printer } from "lucide-react";
+import { Users, Search, Plus, UserCircle2, ArrowUpDown, Banknote, ShieldAlert, Loader2, X, Save, FileText, Printer, MessageCircle } from "lucide-react";
 import ClientListModal from "./ClientListModal";
 import { createClient } from "@/lib/supabase/client";
 
@@ -34,6 +34,21 @@ export default function ClientsPage() {
   const [clientInvoices, setClientInvoices] = useState<any[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+
+  const sendWhatsAppReminder = (client: Client) => {
+    if (!client.tel) {
+      alert("Ce client n'a pas de numéro de téléphone enregistré.");
+      return;
+    }
+    
+    const cleanTel = client.tel.replace(/\D/g, '');
+    const debt = Number(client.credit_facture || 0) + Number(client.credit_bl || 0);
+    
+    const message = `*ETS SALISSOU SALHA*\n\nBonjour ${client.nom},\n\nNous vous contactons pour un rappel concernant votre solde débiteur qui s'élève à *${debt.toLocaleString()} F CFA*.\n\nNous vous prions de bien vouloir régulariser votre situation dès que possible.\n\nMerci de votre confiance !`;
+    const encodedMsg = encodeURIComponent(message);
+    
+    window.open(`https://wa.me/${cleanTel}?text=${encodedMsg}`, '_blank');
+  };
 
   const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -394,6 +409,15 @@ export default function ClientsPage() {
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap text-right">
                         <div className="flex justify-end gap-2">
+                          {hasDebt && (
+                            <button
+                              onClick={() => sendWhatsAppReminder(client)}
+                              className="p-2 bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-600 hover:text-white rounded-xl transition-all shadow-sm"
+                              title="Rappel WhatsApp"
+                            >
+                              <MessageCircle size={18} />
+                            </button>
+                          )}
                           <button
                             onClick={() => fetchClientInvoices(client)}
                             className={`p-2 rounded-xl transition-all shadow-sm group border ${
@@ -404,9 +428,6 @@ export default function ClientsPage() {
                             title="Historique des Factures"
                           >
                             <FileText size={18} className="group-hover:scale-110 transition-transform" />
-                          </button>
-                          <button className="inline-flex items-center justify-center bg-transparent border border-slate-200 hover:border-transparent hover:bg-blue-600 text-slate-400 hover:text-white transition-colors duration-300 h-9 w-12 rounded-full shadow-sm">
-                            <Plus size={16} />
                           </button>
                         </div>
                       </td>
