@@ -60,29 +60,35 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const isAdmin = userSession?.admin === "Oui" || userSession?.role === 1 || userSession?.role === "1";
 
   const allNavItems = [
-    { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
-    { href: "/dashboard/pos", label: "Point de vente (POS)", icon: ShoppingCart, highlight: true },
-    { href: "/dashboard/articles", label: "Articles", icon: Package },
-    { href: "/dashboard/stock", label: "Gestion du Stock", icon: Boxes },
-    { href: "/dashboard/stock/valuation", label: "Valorisation Stock", icon: BarChart3 },
-    { href: "/dashboard/stock/transit", label: "Suivi Transits", icon: Truck },
-    { href: "/dashboard/inventory", label: "Jeu d'Inventaire", icon: ScanLine },
-    { href: "/dashboard/ciment", label: "Gestion Ciment", icon: Layers },
-    { href: "/dashboard/mouvements", label: "Journal d'Audit", icon: ArrowRightLeft },
-    { href: "/dashboard/clients", label: "Clients", icon: Users },
-    { href: "/dashboard/invoices", label: "Factures", icon: FileText },
-    { href: "/dashboard/expenses", label: "Dépenses", icon: TrendingDown },
-    { href: "/dashboard/reports/cash-balance", label: "Bilan de Caisse", icon: Scale },
-    { href: "/dashboard/advances", label: "Dépôts & Avances", icon: Wallet },
-    { href: "/dashboard/loyers", label: "Gestion des Loyers", icon: Home },
-    { href: "/dashboard/vehicles", label: "Gestion des Véhicules", icon: Car },
+    { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard, perm: "sale.dashboard" },
+    { href: "/dashboard/pos", label: "Point de vente (POS)", icon: ShoppingCart, highlight: true, perm: "pos.access" },
+    { href: "/dashboard/articles", label: "Articles", icon: Package, perm: "stock.articles" },
+    { href: "/dashboard/stock", label: "Gestion du Stock", icon: Boxes, perm: "stock.inventory" },
+    { href: "/dashboard/stock/valuation", label: "Valorisation Stock", icon: BarChart3, perm: "report.stock_valuation" },
+    { href: "/dashboard/stock/transit", label: "Suivi Transits", icon: Truck, perm: "stock.transfer" },
+    { href: "/dashboard/inventory", label: "Jeu d'Inventaire", icon: ScanLine, perm: "stock.inventory" },
+    { href: "/dashboard/ciment", label: "Gestion Ciment", icon: Layers, perm: "cement.access" },
+    { href: "/dashboard/mouvements", label: "Journal d'Audit", icon: ArrowRightLeft, perm: "report.activity_log" },
+    { href: "/dashboard/clients", label: "Clients", icon: Users, perm: "client.access" },
+    { href: "/dashboard/invoices", label: "Factures", icon: FileText, perm: "sale.invoices_view" },
+    { href: "/dashboard/expenses", label: "Dépenses", icon: TrendingDown, perm: "expense.access" },
+    { href: "/dashboard/reports/cash-balance", label: "Bilan de Caisse", icon: Scale, perm: "expense.cash_balance" },
+    { href: "/dashboard/advances", label: "Dépôts & Avances", icon: Wallet, perm: "deposit.access" },
+    { href: "/dashboard/loyers", label: "Gestion des Loyers", icon: Home, perm: "rent.access" },
+    { href: "/dashboard/vehicles", label: "Gestion des Véhicules", icon: Car, perm: "vehicles.access" },
     { href: "/dashboard/depots", label: "Gestion des Dépôts", icon: Warehouse, adminOnly: true },
     { href: "/dashboard/users", label: "Utilisateurs", icon: Users, adminOnly: true },
     { href: "/dashboard/permissions", label: "Permissions", icon: Shield, adminOnly: true },
     { href: "/dashboard/settings", label: "Paramètres", icon: Settings, adminOnly: true },
   ];
 
-  const visibleNavItems = allNavItems.filter(item => !item.adminOnly || isAdmin);
+  const userPermissions = userSession?.permissions || [];
+  const visibleNavItems = allNavItems.filter(item => {
+    if (isAdmin) return true;
+    if (item.adminOnly) return false;
+    if (item.perm) return userPermissions.includes(item.perm);
+    return true;
+  });
 
   return (
     <div className="flex min-h-screen relative overflow-hidden font-sans" dir="ltr" style={{

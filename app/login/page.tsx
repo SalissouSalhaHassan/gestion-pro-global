@@ -181,6 +181,14 @@ export default function LoginPage() {
       return;
     }
 
+    // Fetch user permissions
+    const { data: perms } = await supabase
+      .from("role_permissions")
+      .select("permissions(permission_key)")
+      .eq("role_id", userRecord.role_id);
+
+    const permissionKeys = perms?.map((p: any) => p.permissions.permission_key) || [];
+
     // Set custom session cookie (24 hours)
     const sessionData = {
       id: userRecord.id,
@@ -188,7 +196,8 @@ export default function LoginPage() {
       role: userRecord.role_id,
       admin: userRecord.admin,
       emplacement: userRecord.emplacement || "",
-      depots: userRecord.depots || ""
+      depots: userRecord.depots || "",
+      permissions: permissionKeys
     };
     document.cookie = `gp_session=${encodeURIComponent(JSON.stringify(sessionData))}; path=/; max-age=86400; SameSite=Lax`;
 
