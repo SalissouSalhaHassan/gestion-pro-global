@@ -26,6 +26,7 @@ import {
   Unlock,
   Crown,
   CheckCheck,
+  RefreshCw,
   Car,
   Home,
   Waves
@@ -293,8 +294,30 @@ export default function PermissionsPage() {
           )}
         </div>
 
-        {/* Save Button */}
-        <div className="p-4 border-t border-slate-100">
+        {/* Sync & Save Buttons */}
+        <div className="p-4 border-t border-slate-100 space-y-3">
+          <button
+            onClick={async () => {
+              setLoading(true);
+              try {
+                const res = await fetch("/api/permissions/seed", { method: "POST" });
+                const data = await res.json();
+                if (data.success) {
+                  setToast({ message: "Synchronisation réussie !", type: "success" });
+                  fetchData();
+                }
+              } catch (e) {
+                setToast({ message: "Échec de synchronisation", type: "error" });
+              } finally {
+                setLoading(false);
+              }
+            }}
+            className="w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            Synchroniser les Permissions
+          </button>
+
           <button
             onClick={handleSave}
             disabled={!hasChanges || saving || !selectedRoleId}

@@ -6,11 +6,8 @@ export async function POST() {
   const supabase = await createClient();
 
   try {
-    // Check if roles already exist
-    const { data: existingRoles } = await supabase.from("roles").select("id").limit(1);
-    if (existingRoles && existingRoles.length > 0) {
-      return NextResponse.json({ message: "Les données existent déjà.", seeded: false });
-    }
+    // Sync permissions regardless of roles existence
+    // This allows adding new permissions to an existing database
 
     // 1. Insert Roles
     const { error: rolesErr } = await supabase.from("roles").upsert([
