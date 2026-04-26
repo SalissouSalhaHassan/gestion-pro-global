@@ -58,6 +58,9 @@ export async function POST() {
       { permission_key: "client.credit_view", description: "Voir les Crédits Clients" },
       { permission_key: "client.credit_manage", description: "Gérer les Crédits Clients" },
       { permission_key: "user.profile_edit", description: "Modifier son Propre Profil" },
+      { permission_key: "vehicles.access", description: "Accéder à la Gestion des Véhicules" },
+      { permission_key: "rent.access", description: "Accéder à la Gestion des Loyers" },
+      { permission_key: "cement.access", description: "Accéder à la Gestion du Ciment" },
     ];
 
     const { error: permsErr } = await supabase

@@ -26,6 +26,9 @@ import {
   Unlock,
   Crown,
   CheckCheck,
+  Car,
+  Home,
+  Waves
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -61,6 +64,9 @@ const CATEGORY_META: Record<string, { icon: any; gradient: string; shadow: strin
   "Utilisateurs & Profils": { icon: UserCog, gradient: "linear-gradient(135deg, #ec4899, #f472b6)", shadow: "rgba(236,72,153,0.25)", accent: "#ec4899" },
   "Point de Vente (POS)": { icon: Store, gradient: "linear-gradient(135deg, #14b8a6, #2dd4bf)", shadow: "rgba(20,184,166,0.25)", accent: "#14b8a6" },
   "Acomptes & Avances": { icon: Banknote, gradient: "linear-gradient(135deg, #f97316, #fb923c)", shadow: "rgba(249,115,22,0.25)", accent: "#f97316" },
+  "Gestion Parc & Véhicules": { icon: Car, gradient: "linear-gradient(135deg, #6366f1, #a5b4fc)", shadow: "rgba(99,102,241,0.25)", accent: "#6366f1" },
+  "Gestion des Loyers": { icon: Home, gradient: "linear-gradient(135deg, #10b981, #6ee7b7)", shadow: "rgba(16,185,129,0.25)", accent: "#10b981" },
+  "Gestion du Ciment": { icon: Waves, gradient: "linear-gradient(135deg, #0ea5e9, #7dd3fc)", shadow: "rgba(14,165,233,0.25)", accent: "#0ea5e9" },
   "Autres": { icon: Shield, gradient: "linear-gradient(135deg, #475569, #64748b)", shadow: "rgba(71,85,105,0.25)", accent: "#475569" },
 };
 

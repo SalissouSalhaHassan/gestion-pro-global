@@ -41,6 +41,9 @@ export async function GET() {
       user: "Utilisateurs & Profils",
       pos: "Point de Vente (POS)",
       deposit: "Acomptes & Avances",
+      vehicles: "Gestion Parc & Véhicules",
+      rent: "Gestion des Loyers",
+      cement: "Gestion du Ciment",
     };
 
     const grouped: Record<string, typeof permissions> = {};
