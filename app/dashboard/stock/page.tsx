@@ -18,7 +18,8 @@ import {
   ArrowDownRight,
   RefreshCw,
   Box,
-  ClipboardCheck
+  ClipboardCheck,
+  ClipboardList
 } from "lucide-react";
 import Link from "next/link";
 
@@ -125,10 +126,14 @@ export default function StockDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
-           <Link href="/dashboard/stock/reconciliation" className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all font-bold shadow-lg shadow-indigo-200">
-             <ClipboardCheck className="w-5 h-5" />
-             Jerd الدوري
-           </Link>
+            <Link href="/dashboard/stock/reconciliation" className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all font-bold shadow-lg shadow-indigo-200">
+              <ClipboardCheck className="w-5 h-5" />
+              Jerd الدوري
+            </Link>
+            <Link href="/dashboard/stock/journal" className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all font-bold shadow-lg shadow-emerald-200">
+              <ClipboardList className="w-5 h-5" />
+              Journal Quotidien
+            </Link>
            <Link href="/dashboard/mouvements" className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl hover:bg-slate-50 transition-all font-bold shadow-sm">
              <History className="w-5 h-5 text-slate-400" />
              Journal d'Audit
