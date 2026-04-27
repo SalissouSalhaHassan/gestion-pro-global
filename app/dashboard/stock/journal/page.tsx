@@ -79,8 +79,14 @@ export default function StockJournal() {
   };
 
   const fetchCategories = async () => {
-    const { data } = await supabase.from("categories").select("id, nom").order("nom");
-    if (data) setCategories(data);
+    try {
+      const res = await fetch("/api/stock/categories");
+      if (!res.ok) throw new Error("Failed to fetch categories");
+      const data = await res.json();
+      if (Array.isArray(data)) setCategories(data);
+    } catch (err) {
+      console.error("Error fetching categories:", err);
+    }
   };
 
   const stats = {
