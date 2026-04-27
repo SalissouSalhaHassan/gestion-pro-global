@@ -178,15 +178,19 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
             </div>
             <div className="text-right">
                 <div className="bg-slate-900 text-white px-6 py-3 rounded-2xl mb-4 inline-block">
-                    <h2 className="text-sm font-black uppercase tracking-[0.4em]">BON DE TRANSFERT</h2>
+                    <h2 className="text-sm font-black uppercase tracking-[0.8em] whitespace-nowrap">B O N D E T R A N S F E R T</h2>
                 </div>
                 <div className="text-[11px] font-black text-slate-400 space-y-1">
                     <p>Réf: <span className="text-slate-900">{transferData?.ref || '—'}</span></p>
-                    <p>Date: <span className="text-slate-900">
-                      {transferData?.date ? new Date(transferData.date).toLocaleDateString('fr-FR', {
-                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                      }) : '—'}
-                    </span></p>
+                    <p>
+                      {transferData?.date ? (
+                        <>Date: <span className="text-slate-900">{new Date(transferData.date).toLocaleDateString('fr-FR', {
+                          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                        })}</span></>
+                      ) : (
+                        <span className="text-indigo-600 font-black tracking-widest">B O N D E T R A N S F E R T</span>
+                      )}
+                    </p>
                 </div>
             </div>
           </div>
