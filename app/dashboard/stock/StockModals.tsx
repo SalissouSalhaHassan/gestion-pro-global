@@ -68,13 +68,19 @@ export function AdjustmentModal({ isOpen, onClose, item, depotId, depotNom, onSu
   const [notes, setNotes] = useState("");
   const [selectedDepotId, setSelectedDepotId] = useState<string>(depotId ? depotId.toString() : "");
   const [depotsList, setDepotsList] = useState<DepotObject[]>([]);
+  const [suppliersList, setSuppliersList] = useState<any[]>([]);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPrintChoice, setShowPrintChoice] = useState(false);
+  const [lastAdjustRef, setLastAdjustRef] = useState<string | null>(null);
+  const [lastAdjustId, setLastAdjustId] = useState<number | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setSelectedDepotId(depotId ? depotId.toString() : "");
       fetchDepots();
+      fetchSuppliers();
     }
   }, [isOpen, depotId]);
 
@@ -83,6 +89,14 @@ export function AdjustmentModal({ isOpen, onClose, item, depotId, depotNom, onSu
       const res = await fetch("/api/stock/depots");
       const data = await res.json();
       if (Array.isArray(data)) setDepotsList(data);
+    } catch (err) {}
+  };
+
+  const fetchSuppliers = async () => {
+    try {
+      const res = await fetch("/api/suppliers");
+      const data = await res.json();
+      if (Array.isArray(data)) setSuppliersList(data);
     } catch (err) {}
   };
 
@@ -95,6 +109,7 @@ export function AdjustmentModal({ isOpen, onClose, item, depotId, depotNom, onSu
 
     try {
       const depotName = depotId ? depotNom : depotsList.find(d => d.id === Number(selectedDepotId))?.nom;
+      const supplierName = suppliersList.find(s => s.id === Number(selectedSupplierId))?.nom || "";
 
       const res = await fetch("/api/stock/adjust", {
         method: "POST",
@@ -103,6 +118,8 @@ export function AdjustmentModal({ isOpen, onClose, item, depotId, depotNom, onSu
           article_id: item.id,
           qty_adj: Number(qtyAdj),
           depot_nom: depotName,
+          fournisseur_id: selectedSupplierId ? Number(selectedSupplierId) : null,
+          fournisseur_nom: supplierName,
           notes
         })
       });
@@ -110,10 +127,11 @@ export function AdjustmentModal({ isOpen, onClose, item, depotId, depotNom, onSu
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Échec de l'ajustement");
 
+      setLastAdjustRef(data.reference);
+      setLastAdjustId(data.id);
+      setShowPrintChoice(true);
       onSuccess();
-      onClose();
-      setQtyAdj("");
-      setNotes("");
+      // Don't close yet, wait for print choice
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -200,11 +218,24 @@ export function AdjustmentModal({ isOpen, onClose, item, depotId, depotNom, onSu
               </div>
            </div>
 
+           {/* Supplier Selection */}
+           <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fournisseur (Optionnel)</label>
+              <select 
+                className="w-full p-4 bg-slate-50 border-2 border-transparent focus:border-indigo-100 rounded-2xl outline-none font-bold text-slate-700"
+                value={selectedSupplierId}
+                onChange={(e) => setSelectedSupplierId(e.target.value)}
+              >
+                 <option value="">Sélectionner un fournisseur...</option>
+                 {suppliersList.map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
+              </select>
+           </div>
+
            {/* Notes */}
            <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Notes / Raison</label>
               <textarea 
-                className="w-full p-4 bg-slate-50 border-transparent border focus:border-indigo-100 focus:bg-white rounded-2xl outline-none transition-all font-semibold text-slate-600 text-sm min-h-[100px]"
+                className="w-full p-4 bg-slate-50 border-transparent border focus:border-indigo-100 focus:bg-white rounded-2xl outline-none transition-all font-semibold text-slate-600 text-sm min-h-[80px]"
                 placeholder="Ex: Inventaire périodique, correction erreur..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -694,7 +725,49 @@ export function AddArticleModal({ isOpen, onClose, onSuccess, currentDepotId, cu
                 </button>
               </div>
            </div>
-        </form>
+       </form>
+       </div>
+
+       {/* Print Choice Overlay */}
+       {showPrintChoice && (
+         <div className="absolute inset-0 z-[110] bg-indigo-900/90 backdrop-blur-xl flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-300">
+           <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/20">
+             <CheckCircle2 className="w-10 h-10 text-white" />
+           </div>
+           <h4 className="text-3xl font-black text-white mb-2">Ajustement Réussi !</h4>
+           <p className="text-indigo-200 font-medium mb-12">Souhaitez-vous imprimer le bon d'ajustement ?</p>
+           
+           <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
+             <button 
+               onClick={() => {
+                 window.open(`/api/stock/adjust/${lastAdjustId}/pdf?format=A4`, "_blank");
+                 onClose();
+               }}
+               className="bg-white/10 hover:bg-white/20 text-white p-6 rounded-[2rem] border border-white/10 transition-all group"
+             >
+               <Printer className="w-8 h-8 mx-auto mb-3 text-indigo-300 group-hover:scale-110 transition-transform" />
+               <span className="block font-black uppercase tracking-widest text-xs">Format A4</span>
+             </button>
+             <button 
+               onClick={() => {
+                 window.open(`/api/stock/adjust/${lastAdjustId}/pdf?format=A5`, "_blank");
+                 onClose();
+               }}
+               className="bg-white/10 hover:bg-white/20 text-white p-6 rounded-[2rem] border border-white/10 transition-all group"
+             >
+               <Printer className="w-8 h-8 mx-auto mb-3 text-emerald-300 group-hover:scale-110 transition-transform" />
+               <span className="block font-black uppercase tracking-widest text-xs">Format A5</span>
+             </button>
+           </div>
+           
+           <button 
+             onClick={onClose}
+             className="mt-12 text-white/50 font-bold hover:text-white transition-colors"
+           >
+             Continuer sans imprimer
+           </button>
+         </div>
+       )}
       </div>
     </div>
   );

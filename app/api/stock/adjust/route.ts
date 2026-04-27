@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const body = await request.json();
   
-  const { article_id, qty_adj, depot_nom, notes } = body;
+  const { article_id, qty_adj, depot_nom, notes, fournisseur_id, fournisseur_nom } = body;
 
   if (!article_id || qty_adj === undefined || !depot_nom) {
     return NextResponse.json({ error: "Données manquantes" }, { status: 400 });
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     const movType = Number(qty_adj) > 0 ? "ajustement_entree" : "ajustement_sortie";
     const ref = `ADJ-${new Date().getTime().toString().slice(-10)}`;
     
-    const { error: mError } = await supabase
+    const { data: newMvt, error: mError } = await supabase
       .from("mouvements")
       .insert({
         article_id,
@@ -80,14 +80,17 @@ export async function POST(request: Request) {
         depot: depot_nom,
         date_mouvement: new Date().toISOString(),
         nr_doc: ref,
-        fournisseur_client: "Ajustement Manuel Web",
+        fournisseur_client: fournisseur_nom || "Ajustement Manuel Web",
         user_id: user.id,
-        utilisateur: user.username
-      });
+        utilisateur: user.username,
+        notes: notes
+      })
+      .select()
+      .single();
 
     if (mError) throw mError;
 
-    return NextResponse.json({ success: true, newStock: stockApres });
+    return NextResponse.json({ success: true, newStock: stockApres, id: newMvt.id, reference: ref });
 
   } catch (err: any) {
     console.error("Adjustment Error:", err);

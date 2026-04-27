@@ -25,6 +25,8 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
   const [items, setItems] = useState<any[]>([]);
   const [transferData, setTransferData] = useState<any>(null);
   const [company, setCompany] = useState<any>(null);
+  const [printFormat, setPrintFormat] = useState<'A4' | 'A5'>('A4');
+  const [showPrintChoice, setShowPrintChoice] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -39,15 +41,41 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
           .single();
         setCompany(comp);
 
-        // 2. Fetch Movements related to this transfer reference
-        // We look for both exit and entry to find the source/dest
+        // 2. Fetch Transit Record (Primary source for source/dest depots)
+        const { data: transit } = await supabase
+          .from("stock_transits")
+          .select("*")
+          .eq("reference", transferRef)
+          .maybeSingle();
+
+        // 3. Fetch Movements related to this transfer reference
         const { data: mvts } = await supabase
           .from("mouvements")
           .select("*, articles(reference, designation, unite)")
           .eq("nr_doc", transferRef);
         
-        if (mvts && mvts.length > 0) {
-            // Find the source and dest from the first two movements (if it's a standard transfer)
+        if (transit) {
+            setTransferData({
+                ref: transferRef,
+                date: transit.created_at,
+                source: transit.source_depot,
+                dest: transit.dest_depot,
+                user: transit.created_by,
+                notes: transit.notes
+            });
+            
+            // For items, use movements (sortie) or details from transit
+            if (mvts && mvts.length > 0) {
+                setItems(mvts.filter(m => m.type === 'transfert_sortie'));
+            } else if (transit.details) {
+                // Fallback to transit details if movements haven't synced yet
+                setItems((transit.details as any[]).map(d => ({
+                    articles: { reference: "", designation: d.designation, unite: "" },
+                    quantite: d.qty
+                })));
+            }
+        } else if (mvts && mvts.length > 0) {
+            // Fallback to movements if transit record missing
             const sortie = mvts.find(m => m.type === 'transfert_sortie');
             const entree = mvts.find(m => m.type === 'transfert_entree');
             
@@ -58,8 +86,6 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
                 dest: entree?.depot || "Inconnu",
                 user: mvts[0].utilisateur
             });
-
-            // Group by article if multiple (though currently API does 1 per ref)
             setItems(mvts.filter(m => m.type === 'transfert_sortie'));
         }
 
@@ -73,8 +99,12 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
     if (transferRef) fetchData();
   }, [transferRef]);
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = (format: 'A4' | 'A5') => {
+    setPrintFormat(format);
+    setShowPrintChoice(false);
+    setTimeout(() => {
+        window.print();
+    }, 100);
   };
 
   if (loading) {
@@ -95,13 +125,34 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
       
       {/* Action Bar (Hidden on Print) */}
       <div className="absolute top-6 right-6 flex items-center gap-3 print:hidden z-[110]">
-          <button 
-            onClick={handlePrint}
-            className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black shadow-xl shadow-emerald-500/30 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all"
-          >
-            <Printer size={20} />
-            Imprimer
-          </button>
+          <div className="relative">
+            <button 
+              onClick={() => setShowPrintChoice(!showPrintChoice)}
+              className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black shadow-xl shadow-emerald-500/30 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all"
+            >
+              <Printer size={20} />
+              Imprimer
+            </button>
+            
+            {showPrintChoice && (
+                <div className="absolute top-full mt-2 right-0 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 w-40 animate-in slide-in-from-top-2 duration-200">
+                    <button 
+                        onClick={() => handlePrint('A4')}
+                        className="w-full text-left p-3 hover:bg-slate-50 rounded-xl font-bold text-slate-700 text-sm flex items-center justify-between"
+                    >
+                        Format A4
+                        <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-400">Portrait</span>
+                    </button>
+                    <button 
+                        onClick={() => handlePrint('A5')}
+                        className="w-full text-left p-3 hover:bg-slate-50 rounded-xl font-bold text-slate-700 text-sm flex items-center justify-between"
+                    >
+                        Format A5
+                        <span className="text-[9px] bg-emerald-100 px-2 py-0.5 rounded text-emerald-600">Compact</span>
+                    </button>
+                </div>
+            )}
+          </div>
           <button 
             onClick={onClose}
             className="bg-white text-slate-400 p-3 rounded-2xl shadow-lg border border-slate-100 hover:text-rose-500 transition-colors"
@@ -230,13 +281,14 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            width: 100% !important;
-            padding: 10mm !important;
+            width: ${printFormat === 'A5' ? '148mm' : '100%'} !important;
+            padding: ${printFormat === 'A5' ? '10mm' : '20mm'} !important;
             margin: 0 !important;
             font-family: 'Outfit', sans-serif !important;
+            background: white !important;
           }
           @page {
-            size: A4 portrait;
+            size: ${printFormat === 'A5' ? 'A5 landscape' : 'A4 portrait'};
             margin: 0;
           }
           .bg-slate-900 { background-color: #0f172a !important; color: #fff !important; }
@@ -246,6 +298,17 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
           .text-indigo-600 { color: #4f46e5 !important; }
           .text-emerald-600 { color: #059669 !important; }
           .border-slate-900 { border-color: #0f172a !important; }
+          
+          /* Scale down for A5 */
+          ${printFormat === 'A5' ? `
+            #printable-transfer h1 { font-size: 18px !important; }
+            #printable-transfer h2 { font-size: 10px !important; }
+            #printable-transfer .text-lg { font-size: 14px !important; }
+            #printable-transfer .p-12 { padding: 5mm !important; }
+            #printable-transfer .mb-12 { margin-bottom: 20px !important; }
+            #printable-transfer .p-6 { padding: 10px !important; }
+            #printable-transfer table th, #printable-transfer table td { padding: 8px !important; font-size: 10px !important; }
+          ` : ''}
         }
       `}</style>
     </div>
