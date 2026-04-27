@@ -73,9 +73,7 @@ export class PurchaseService {
     const { data: newPurchase, error: purchaseError } = await this.supabase
       .from('achats')
       .insert({
-        ...purchaseRow,
-        user_id: userId,
-        created_by: username
+        ...purchaseRow
       })
       .select()
       .single();

@@ -167,14 +167,14 @@ export default function NewPurchasePage() {
         body: JSON.stringify(purchaseData)
       });
 
-      if (!res.ok) throw new Error("Failed to save purchase");
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to save purchase");
 
-      const saved = await res.json();
-      setLastSavedPurchase(saved);
+      setLastSavedPurchase(result);
       setIsPrintModalOpen(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Erreur lors de l'enregistrement de l'achat.");
+      alert(`Erreur: ${error.message}`);
     } finally {
       setSaving(false);
     }
