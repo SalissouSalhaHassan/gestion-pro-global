@@ -80,10 +80,9 @@ export async function POST(request: Request) {
         depot: depot_nom,
         date_mouvement: new Date().toISOString(),
         nr_doc: ref,
-        fournisseur_client: fournisseur_nom || "Ajustement Manuel Web",
+        fournisseur_client: (fournisseur_nom || "Ajustement Manuel") + (notes ? ` (${notes})` : ""),
         user_id: user.id,
-        utilisateur: user.username,
-        notes: notes
+        utilisateur: user.username
       })
       .select()
       .single();
