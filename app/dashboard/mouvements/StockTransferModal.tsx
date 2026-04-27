@@ -177,20 +177,18 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
                 </div>
             </div>
             <div className="text-right">
-                <div className="bg-slate-900 text-white px-6 py-3 rounded-2xl mb-4 inline-block">
-                    <h2 className="text-sm font-black uppercase tracking-[0.8em] whitespace-nowrap">B O N D E T R A N S F E R T</h2>
+                <div className="bg-slate-900 text-white px-6 py-2.5 rounded-xl mb-4 inline-block">
+                    <h2 className="text-xs font-black uppercase tracking-[0.4em] whitespace-nowrap">B O N D E T R A N S F E R T</h2>
                 </div>
                 <div className="text-[11px] font-black text-slate-400 space-y-1">
                     <p>Réf: <span className="text-slate-900">{transferData?.ref || '—'}</span></p>
-                    <p>
-                      {transferData?.date ? (
-                        <>Date: <span className="text-slate-900">{new Date(transferData.date).toLocaleDateString('fr-FR', {
-                          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                        })}</span></>
-                      ) : (
-                        <span className="text-indigo-600 font-black tracking-widest">B O N D E T R A N S F E R T</span>
-                      )}
-                    </p>
+                    <p>Date: <span className="text-slate-900">
+                      {transferData?.date ? new Date(transferData.date).toLocaleDateString('fr-FR', {
+                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                      }) : (new Date().toLocaleDateString('fr-FR', {
+                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                      }))}
+                    </span></p>
                 </div>
             </div>
           </div>
@@ -311,16 +309,18 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
           
           /* Scale down for A5 */
           ${printFormat === 'A5' ? `
-            #printable-transfer h1 { font-size: 16px !important; }
-            #printable-transfer h2 { font-size: 9px !important; }
-            #printable-transfer .text-lg { font-size: 12px !important; }
+            #printable-transfer h1 { font-size: 14px !important; }
+            #printable-transfer h2 { font-size: 8px !important; tracking: 0.2em !important; }
+            #printable-transfer .text-lg { font-size: 11px !important; }
             #printable-transfer .p-12 { padding: 5mm !important; }
-            #printable-transfer .mb-12 { margin-bottom: 12px !important; }
-            #printable-transfer .p-6 { padding: 8px !important; }
-            #printable-transfer table th, #printable-transfer table td { padding: 6px !important; font-size: 9px !important; }
-            #printable-transfer .rounded-[2rem] { border-radius: 12px !important; }
+            #printable-transfer .mb-12 { margin-bottom: 10px !important; }
+            #printable-transfer .p-6 { padding: 6px !important; }
+            #printable-transfer table th, #printable-transfer table td { padding: 5px !important; font-size: 8px !important; }
+            #printable-transfer .rounded-[2rem] { border-radius: 10px !important; }
             #printable-transfer .p-12 { padding: 0 !important; }
-            #printable-transfer { padding: 8mm !important; }
+            #printable-transfer { padding: 6mm !important; }
+            #printable-transfer .mb-4 { margin-bottom: 8px !important; }
+            #printable-transfer .py-2.5 { padding-top: 6px !important; padding-bottom: 6px !important; }
           ` : ''}
         }
       `}</style>
