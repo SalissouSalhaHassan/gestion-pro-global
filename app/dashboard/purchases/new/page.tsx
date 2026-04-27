@@ -23,7 +23,13 @@ import {
 
 type Supplier = { id: number; nom: string };
 type Depot = { id: number; nom: string };
-type Article = { id: number; designation: string; unite: string; p_achat_ht: number };
+type Article = { 
+  id: number; 
+  designation: string; 
+  unite: string; 
+  p_achat_ht: number;
+  stocks: { quantite: number; depot_nom: string }[];
+};
 type PurchaseItem = {
   article_id: number;
   designation: string;
