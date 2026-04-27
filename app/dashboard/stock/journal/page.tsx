@@ -12,10 +12,9 @@ import {
   TrendingUp,
   TrendingDown,
   Filter,
-  RefreshCw,
-  Box,
   Layers,
-  ArrowRight
+  ArrowRight,
+  ChevronDown
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -196,13 +195,14 @@ export default function StockJournal() {
             <div className="relative flex-1 md:w-64">
                 <Layers className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <select 
-                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-transparent border focus:border-indigo-200 focus:bg-white rounded-2xl outline-none transition-all font-semibold text-slate-700 appearance-none"
+                    className="w-full pl-12 pr-10 py-4 bg-slate-50 border-transparent border focus:border-indigo-200 focus:bg-white rounded-2xl outline-none transition-all font-semibold text-slate-700 appearance-none cursor-pointer"
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
                 >
                     <option value="">Toutes les catégories</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
                 </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             </div>
             
             <button 

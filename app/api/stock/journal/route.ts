@@ -27,8 +27,8 @@ export async function GET(request: Request) {
   if (search) {
     articlesQuery = articlesQuery.or(`reference.ilike.%${search}%,designation.ilike.%${search}%`);
   }
-  if (categoryId) {
-    articlesQuery = articlesQuery.eq("categorie_id", categoryId);
+  if (categoryId && categoryId !== "") {
+    articlesQuery = articlesQuery.eq("categorie_id", parseInt(categoryId, 10));
   }
 
   const { data: articles, error: artError } = await articlesQuery.order("designation");
