@@ -212,11 +212,11 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-slate-500" /><span className="text-xs font-bold text-slate-500">{analytics?.summary?.previousMonthName || 'Précédent'}</span></div>
             </div>
           </div>
-          <div className="flex-1 w-full" style={{ minHeight: 280 }}>
+          <div className="flex-1 w-full min-h-[300px]" style={{ minHeight: 300 }}>
             {loadingAnalytics ? (
               <div className="w-full h-full flex items-center justify-center opacity-20"><Database size={48} className="text-white animate-pulse" /></div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minHeight={300}>
                 <AreaChart data={analytics?.monthlyComparison || []} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                   <defs>
                     <linearGradient id="curGrad" x1="0" y1="0" x2="0" y2="1">
@@ -287,11 +287,11 @@ export default function DashboardPage() {
               <div><h2 className="text-xl font-black text-white mb-1">Performance du Stock</h2><p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Sorties sur 7 jours</p></div>
               <div className="p-3 bg-white/5 rounded-2xl border border-white/10"><TrendingUp size={20} className="text-indigo-400" /></div>
             </div>
-            <div className="flex-1 w-full">
+            <div className="flex-1 w-full min-h-[300px]">
               {loading ? (
                 <div className="w-full h-full flex items-center justify-center opacity-20"><Database size={48} className="text-white animate-pulse" /></div>
               ) : (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minHeight={300}>
                   <BarChart data={(data?.chartData || []).map((val: number, i: number) => ({ name: ['J-6','J-5','J-4','J-3','J-2','Hier','Auj.'][i], value: val }))} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                     <defs><linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#818cf8" /><stop offset="100%" stopColor="#4f46e5" /></linearGradient></defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
