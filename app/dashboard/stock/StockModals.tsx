@@ -23,7 +23,8 @@ import {
   Layers,
   RefreshCw,
   Info,
-  Save
+  Save,
+  Printer
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -131,7 +132,6 @@ export function AdjustmentModal({ isOpen, onClose, item, depotId, depotNom, onSu
       setLastAdjustId(data.id);
       setShowPrintChoice(true);
       onSuccess();
-      // Don't close yet, wait for print choice
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -256,8 +256,52 @@ export function AdjustmentModal({ isOpen, onClose, item, depotId, depotNom, onSu
              {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : "Valider l'Ajustement"}
            </button>
 
-        </div>
-      </form>
+         </div>
+       </form>
+
+       {/* Print Choice Overlay */}
+       {showPrintChoice && (
+         <div className="absolute inset-0 z-[110] bg-indigo-900/90 backdrop-blur-xl flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-300">
+           <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/20">
+             <CheckCircle2 className="w-10 h-10 text-white" />
+           </div>
+           <h4 className="text-3xl font-black text-white mb-2">Ajustement Réussi !</h4>
+           <p className="text-indigo-200 font-medium mb-12">Souhaitez-vous imprimer le bon d'ajustement ?</p>
+           
+           <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
+             <button 
+               type="button"
+               onClick={() => {
+                 window.open(`/api/stock/adjust/${lastAdjustId}/pdf?format=A4`, "_blank");
+                 onClose();
+               }}
+               className="bg-white/10 hover:bg-white/20 text-white p-6 rounded-[2rem] border border-white/10 transition-all group"
+             >
+               <Printer className="w-8 h-8 mx-auto mb-3 text-indigo-300 group-hover:scale-110 transition-transform" />
+               <span className="block font-black uppercase tracking-widest text-xs">Format A4</span>
+             </button>
+             <button 
+               type="button"
+               onClick={() => {
+                 window.open(`/api/stock/adjust/${lastAdjustId}/pdf?format=A5`, "_blank");
+                 onClose();
+               }}
+               className="bg-white/10 hover:bg-white/20 text-white p-6 rounded-[2rem] border border-white/10 transition-all group"
+             >
+               <Printer className="w-8 h-8 mx-auto mb-3 text-emerald-300 group-hover:scale-110 transition-transform" />
+               <span className="block font-black uppercase tracking-widest text-xs">Format A5</span>
+             </button>
+           </div>
+           
+           <button 
+             type="button"
+             onClick={onClose}
+             className="mt-12 text-white/50 font-bold hover:text-white transition-colors"
+           >
+             Continuer sans imprimer
+           </button>
+         </div>
+       )}
       </div>
     </div>
   );
@@ -450,9 +494,9 @@ export function TransferModal({ isOpen, onClose, item, sourceDepotId, sourceDepo
              {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : "Confirmer le Transfert"}
            </button>
 
-        </div>
-      </form>
-      </div>
+         </div>
+       </form>
+       </div>
     </div>
   );
 }
@@ -602,7 +646,7 @@ export function AddArticleModal({ isOpen, onClose, onSuccess, currentDepotId, cu
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex justify-between">
-                    Code Barre <span>(Auto-جénéré)</span>
+                    Code Barre <span>(Auto-généré)</span>
                   </label>
                   <div className="relative group">
                     <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-slate-900 transition-colors" />
@@ -727,48 +771,6 @@ export function AddArticleModal({ isOpen, onClose, onSuccess, currentDepotId, cu
            </div>
        </form>
        </div>
-
-       {/* Print Choice Overlay */}
-       {showPrintChoice && (
-         <div className="absolute inset-0 z-[110] bg-indigo-900/90 backdrop-blur-xl flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-300">
-           <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/20">
-             <CheckCircle2 className="w-10 h-10 text-white" />
-           </div>
-           <h4 className="text-3xl font-black text-white mb-2">Ajustement Réussi !</h4>
-           <p className="text-indigo-200 font-medium mb-12">Souhaitez-vous imprimer le bon d'ajustement ?</p>
-           
-           <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
-             <button 
-               onClick={() => {
-                 window.open(`/api/stock/adjust/${lastAdjustId}/pdf?format=A4`, "_blank");
-                 onClose();
-               }}
-               className="bg-white/10 hover:bg-white/20 text-white p-6 rounded-[2rem] border border-white/10 transition-all group"
-             >
-               <Printer className="w-8 h-8 mx-auto mb-3 text-indigo-300 group-hover:scale-110 transition-transform" />
-               <span className="block font-black uppercase tracking-widest text-xs">Format A4</span>
-             </button>
-             <button 
-               onClick={() => {
-                 window.open(`/api/stock/adjust/${lastAdjustId}/pdf?format=A5`, "_blank");
-                 onClose();
-               }}
-               className="bg-white/10 hover:bg-white/20 text-white p-6 rounded-[2rem] border border-white/10 transition-all group"
-             >
-               <Printer className="w-8 h-8 mx-auto mb-3 text-emerald-300 group-hover:scale-110 transition-transform" />
-               <span className="block font-black uppercase tracking-widest text-xs">Format A5</span>
-             </button>
-           </div>
-           
-           <button 
-             onClick={onClose}
-             className="mt-12 text-white/50 font-bold hover:text-white transition-colors"
-           >
-             Continuer sans imprimer
-           </button>
-         </div>
-       )}
-      </div>
     </div>
   );
 }
