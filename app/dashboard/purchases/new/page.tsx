@@ -47,6 +47,10 @@ export default function NewPurchasePage() {
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<PurchaseItem[]>([]);
 
+  // Print Modal
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [lastSavedPurchase, setLastSavedPurchase] = useState<any>(null);
+
   // Input fields for current item
   const [currentArticle, setCurrentArticle] = useState<Article | null>(null);
   const [currentQty, setCurrentQty] = useState<number>(1);
@@ -66,10 +70,11 @@ export default function NewPurchasePage() {
 
   const fetchInitialData = async () => {
     try {
-      const [suppRes, depRes, artRes] = await Promise.all([
+      const [suppRes, depRes, artRes, refRes] = await Promise.all([
         fetch("/api/suppliers"),
-        fetch("/api/depots"),
-        fetch("/api/articles")
+        fetch("/api/stock/depots"),
+        fetch("/api/articles"),
+        fetch("/api/purchases/next-ref")
       ]);
       setSuppliers(await suppRes.json());
       const depData = await depRes.json();
@@ -78,6 +83,9 @@ export default function NewPurchasePage() {
       
       const artData = await artRes.json();
       setArticles(Array.isArray(artData) ? artData : (artData.items || []));
+
+      const refData = await refRes.json();
+      if (refData.ref) setRefFacture(refData.ref);
     } catch (error) {
       console.error("Failed to fetch initial data", error);
     } finally {
@@ -87,7 +95,10 @@ export default function NewPurchasePage() {
 
   const filteredArticles = useMemo(() => {
     if (!articleSearch) return [];
-    return articles.filter(a => a.designation.toLowerCase().includes(articleSearch.toLowerCase())).slice(0, 10);
+    return articles.filter(a => 
+      a.designation.toLowerCase().includes(articleSearch.toLowerCase()) ||
+      a.id.toString().includes(articleSearch)
+    ).slice(0, 10);
   }, [articleSearch, articles]);
 
   const subTotal = useMemo(() => items.reduce((acc, item) => acc + item.montant_ligne, 0), [items]);
@@ -130,7 +141,7 @@ export default function NewPurchasePage() {
       const purchaseData = {
         fournisseur_id: selectedSupplier,
         fournisseur_nom: suppliers.find(s => s.id === Number(selectedSupplier))?.nom,
-        numero_facture: refFacture || `FAC-${Date.now()}`,
+        numero_facture: refFacture,
         date_achat: new Date().toISOString().split('T')[0],
         sous_total: subTotal,
         remise: remiseAmount,
@@ -152,13 +163,23 @@ export default function NewPurchasePage() {
 
       if (!res.ok) throw new Error("Failed to save purchase");
 
-      router.push("/dashboard/purchases");
+      const saved = await res.json();
+      setLastSavedPurchase(saved);
+      setIsPrintModalOpen(true);
     } catch (error) {
       console.error(error);
       alert("Erreur lors de l'enregistrement de l'achat.");
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePrint = (format: 'A4' | 'A5') => {
+    if (lastSavedPurchase?.id) {
+      window.open(`/api/purchases/${lastSavedPurchase.id}/pdf?format=${format}`, '_blank');
+    }
+    setIsPrintModalOpen(false);
+    router.push("/dashboard/purchases");
   };
 
   if (loading) return (
@@ -171,6 +192,53 @@ export default function NewPurchasePage() {
   return (
     <div className="space-y-8 max-w-[1600px] mx-auto pb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
       
+      {/* Print Modal */}
+      {isPrintModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xl" onClick={() => setIsPrintModalOpen(false)}></div>
+          <div className="relative bg-white rounded-[48px] shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-10 text-center space-y-6">
+              <div className="w-24 h-24 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle2 size={48} />
+              </div>
+              <h2 className="text-3xl font-black text-slate-900">Achat Enregistré avec Succès !</h2>
+              <p className="text-slate-500 font-medium max-w-md mx-auto">
+                L'achat N° <span className="text-indigo-600 font-black">{refFacture}</span> a été validé. 
+                Souhaitez-vous imprimer le bon de réception ?
+              </p>
+              
+              <div className="grid grid-cols-2 gap-4 mt-10">
+                <button 
+                  onClick={() => handlePrint('A4')}
+                  className="flex flex-col items-center gap-4 p-8 bg-slate-50 rounded-[32px] hover:bg-indigo-50 hover:text-indigo-600 border border-transparent hover:border-indigo-100 transition-all group"
+                >
+                  <div className="p-4 bg-white rounded-2xl shadow-sm group-hover:scale-110 transition-transform">
+                    <FileText size={32} />
+                  </div>
+                  <span className="font-black uppercase tracking-widest text-xs">Format A4</span>
+                </button>
+                <button 
+                  onClick={() => handlePrint('A5')}
+                  className="flex flex-col items-center gap-4 p-8 bg-slate-50 rounded-[32px] hover:bg-indigo-50 hover:text-indigo-600 border border-transparent hover:border-indigo-100 transition-all group"
+                >
+                  <div className="p-4 bg-white rounded-2xl shadow-sm group-hover:scale-110 transition-transform">
+                    <FileText size={24} />
+                  </div>
+                  <span className="font-black uppercase tracking-widest text-xs">Format A5</span>
+                </button>
+              </div>
+
+              <button 
+                onClick={() => router.push("/dashboard/purchases")}
+                className="mt-6 text-slate-400 font-black text-sm uppercase tracking-widest hover:text-slate-600 transition-all"
+              >
+                Fermer sans imprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
@@ -207,7 +275,7 @@ export default function NewPurchasePage() {
               </label>
               <select 
                 value={selectedSupplier} onChange={e => setSelectedSupplier(e.target.value === "" ? "" : Number(e.target.value))}
-                className="w-full bg-white border-slate-100 rounded-2xl p-4 font-bold focus:ring-4 focus:ring-indigo-50 transition-all"
+                className="w-full bg-white border-slate-100 rounded-2xl p-4 font-bold focus:ring-4 focus:ring-indigo-50 transition-all appearance-none"
               >
                 <option value="">Sélectionner un fournisseur...</option>
                 {suppliers.map(s => <option key={s.id} value={s.id}>{s.nom}</option>)}
@@ -219,7 +287,7 @@ export default function NewPurchasePage() {
               </label>
               <select 
                 value={selectedDepot} onChange={e => setSelectedDepot(e.target.value)}
-                className="w-full bg-white border-slate-100 rounded-2xl p-4 font-bold focus:ring-4 focus:ring-indigo-50 transition-all"
+                className="w-full bg-white border-slate-100 rounded-2xl p-4 font-bold focus:ring-4 focus:ring-indigo-50 transition-all appearance-none"
               >
                 {depots.map(d => <option key={d.id} value={d.nom}>{d.nom}</option>)}
               </select>
@@ -229,9 +297,9 @@ export default function NewPurchasePage() {
                 <FileText size={12} /> Référence Facture
               </label>
               <input 
-                type="text" placeholder="Ex: FAC-2024-001"
+                type="text" placeholder="Génération automatique..."
                 value={refFacture} onChange={e => setRefFacture(e.target.value)}
-                className="w-full bg-white border-slate-100 rounded-2xl p-4 font-bold focus:ring-4 focus:ring-indigo-50 transition-all"
+                className="w-full bg-slate-50 border-slate-100 rounded-2xl p-4 font-black text-indigo-600 focus:ring-4 focus:ring-indigo-50 transition-all"
               />
             </div>
             <div className="space-y-2">
@@ -254,7 +322,7 @@ export default function NewPurchasePage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="md:col-span-2 relative">
                 <input 
-                  type="text" placeholder="Rechercher un article..."
+                  type="text" placeholder="Rechercher un article (Nom ou ID)..."
                   value={articleSearch} 
                   onChange={e => {
                     setArticleSearch(e.target.value);
@@ -264,20 +332,29 @@ export default function NewPurchasePage() {
                 />
                 {isArticleListOpen && filteredArticles.length > 0 && (
                   <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl overflow-hidden z-50">
-                    {filteredArticles.map(art => (
-                      <button 
-                        key={art.id}
-                        onClick={() => {
-                          setCurrentArticle(art);
-                          setArticleSearch(art.designation);
-                          setCurrentPrice(art.p_achat_ht || 0);
-                          setIsArticleListOpen(false);
-                        }}
-                        className="w-full text-left px-6 py-4 hover:bg-indigo-50 font-bold text-slate-700 transition-colors border-b border-slate-50 last:border-0"
-                      >
-                        {art.designation} <span className="text-slate-400 text-xs ml-2">({art.unite})</span>
-                      </button>
-                    ))}
+                    {filteredArticles.map(art => {
+                      const stockInSelectedDepot = art.stocks?.find(s => s.depot_nom === selectedDepot)?.quantite || 0;
+                      return (
+                        <button 
+                          key={art.id}
+                          onClick={() => {
+                            setCurrentArticle(art);
+                            setArticleSearch(art.designation);
+                            setCurrentPrice(art.p_achat_ht || 0);
+                            setIsArticleListOpen(false);
+                          }}
+                          className="w-full text-left px-6 py-4 hover:bg-indigo-50 font-bold text-slate-700 transition-colors border-b border-slate-50 last:border-0 flex justify-between items-center"
+                        >
+                          <div>
+                            <span className="text-indigo-600 mr-2 text-xs font-black">#{art.id}</span>
+                            {art.designation}
+                          </div>
+                          <span className={`text-[10px] px-2 py-1 rounded-md font-black ${stockInSelectedDepot > 0 ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>
+                            Stock: {stockInSelectedDepot} {art.unite}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -298,9 +375,9 @@ export default function NewPurchasePage() {
             </div>
             <button 
               onClick={handleAddLine}
-              className="w-full bg-white text-indigo-600 px-6 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-50 transition-all"
+              className="w-full bg-white text-indigo-600 px-6 py-4 rounded-2xl font-black shadow-lg hover:bg-indigo-50 transition-all active:scale-[0.99]"
             >
-              Ajouter à la liste
+              Ajouter à la liste de réception
             </button>
           </div>
 
@@ -311,20 +388,23 @@ export default function NewPurchasePage() {
                 <tr className="bg-slate-50">
                   <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Désignation</th>
                   <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Unité</th>
-                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">P.U</th>
+                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">P.U HT</th>
                   <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Qté</th>
-                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Total</th>
+                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Montant</th>
                   <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-20 text-center text-slate-300 font-bold">Aucun article ajouté</td>
+                    <td colSpan={6} className="py-20 text-center text-slate-300 font-bold flex flex-col items-center gap-2">
+                      <Package size={40} className="opacity-20" />
+                      Aucun article ajouté
+                    </td>
                   </tr>
                 ) : (
                   items.map((item, index) => (
-                    <tr key={index} className="hover:bg-slate-50/50 transition-colors">
+                    <tr key={index} className="hover:bg-slate-50/50 transition-colors group">
                       <td className="px-8 py-5 font-black text-slate-700">{item.designation}</td>
                       <td className="px-8 py-5 text-slate-500 font-bold">{item.unite}</td>
                       <td className="px-8 py-5 text-right font-bold text-slate-900">{new Intl.NumberFormat("fr-FR").format(item.prix_unitaire_ht)}</td>
@@ -347,12 +427,12 @@ export default function NewPurchasePage() {
         <div className="space-y-8">
           <div className="bg-white rounded-[48px] border border-slate-100 p-10 shadow-xl space-y-8">
             <div className="flex items-center gap-2 text-slate-400 font-black text-xs uppercase tracking-widest">
-              <Calculator size={14} /> Récapitulatif
+              <Calculator size={14} /> Récapitulatif Financier
             </div>
 
             <div className="space-y-4">
               <div className="flex justify-between items-center text-slate-500 font-bold">
-                <span>Sous-Total</span>
+                <span>Sous-Total HT</span>
                 <span>{new Intl.NumberFormat("fr-FR").format(subTotal)} F</span>
               </div>
               
@@ -373,7 +453,7 @@ export default function NewPurchasePage() {
               </div>
 
               <div className="flex justify-between items-center gap-4">
-                <span className="text-slate-500 font-bold">Transport</span>
+                <span className="text-slate-500 font-bold">Frais Transport</span>
                 <input 
                   type="number" value={transport} onChange={e => setTransport(Number(e.target.value))}
                   className="w-32 bg-slate-50 border-none rounded-xl p-2 text-right font-bold focus:ring-2 focus:ring-indigo-100"
@@ -383,13 +463,13 @@ export default function NewPurchasePage() {
 
             <div className="pt-8 border-t border-slate-100 space-y-6">
               <div className="flex justify-between items-center">
-                <span className="text-xl font-black text-slate-900 uppercase tracking-tighter">Total à payer</span>
+                <span className="text-xl font-black text-slate-900 uppercase tracking-tighter">Net à payer</span>
                 <span className="text-3xl font-black text-indigo-600">{new Intl.NumberFormat("fr-FR").format(totalAmount)} F</span>
               </div>
 
-              <div className="bg-emerald-50 rounded-3xl p-6 space-y-4">
+              <div className="bg-emerald-50 rounded-3xl p-6 space-y-4 border border-emerald-100">
                 <div className="flex justify-between items-center text-emerald-700 font-black text-xs uppercase tracking-widest">
-                  <span>Montant Payé</span>
+                  <span>Acompte Versé</span>
                   <CheckCircle2 size={14} />
                 </div>
                 <input 
@@ -398,8 +478,8 @@ export default function NewPurchasePage() {
                 />
               </div>
 
-              <div className={`rounded-3xl p-6 flex justify-between items-center ${resteAPayer > 0 ? "bg-rose-50 text-rose-600" : "bg-indigo-50 text-indigo-600"}`}>
-                <span className="font-black text-xs uppercase tracking-widest">Reste à payer</span>
+              <div className={`rounded-3xl p-6 flex justify-between items-center border ${resteAPayer > 0 ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-indigo-50 text-indigo-600 border-indigo-100"}`}>
+                <span className="font-black text-xs uppercase tracking-widest">Reste Dû</span>
                 <span className="text-xl font-black">{new Intl.NumberFormat("fr-FR").format(resteAPayer)} F</span>
               </div>
             </div>
@@ -407,10 +487,11 @@ export default function NewPurchasePage() {
 
           <div className="bg-slate-900 rounded-[40px] p-10 text-white space-y-4">
             <h4 className="font-black flex items-center gap-2">
-              <AlertCircle size={16} className="text-indigo-400" /> Aide
+              <AlertCircle size={16} className="text-indigo-400" /> Information Stock
             </h4>
             <p className="text-xs text-slate-400 leading-relaxed font-medium">
-              Vérifiez bien le dépôt de destination avant de valider. Les stocks et les prix moyens pondérés (PMP) seront mis à jour instantanément après l'enregistrement.
+              L'enregistrement de cette facture déclenchera automatiquement une <span className="text-white font-bold italic">ENTRÉE EN STOCK (Ajustement)</span> dans le dépôt sélectionné. 
+              Le prix d'achat sera également mis à jour dans la fiche produit.
             </p>
           </div>
         </div>
