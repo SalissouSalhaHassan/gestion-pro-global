@@ -113,7 +113,7 @@ export default function StockJournal() {
               <div className="p-2 bg-indigo-600 rounded-xl shadow-lg shadow-indigo-200">
                  <ClipboardList className="w-7 h-7 text-white" />
               </div>
-              دفتر اليومي للمخزون
+              Journal Quotidien du Stock
             </h1>
             <p className="text-slate-500 mt-1 font-medium italic">
               Journal détaillé des états de stock pour la journée du <span className="text-indigo-600 font-bold underline">{new Date(date).toLocaleDateString('fr-FR')}</span>
