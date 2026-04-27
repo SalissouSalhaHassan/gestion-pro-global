@@ -84,20 +84,20 @@ export async function GET(request: Request) {
     let visibleStocks = allStocks;
     
     if (requestedDepot && requestedDepot !== "Tous") {
-      visibleStocks = allStocks.filter((stock) => {
+      visibleStocks = allStocks.filter((stock: any) => {
         const stockDepot = String(stock.depot_nom || "").toLowerCase();
         const reqDepot = requestedDepot.toLowerCase();
         return stockDepot === reqDepot;
       });
     } else if (!isAdmin && scopeDepots.length > 0) {
-      visibleStocks = allStocks.filter((stock) => {
+      visibleStocks = allStocks.filter((stock: any) => {
         const stockDepot = String(stock.depot_nom || "").toLowerCase();
         return scopeDepots.some(sd => sd.toLowerCase() === stockDepot);
       });
     }
 
     const quantite = visibleStocks.reduce(
-      (sum, stock) => sum + Number(stock.quantite || 0),
+      (sum: number, stock: any) => sum + Number(stock.quantite || 0),
       0
     );
 
