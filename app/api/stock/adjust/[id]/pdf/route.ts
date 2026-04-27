@@ -60,93 +60,96 @@ export async function GET(
         body {
             font-family: 'Inter', sans-serif;
             background: #f1f5f9;
-            padding: 40px 20px;
+            padding: ${isA5 ? '0' : '40px 20px'};
             color: #0f172a;
             line-height: 1.4;
         }
         .receipt {
             width: 100%;
             max-width: ${isA5 ? '148mm' : '210mm'};
-            min-height: ${isA5 ? '210mm' : 'auto'};
+            min-height: ${isA5 ? '100vh' : 'auto'};
             margin: 0 auto;
             background: white;
-            padding: ${isA5 ? '30px' : '50px'};
+            padding: ${isA5 ? '15mm' : '40px'};
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-            border-radius: ${isA5 ? '10px' : '0'};
+            border-radius: ${isA5 ? '0' : '10px'};
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
         .header {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 30px;
+            margin-bottom: ${isA5 ? '15px' : '30px'};
             border-bottom: 2px solid #0f172a;
-            padding-bottom: 20px;
+            padding-bottom: ${isA5 ? '10px' : '20px'};
         }
         .company-info h1 {
-            font-size: ${isA5 ? '20px' : '24px'};
+            font-size: ${isA5 ? '18px' : '24px'};
             font-weight: 900;
             text-transform: uppercase;
         }
         .company-info p {
-            font-size: ${isA5 ? '10px' : '12px'};
+            font-size: ${isA5 ? '9px' : '12px'};
             color: #64748b;
         }
         .doc-info { text-align: right; }
         .doc-type {
             background: #0f172a;
             color: white;
-            padding: 5px 15px;
+            padding: 5px 12px;
             font-weight: 900;
-            font-size: ${isA5 ? '12px' : '14px'};
+            font-size: ${isA5 ? '10px' : '14px'};
             display: inline-block;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
         }
-        .doc-ref { font-weight: 900; font-size: ${isA5 ? '14px' : '16px'}; color: #4f46e5; }
+        .doc-ref { font-weight: 900; font-size: ${isA5 ? '12px' : '16px'}; color: #4f46e5; }
 
         .details-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 40px;
-            font-size: ${isA5 ? '11px' : '13px'};
+            gap: ${isA5 ? '15px' : '30px'};
+            margin-bottom: ${isA5 ? '20px' : '40px'};
+            font-size: ${isA5 ? '10px' : '13px'};
         }
         .section-title {
             font-weight: 900;
             text-transform: uppercase;
-            font-size: ${isA5 ? '10px' : '11px'};
+            font-size: ${isA5 ? '9px' : '11px'};
             color: #94a3b8;
             border-bottom: 1px solid #e2e8f0;
-            margin-bottom: 10px;
-            padding-bottom: 5px;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
         }
-        .info-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
         .info-label { font-weight: 700; color: #64748b; }
         .info-value { font-weight: 900; }
 
         .article-card {
             background: #f8fafc;
             border: 2px solid #e2e8f0;
-            padding: 20px;
-            border-radius: 15px;
-            margin-bottom: 40px;
+            padding: ${isA5 ? '12px' : '20px'};
+            border-radius: ${isA5 ? '10px' : '15px'};
+            margin-bottom: ${isA5 ? '20px' : '40px'};
         }
-        .article-name { font-size: ${isA5 ? '16px' : '20px'}; font-weight: 900; color: #0f172a; margin-bottom: 5px; }
-        .article-ref { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
+        .article-name { font-size: ${isA5 ? '14px' : '20px'}; font-weight: 900; color: #0f172a; margin-bottom: 4px; }
+        .article-ref { font-size: ${isA5 ? '9px' : '11px'}; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
 
         .adjustment-box {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
-            gap: 15px;
-            margin-top: 20px;
+            gap: ${isA5 ? '8px' : '15px'};
+            margin-top: ${isA5 ? '10px' : '20px'};
         }
         .adj-item {
             text-align: center;
-            padding: 15px;
+            padding: ${isA5 ? '10px' : '15px'};
             background: white;
             border: 1px solid #e2e8f0;
-            border-radius: 10px;
+            border-radius: 8px;
         }
-        .adj-label { font-size: 9px; font-weight: 900; text-transform: uppercase; color: #64748b; margin-bottom: 5px; }
-        .adj-value { font-size: 18px; font-weight: 900; }
+        .adj-label { font-size: ${isA5 ? '8px' : '9px'}; font-weight: 900; text-transform: uppercase; color: #64748b; margin-bottom: 3px; }
+        .adj-value { font-size: ${isA5 ? '14px' : '18px'}; font-weight: 900; }
         .adj-value.highlight { color: #4f46e5; }
         .adj-value.pos { color: #10b981; }
         .adj-value.neg { color: #ef4444; }
@@ -154,20 +157,20 @@ export async function GET(
         .signature-section {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 50px;
-            margin-top: 60px;
+            gap: ${isA5 ? '30px' : '50px'};
+            margin-top: ${isA5 ? '30px' : '60px'};
             text-align: center;
         }
-        .sig-box { border-top: 1px solid #0f172a; padding-top: 10px; }
-        .sig-label { font-size: 10px; font-weight: 900; text-transform: uppercase; }
+        .sig-box { border-top: 1px solid #0f172a; padding-top: 8px; }
+        .sig-label { font-size: ${isA5 ? '9px' : '10px'}; font-weight: 900; text-transform: uppercase; }
 
         .footer {
-            margin-top: 50px;
-            padding-top: 20px;
+            margin-top: ${isA5 ? '20px' : '50px'};
+            padding-top: 15px;
             border-top: 1px solid #e2e8f0;
             display: flex;
             justify-content: space-between;
-            font-size: 9px;
+            font-size: ${isA5 ? '8px' : '9px'};
             color: #94a3b8;
             font-weight: 700;
         }
@@ -186,8 +189,16 @@ export async function GET(
         }
         @media print {
             body { background: white; padding: 0; }
-            .receipt { box-shadow: none; border: none; padding: 10mm; }
+            .receipt { 
+                box-shadow: none; border: none; padding: 10mm; 
+                width: 148mm; height: 210mm; 
+                max-width: none; min-height: none;
+            }
             .print-btn { display: none; }
+            @page {
+                size: A5 portrait;
+                margin: 0;
+            }
         }
     </style>
 </head>
