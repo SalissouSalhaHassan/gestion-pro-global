@@ -181,8 +181,12 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
                     <h2 className="text-sm font-black uppercase tracking-[0.4em]">BON DE TRANSFERT</h2>
                 </div>
                 <div className="text-[11px] font-black text-slate-400 space-y-1">
-                    <p>Réf: <span className="text-slate-900">{transferData.ref}</span></p>
-                    <p>Date: <span className="text-slate-900">{new Date(transferData.date).toLocaleDateString('fr-FR')}</span></p>
+                    <p>Réf: <span className="text-slate-900">{transferData?.ref || '—'}</span></p>
+                    <p>Date: <span className="text-slate-900">
+                      {transferData?.date ? new Date(transferData.date).toLocaleDateString('fr-FR', {
+                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                      }) : '—'}
+                    </span></p>
                 </div>
             </div>
           </div>
@@ -281,14 +285,16 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            width: ${printFormat === 'A5' ? '148mm' : '100%'} !important;
-            padding: ${printFormat === 'A5' ? '10mm' : '20mm'} !important;
+            width: ${printFormat === 'A5' ? '148mm' : '210mm'} !important;
+            height: ${printFormat === 'A5' ? '210mm' : '297mm'} !important;
+            padding: ${printFormat === 'A5' ? '8mm' : '15mm'} !important;
             margin: 0 !important;
             font-family: 'Outfit', sans-serif !important;
             background: white !important;
+            border: none !important;
           }
           @page {
-            size: ${printFormat === 'A5' ? 'A5 landscape' : 'A4 portrait'};
+            size: ${printFormat === 'A5' ? 'A5 portrait' : 'A4 portrait'};
             margin: 0;
           }
           .bg-slate-900 { background-color: #0f172a !important; color: #fff !important; }
@@ -301,13 +307,16 @@ export default function StockTransferModal({ transferRef, onClose }: StockTransf
           
           /* Scale down for A5 */
           ${printFormat === 'A5' ? `
-            #printable-transfer h1 { font-size: 18px !important; }
-            #printable-transfer h2 { font-size: 10px !important; }
-            #printable-transfer .text-lg { font-size: 14px !important; }
+            #printable-transfer h1 { font-size: 16px !important; }
+            #printable-transfer h2 { font-size: 9px !important; }
+            #printable-transfer .text-lg { font-size: 12px !important; }
             #printable-transfer .p-12 { padding: 5mm !important; }
-            #printable-transfer .mb-12 { margin-bottom: 20px !important; }
-            #printable-transfer .p-6 { padding: 10px !important; }
-            #printable-transfer table th, #printable-transfer table td { padding: 8px !important; font-size: 10px !important; }
+            #printable-transfer .mb-12 { margin-bottom: 12px !important; }
+            #printable-transfer .p-6 { padding: 8px !important; }
+            #printable-transfer table th, #printable-transfer table td { padding: 6px !important; font-size: 9px !important; }
+            #printable-transfer .rounded-[2rem] { border-radius: 12px !important; }
+            #printable-transfer .p-12 { padding: 0 !important; }
+            #printable-transfer { padding: 8mm !important; }
           ` : ''}
         }
       `}</style>
