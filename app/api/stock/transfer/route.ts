@@ -76,6 +76,60 @@ export async function POST(request: Request) {
   }
 
   // ──────────────────────────────────────────────────────────────────
+  // 1b. CANCELLATION (CANCELING A TRANSFER)
+  // ──────────────────────────────────────────────────────────────────
+  if (action === "cancel") {
+    if (!transit_id) return NextResponse.json({ error: "ID de transit manquant" }, { status: 400 });
+
+    try {
+      const { data: transit, error: errTransit } = await supabase.from("stock_transits").select("*").eq("id", transit_id).single();
+      if (errTransit || !transit) throw new Error("Transit introuvable");
+
+      if (transit.status !== "En Transit") {
+         return NextResponse.json({ error: "Seuls les transferts 'En Transit' peuvent être annulés." }, { status: 400 });
+      }
+
+      // Auth Check: Admin or Source Depot user
+      if (userDepot && !isAdmin && userDepot.toLowerCase() !== transit.source_depot.toLowerCase()) {
+        return NextResponse.json({ error: `Action refusée: Seul le dépôt source (${transit.source_depot}) peut annuler.` }, { status: 403 });
+      }
+
+      const articlesDetails = transit.details as any[];
+      
+      for (const detail of articlesDetails) {
+         const { article_id, qty } = detail;
+
+         // Return Stock to Source Depot
+         const { data: sourceStock } = await supabase.from("stocks").select("quantite").eq("article_id", article_id).ilike("depot_nom", transit.source_depot).maybeSingle();
+         
+         const beforeQty = sourceStock ? Number(sourceStock.quantite) : 0;
+         const afterQty = beforeQty + qty;
+
+         await supabase.from("stocks").update({ quantite: afterQty }).eq("article_id", article_id).ilike("depot_nom", transit.source_depot);
+
+         // Record Cancellation Movement
+         await supabase.from("mouvements").insert({
+           article_id, type: 'transfert_annule', quantite: qty, entree: qty, sortie: 0,
+           stock_avant: beforeQty, stock_apres: afterQty,
+           depot: transit.source_depot, date_mouvement: new Date().toISOString(), nr_doc: transit.reference, fournisseur_client: `Annulation transit vers ${transit.dest_depot}`,
+           user_id: user.id, utilisateur: user.username
+         });
+      }
+
+      // Update Transit Status
+      await supabase.from("stock_transits").update({
+         status: "Annulé",
+         notes: (transit.notes || "") + " (Annulé le " + new Date().toLocaleDateString() + ")"
+      }).eq("id", transit_id);
+
+      return NextResponse.json({ success: true, message: "Transfert annulé. Stock retourné au dépôt source." });
+
+    } catch (err: any) {
+       return NextResponse.json({ error: err.message }, { status: 500 });
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────
   // 2. EXPEDITION (INITIATING A TRANSFER)
   // ──────────────────────────────────────────────────────────────────
   if (!article_id || !qty || qty <= 0 || !source_depot || !dest_depot) {

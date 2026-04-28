@@ -9,7 +9,9 @@ import {
   Truck, 
   AlertCircle,
   ArrowRight,
-  Clock
+  Clock,
+  Trash2,
+  XCircle
 } from "lucide-react";
 import StockTransferModal from "../../mouvements/StockTransferModal";
 
@@ -102,6 +104,29 @@ export default function TransitPage() {
       setProcessingId(null);
       setTimeout(() => setSuccess(null), 5000);
     }
+  const handleCancel = async (transitId: number) => {
+    if (!confirm("Voulez-vous vraiment annuler ce transfert ? Les quantités seront retournées au dépôt source.")) return;
+    
+    setProcessingId(transitId);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch("/api/stock/transfer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel", transit_id: transitId })
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Erreur lors de l'annulation");
+
+      setSuccess("Transfert annulé et stock retourné !");
+      fetchData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setProcessingId(null);
+      setTimeout(() => setSuccess(null), 5000);
+    }
   };
 
   return (
@@ -132,6 +157,7 @@ export default function TransitPage() {
                <option value="Tous">Tous Statuts</option>
                <option value="En Transit">En Transit</option>
                <option value="Reçu">Reçu</option>
+               <option value="Annulé">Annulé</option>
              </select>
           </div>
           <button onClick={fetchData} className="p-3 hover:bg-slate-50 text-slate-400 rounded-xl transition-colors">
@@ -224,13 +250,28 @@ export default function TransitPage() {
                       <p className="text-sm font-black text-slate-800">@{tr.created_by}</p>
                     </div>
                     {inTransit ? (
-                      <button 
-                        onClick={() => handleReceive(tr.id)}
-                        disabled={processingId === tr.id}
-                        className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 hover:shadow-lg transition-all active:scale-95 disabled:opacity-50"
-                      >
-                         {processingId === tr.id ? <RefreshCw className="animate-spin" size={16} /> : "Recevoir"}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => handleCancel(tr.id)}
+                          disabled={processingId === tr.id}
+                          className="p-3 text-rose-500 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50"
+                          title="Annuler le transfert"
+                        >
+                           <XCircle size={20} />
+                        </button>
+                        <button 
+                          onClick={() => handleReceive(tr.id)}
+                          disabled={processingId === tr.id}
+                          className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 hover:shadow-lg transition-all active:scale-95 disabled:opacity-50"
+                        >
+                           {processingId === tr.id ? <RefreshCw className="animate-spin" size={16} /> : "Recevoir"}
+                        </button>
+                      </div>
+                    ) : tr.status === "Annulé" ? (
+                      <div className="text-right">
+                        <p className="text-[9px] font-bold text-rose-400 uppercase tracking-widest">Statut</p>
+                        <p className="text-sm font-black text-rose-600 italic">Annulé</p>
+                      </div>
                     ) : (
                       <div className="text-right">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Reçu par</p>
