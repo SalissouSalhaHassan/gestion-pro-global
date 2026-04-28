@@ -19,7 +19,9 @@ import {
   RefreshCw,
   Box,
   ClipboardCheck,
-  ClipboardList
+  ClipboardList,
+  Layers,
+  Ruler
 } from "lucide-react";
 import Link from "next/link";
 
@@ -133,6 +135,14 @@ export default function StockDashboard() {
             <Link href="/dashboard/stock/journal" className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all font-bold shadow-lg shadow-emerald-200">
               <ClipboardList className="w-5 h-5" />
               Journal Quotidien
+            </Link>
+            <Link href="/dashboard/stock/categories" className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl hover:bg-slate-50 transition-all font-bold shadow-sm">
+              <Layers className="w-5 h-5 text-indigo-500" />
+              Catégories
+            </Link>
+            <Link href="/dashboard/stock/units" className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl hover:bg-slate-50 transition-all font-bold shadow-sm">
+              <Ruler className="w-5 h-5 text-emerald-500" />
+              Unités
             </Link>
            <Link href="/dashboard/mouvements" className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl hover:bg-slate-50 transition-all font-bold shadow-sm">
              <History className="w-5 h-5 text-slate-400" />
