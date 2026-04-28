@@ -104,6 +104,8 @@ export default function TransitPage() {
       setProcessingId(null);
       setTimeout(() => setSuccess(null), 5000);
     }
+  };
+
   const handleCancel = async (transitId: number) => {
     if (!confirm("Voulez-vous vraiment annuler ce transfert ? Les quantités seront retournées au dépôt source.")) return;
     
