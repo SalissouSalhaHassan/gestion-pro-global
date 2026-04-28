@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { X, Save, Loader2, Calendar, User, Banknote, Tag } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getClientSessionFromCookie, isAdminOrManagerSession, DEFAULT_CLIENT_ID } from "@/lib/client_helpers";
 
 const supabase = createClient();
 
@@ -51,12 +52,22 @@ export default function EditInvoiceModal({ invoiceId, onClose, onRefresh }: Edit
           });
         }
 
-        // 2. Fetch Clients
-        const { data: cls } = await supabase
+        // 2. Fetch Clients (with isolation for Dépôt users)
+        const session = getClientSessionFromCookie();
+        const admin = isAdminOrManagerSession(session);
+
+        let clientQuery = supabase
           .from("clients")
           .select("id, nom")
           .eq("is_deleted", false)
           .order("nom");
+
+        // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
+        if (!admin && session?.id) {
+          clientQuery = clientQuery.or(`created_by.eq.${session.id},id.eq.${DEFAULT_CLIENT_ID}`);
+        }
+
+        const { data: cls } = await clientQuery;
         setClients(cls || []);
 
       } catch (err) {

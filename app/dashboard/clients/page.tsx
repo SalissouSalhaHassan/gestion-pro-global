@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Users, Search, Plus, UserCircle2, ArrowUpDown, Banknote, ShieldAlert, Loader2, X, Save, FileText, Printer, MessageCircle } from "lucide-react";
 import ClientListModal from "./ClientListModal";
 import { createClient } from "@/lib/supabase/client";
+import { getClientSessionFromCookie, isAdminOrManagerSession, DEFAULT_CLIENT_ID } from "@/lib/client_helpers";
 
 type Client = {
   id: string | number;
@@ -28,6 +29,16 @@ export default function ClientsPage() {
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({ nom: "", tel: "", ref_client: "" });
   const [toast, setToast] = useState<{message: string, type: "success" | "error"} | null>(null);
+
+  // ── Session & Role State ──
+  const [userSession, setUserSession] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(true); // Default to true to avoid flash
+
+  useEffect(() => {
+    const session = getClientSessionFromCookie();
+    setUserSession(session);
+    setIsAdmin(isAdminOrManagerSession(session));
+  }, []);
   
   // Debt Details State
   const [selectedClientForDebt, setSelectedClientForDebt] = useState<Client | null>(null);
@@ -74,7 +85,8 @@ export default function ClientsPage() {
           montant_plafond: 0,
           prix_client: 1,
           pre_client: false,
-          is_deleted: false
+          is_deleted: false,
+          created_by: userSession?.id || null  // Track creator for data isolation
         })
         .select()
         .single();
@@ -110,10 +122,17 @@ export default function ClientsPage() {
   useEffect(() => {
     async function loadClients() {
       try {
-        const { data, error } = await supabase
+        let clientQuery = supabase
           .from("clients")
-          .select("id, ref_client, nom, tel, credit_facture, credit_bl")
+          .select("id, ref_client, nom, tel, credit_facture, credit_bl, created_by")
           .eq("is_deleted", false);
+
+        // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
+        if (!isAdmin && userSession?.id) {
+          clientQuery = clientQuery.or(`created_by.eq.${userSession.id},id.eq.${DEFAULT_CLIENT_ID}`);
+        }
+
+        const { data, error } = await clientQuery;
 
         if (error) {
           console.error("❌ Clients fetch error:", error.message, error.details);
@@ -144,7 +163,7 @@ export default function ClientsPage() {
       }
     }
     loadClients();
-  }, []);
+  }, [isAdmin, userSession]);
 
   const fetchClientInvoices = async (client: Client) => {
     setSelectedClientForDebt(client);

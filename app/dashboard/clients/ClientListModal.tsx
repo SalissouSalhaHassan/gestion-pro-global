@@ -13,6 +13,7 @@ import {
   MapPin
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getClientSessionFromCookie, isAdminOrManagerSession, DEFAULT_CLIENT_ID } from "@/lib/client_helpers";
 
 const supabase = createClient();
 
@@ -38,10 +39,20 @@ export default function ClientListModal({ onClose }: ClientListModalProps) {
           .single();
         setCompany(comp);
 
-        const { data, error } = await supabase
+        const session = getClientSessionFromCookie();
+        const admin = isAdminOrManagerSession(session);
+
+        let clientQuery = supabase
           .from("clients")
           .select("id, ref_client, nom, tel, credit_facture, credit_bl")
           .eq("is_deleted", false);
+
+        // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
+        if (!admin && session?.id) {
+          clientQuery = clientQuery.or(`created_by.eq.${session.id},id.eq.${DEFAULT_CLIENT_ID}`);
+        }
+
+        const { data, error } = await clientQuery;
 
         if (data) {
           setClients(data.map(c => ({

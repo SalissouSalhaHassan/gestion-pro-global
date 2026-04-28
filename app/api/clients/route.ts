@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getServerSession, isAdminOrManager } from '@/lib/auth_helper';
+import { DEFAULT_CLIENT_ID } from '@/lib/client_helpers';
 
 export async function GET() {
   try {
@@ -16,7 +17,10 @@ export async function GET() {
       .select('id, nom, ref_client')
       .order('nom', { ascending: true });
 
-    // Clients are shared - no per-user isolation needed
+    // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
+    if (!isAdmin) {
+      query = query.or(`created_by.eq.${user.id},id.eq.${DEFAULT_CLIENT_ID}`);
+    }
 
     const { data, error } = await query;
 
@@ -46,7 +50,8 @@ export async function POST(request: Request) {
         email,
         telephone,
         adresse,
-        ref_client
+        ref_client,
+        created_by: user.id  // Track which user created this client
       }])
       .select()
       .single();
@@ -57,4 +62,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-

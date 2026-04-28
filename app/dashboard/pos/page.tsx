@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { getClientSessionFromCookie, isAdminOrManagerSession, DEFAULT_CLIENT_ID } from "@/lib/client_helpers";
 import InvoiceModal from "../invoices/InvoiceModal";
 import PaymentModal from "../invoices/PaymentModal";
 
@@ -1238,12 +1239,20 @@ function PosPage() {
         }
 
         /* ── 2. Clients ── */
-        const { data: clientsRaw, error: cliErr } = await supabase
+        let clientQueryBuilder = supabase
           .from("clients")
           .select("id, ref_client, nom, tel, credit_facture, is_deleted")
           .eq("is_deleted", false)
-          .order("nom", { ascending: true })
-          .limit(500);
+          .order("nom", { ascending: true });
+
+        // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
+        const posSession = getClientSessionFromCookie();
+        const posIsAdmin = isAdminOrManagerSession(posSession);
+        if (!posIsAdmin && posSession?.id) {
+          clientQueryBuilder = clientQueryBuilder.or(`created_by.eq.${posSession.id},id.eq.${DEFAULT_CLIENT_ID}`);
+        }
+
+        const { data: clientsRaw, error: cliErr } = await clientQueryBuilder.limit(500);
 
         /* ── 3. Depots ── */
         const { data: depotsRaw, error: depErr } = await supabase
@@ -1847,7 +1856,8 @@ function PosPage() {
           tel: clientFormData.tel || null,
           ref_client: finalRef,
           credit_facture: 0,
-          is_deleted: false
+          is_deleted: false,
+          created_by: readClientSession()?.id || null  // Track creator for data isolation
         })
         .select()
         .single();

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth_helper";
+import { getServerSession, isAdminOrManager } from "@/lib/auth_helper";
+import { DEFAULT_CLIENT_ID } from "@/lib/client_helpers";
 
 export async function GET(request: Request) {
   try {
@@ -18,6 +19,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
+    const isAdmin = await isAdminOrManager(user);
+
     // 1. Search Articles
     const { data: articles } = await supabase
       .from("articles")
@@ -26,13 +29,19 @@ export async function GET(request: Request) {
       .eq("is_deleted", false)
       .limit(5);
 
-    // 2. Search Clients
-    const { data: clients } = await supabase
+    // 2. Search Clients (with isolation for Dépôt users)
+    let clientQuery = supabase
       .from("clients")
       .select("id, nom, ref_client, tel")
       .or(`nom.ilike.%${query}%,ref_client.ilike.%${query}%`)
-      .eq("is_deleted", false)
-      .limit(5);
+      .eq("is_deleted", false);
+
+    // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
+    if (!isAdmin) {
+      clientQuery = clientQuery.or(`created_by.eq.${user.id},id.eq.${DEFAULT_CLIENT_ID}`);
+    }
+
+    const { data: clients } = await clientQuery.limit(5);
 
     // 3. Search Invoices (Using bl_number as reference)
     const { data: invoices } = await supabase
