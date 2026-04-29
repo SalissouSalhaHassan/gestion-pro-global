@@ -190,8 +190,8 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
         pageSize === 'A4' ? 'max-w-[210mm]' : pageSize === 'Ticket' ? 'max-w-[80mm]' : 'max-w-[148mm]'
       } w-full rounded-[40px] border border-slate-100 print:border-none`}>
         
-        <div id="printable-advance" className={`p-10 text-slate-900 font-outfit leading-tight relative overflow-hidden ${
-           pageSize === 'Ticket' ? 'px-4 py-6' : 'p-10'
+        <div id="printable-advance" className={`p-6 text-slate-900 font-outfit leading-tight relative overflow-hidden ${
+           pageSize === 'Ticket' ? 'px-4 py-4' : 'p-6'
         }`}>
           
           {/* Watermark */}
@@ -202,7 +202,7 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
           )}
 
           {/* HEADER */}
-          <div className={`flex justify-between items-start mb-10 pb-6 border-b-2 border-slate-900 ${
+          <div className={`flex justify-between items-start mb-4 pb-4 border-b-2 border-slate-900 ${
              pageSize === 'Ticket' ? 'flex-col items-center text-center gap-4' : ''
           }`}>
             <div className={pageSize === 'Ticket' ? 'text-center' : 'text-left'}>
@@ -227,7 +227,7 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
           </div>
 
           {/* TITLE SECTION */}
-          <div className="text-center mb-10">
+          <div className="text-center mb-6">
             <h2 className={`${pageSize === 'Ticket' ? 'text-lg' : 'text-3xl'} font-black uppercase tracking-[0.1em] text-slate-900 relative inline-block`}>
                {docType === 'Facture' ? 'REÇU DE DÉPÔT' : 'BON DE LIVRAISON'}
                <div className="absolute -bottom-2 left-0 w-full h-1 bg-indigo-600 rounded-full"></div>
@@ -235,7 +235,7 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
           </div>
 
           {/* DÉTAILS SECTION */}
-          <div className={`grid ${pageSize === 'Ticket' ? 'grid-cols-1 gap-6' : 'grid-cols-2 gap-10'} mb-10 text-[11px]`}>
+          <div className={`grid ${pageSize === 'Ticket' ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'} mb-6 text-[11px]`}>
              <div className="space-y-4">
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Détails du Reçu</p>
@@ -267,8 +267,8 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
           </div>
 
           {/* BIG AMOUNT */}
-          <div className="mb-10 text-center">
-             <div className={`inline-block ${pageSize === 'Ticket' ? 'px-6 py-4' : 'px-12 py-8'} bg-slate-900 text-white rounded-[40px] shadow-2xl relative`}>
+          <div className="mb-6 text-center">
+             <div className={`inline-block ${pageSize === 'Ticket' ? 'px-6 py-4' : 'px-10 py-6'} bg-slate-900 text-white rounded-[40px] shadow-2xl relative`}>
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-[0.2em]">Montant Principal</div>
                 <p className={`${pageSize === 'Ticket' ? 'text-2xl' : 'text-5xl'} font-black tracking-tighter`}>
                    {new Intl.NumberFormat('fr-FR').format(advance.montant_initial)}
@@ -278,7 +278,7 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
           </div>
 
           {/* WORDS */}
-          <div className="bg-slate-50 p-6 rounded-[32px] border-2 border-slate-100 mb-10">
+          <div className="bg-slate-50 p-4 rounded-[24px] border-2 border-slate-100 mb-6">
              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Montant en toutes lettres</p>
              <p className="text-sm font-black text-slate-900 uppercase italic tracking-tight leading-relaxed">
                 {numberToWordsFr(advance.montant_initial)} francs CFA.
@@ -286,29 +286,29 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
           </div>
 
            {/* TABLE RECAP */}
-           <div className="mb-8">
+           <div className="mb-4">
               <table className="w-full text-left">
                  <thead>
                     <tr className="text-[10px] font-black text-slate-400 uppercase border-b border-slate-100">
-                       <th className="py-3 px-4">Désignation</th>
-                       <th className="py-3 px-4 text-right">Crédit</th>
-                       <th className="py-3 px-4 text-right">Débit</th>
+                       <th className="py-2 px-3">Désignation</th>
+                       <th className="py-2 px-3 text-right">Crédit</th>
+                       <th className="py-2 px-3 text-right">Débit</th>
                     </tr>
                  </thead>
                  <tbody className="text-xs font-bold text-slate-700">
                     <tr className="border-b border-slate-50">
-                       <td className="py-4 px-4 font-black text-[10px]">Dépôt Initial</td>
-                       <td className="py-4 px-4 text-right text-emerald-600">+{new Intl.NumberFormat('fr-FR').format(advance.montant_initial)}</td>
-                       <td className="py-4 px-4 text-right text-slate-300">—</td>
+                       <td className="py-2 px-3 font-black text-[10px]">Dépôt Initial</td>
+                       <td className="py-2 px-3 text-right text-emerald-600">+{new Intl.NumberFormat('fr-FR').format(advance.montant_initial)}</td>
+                       <td className="py-2 px-3 text-right text-slate-300">—</td>
                     </tr>
                     <tr className="border-b border-slate-50">
-                       <td className="py-4 px-4 font-bold italic text-slate-400 text-[10px]">Utilisation (-)</td>
-                       <td className="py-4 px-4 text-right text-slate-300">—</td>
-                       <td className="py-4 px-4 text-right text-rose-500">-{new Intl.NumberFormat('fr-FR').format(advance.montant_initial - advance.montant_restant)}</td>
+                       <td className="py-2 px-3 font-bold italic text-slate-400 text-[10px]">Utilisation (-)</td>
+                       <td className="py-2 px-3 text-right text-slate-300">—</td>
+                       <td className="py-2 px-3 text-right text-rose-500">-{new Intl.NumberFormat('fr-FR').format(advance.montant_initial - advance.montant_restant)}</td>
                     </tr>
                     <tr className="bg-indigo-600 text-white">
-                       <td className={`py-5 px-6 ${pageSize === 'Ticket' ? 'rounded-l-2xl' : 'rounded-l-[24px]'} font-black uppercase text-[10px]`}>Solde Nette</td>
-                       <td className="py-5 px-6 text-right font-black text-lg" colSpan={2}>
+                       <td className={`py-3 px-4 ${pageSize === 'Ticket' ? 'rounded-l-2xl' : 'rounded-l-[24px]'} font-black uppercase text-[10px]`}>Solde Nette</td>
+                       <td className="py-3 px-4 text-right font-black text-lg" colSpan={2}>
                           {new Intl.NumberFormat('fr-FR').format(advance.montant_restant)} <span className="text-[10px] text-indigo-200">FCFA</span>
                        </td>
                     </tr>
@@ -317,18 +317,18 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
            </div>
 
            {/* TABLE HISTORY */}
-           <div className="mb-12">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+           <div className="mb-6">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                  <FileBadge size={12} /> Historique des Mouvements du Dépôt
               </p>
-              <div className="border border-slate-100 rounded-[20px] overflow-hidden">
+              <div className="border border-slate-100 rounded-[16px] overflow-hidden">
                  <table className="w-full text-left">
                     <thead className="bg-slate-50">
                        <tr className="text-[9px] font-black text-slate-400 uppercase border-b border-slate-100">
-                          <th className="py-3 px-4">Date</th>
-                          <th className="py-3 px-4">Opération</th>
-                          <th className="py-3 px-4">Référence</th>
-                          <th className="py-3 px-4 text-right">Montant</th>
+                          <th className="py-2 px-3">Date</th>
+                          <th className="py-2 px-3">Opération</th>
+                          <th className="py-2 px-3">Référence</th>
+                          <th className="py-2 px-3 text-right">Montant</th>
                        </tr>
                     </thead>
                     <tbody className="text-[10px] font-bold text-slate-700">
@@ -340,10 +340,10 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
                          
                          return (
                            <tr key={i} className="border-b border-slate-50 last:border-none">
-                              <td className="py-3 px-4">{new Date(h.date_action).toLocaleString('fr-FR', {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'})}</td>
-                              <td className="py-3 px-4 uppercase">{op}</td>
-                              <td className="py-3 px-4 italic text-slate-500">{ref}</td>
-                              <td className={`py-3 px-4 text-right font-black ${color}`}>
+                              <td className="py-2 px-3">{new Date(h.date_action).toLocaleString('fr-FR', {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'})}</td>
+                              <td className="py-2 px-3 uppercase">{op}</td>
+                              <td className="py-2 px-3 italic text-slate-500">{ref}</td>
+                              <td className={`py-2 px-3 text-right font-black ${color}`}>
                                  {h.amount > 0 ? `${sign}${new Intl.NumberFormat('fr-FR').format(h.amount)}` : '—'}
                               </td>
                            </tr>
@@ -351,7 +351,7 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
                        })}
                        {history.length === 0 && (
                           <tr>
-                            <td colSpan={4} className="py-4 text-center text-slate-400 italic font-normal text-[10px]">
+                            <td colSpan={4} className="py-3 text-center text-slate-400 italic font-normal text-[10px]">
                                Aucun historique disponible.
                             </td>
                           </tr>
@@ -363,18 +363,18 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
 
           {/* OBSERVATIONS */}
           {advance.notes && (
-             <div className="mb-12">
+             <div className="mb-6">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                    <FileText size={12} /> Observations
                 </p>
-                <div className="p-5 bg-slate-50 rounded-2xl italic text-[10px] text-slate-600 border border-slate-100 leading-relaxed">
+                <div className="p-4 bg-slate-50 rounded-[16px] italic text-[10px] text-slate-600 border border-slate-100 leading-relaxed">
                    {advance.notes}
                 </div>
              </div>
           )}
 
           {/* SIGNATURES */}
-          <div className="grid grid-cols-2 gap-16 mt-auto">
+          <div className="grid grid-cols-2 gap-16 mt-6">
              <div className="text-center">
                 <div className="h-[60px] flex items-center justify-center opacity-10">
                    <User size={50} />
