@@ -28,6 +28,7 @@ type AdvanceReceiptModalProps = {
 export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceReceiptModalProps) {
   const [loading, setLoading] = useState(true);
   const [advance, setAdvance] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
   const [company, setCompany] = useState<any>(null);
   const [pageSize, setPageSize] = useState<'A4' | 'A5' | 'Ticket'>('A5');
   const [docType, setDocType] = useState<'Facture' | 'Bon de Livraison'>('Facture');
@@ -84,6 +85,14 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
           .single();
         
         setAdvance(adv);
+
+        const { data: hist } = await supabase
+          .from("avances_history")
+          .select("*")
+          .eq("advance_id", advanceId)
+          .order("date_action", { ascending: true });
+        
+        setHistory(hist || []);
 
       } catch (err) {
         console.error("Error fetching advance data:", err);
@@ -276,36 +285,81 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
              </p>
           </div>
 
-          {/* TABLE RECAP */}
-          <div className="mb-12">
-             <table className="w-full text-left">
-                <thead>
-                   <tr className="text-[10px] font-black text-slate-400 uppercase border-b border-slate-100">
-                      <th className="py-3 px-4">Désignation</th>
-                      <th className="py-3 px-4 text-right">Crédit</th>
-                      <th className="py-3 px-4 text-right">Débit</th>
-                   </tr>
-                </thead>
-                <tbody className="text-xs font-bold text-slate-700">
-                   <tr className="border-b border-slate-50">
-                      <td className="py-4 px-4 font-black text-[10px]">Dépôt Initial</td>
-                      <td className="py-4 px-4 text-right text-emerald-600">+{new Intl.NumberFormat('fr-FR').format(advance.montant_initial)}</td>
-                      <td className="py-4 px-4 text-right text-slate-300">—</td>
-                   </tr>
-                   <tr className="border-b border-slate-50">
-                      <td className="py-4 px-4 font-bold italic text-slate-400 text-[10px]">Utilisation (-)</td>
-                      <td className="py-4 px-4 text-right text-slate-300">—</td>
-                      <td className="py-4 px-4 text-right text-rose-500">-{new Intl.NumberFormat('fr-FR').format(advance.montant_initial - advance.montant_restant)}</td>
-                   </tr>
-                   <tr className="bg-indigo-600 text-white">
-                      <td className={`py-5 px-6 ${pageSize === 'Ticket' ? 'rounded-l-2xl' : 'rounded-l-[24px]'} font-black uppercase text-[10px]`}>Solde Nette</td>
-                      <td className="py-5 px-6 text-right font-black text-lg" colSpan={2}>
-                         {new Intl.NumberFormat('fr-FR').format(advance.montant_restant)} <span className="text-[10px] text-indigo-200">FCFA</span>
-                      </td>
-                   </tr>
-                </tbody>
-             </table>
-          </div>
+           {/* TABLE RECAP */}
+           <div className="mb-8">
+              <table className="w-full text-left">
+                 <thead>
+                    <tr className="text-[10px] font-black text-slate-400 uppercase border-b border-slate-100">
+                       <th className="py-3 px-4">Désignation</th>
+                       <th className="py-3 px-4 text-right">Crédit</th>
+                       <th className="py-3 px-4 text-right">Débit</th>
+                    </tr>
+                 </thead>
+                 <tbody className="text-xs font-bold text-slate-700">
+                    <tr className="border-b border-slate-50">
+                       <td className="py-4 px-4 font-black text-[10px]">Dépôt Initial</td>
+                       <td className="py-4 px-4 text-right text-emerald-600">+{new Intl.NumberFormat('fr-FR').format(advance.montant_initial)}</td>
+                       <td className="py-4 px-4 text-right text-slate-300">—</td>
+                    </tr>
+                    <tr className="border-b border-slate-50">
+                       <td className="py-4 px-4 font-bold italic text-slate-400 text-[10px]">Utilisation (-)</td>
+                       <td className="py-4 px-4 text-right text-slate-300">—</td>
+                       <td className="py-4 px-4 text-right text-rose-500">-{new Intl.NumberFormat('fr-FR').format(advance.montant_initial - advance.montant_restant)}</td>
+                    </tr>
+                    <tr className="bg-indigo-600 text-white">
+                       <td className={`py-5 px-6 ${pageSize === 'Ticket' ? 'rounded-l-2xl' : 'rounded-l-[24px]'} font-black uppercase text-[10px]`}>Solde Nette</td>
+                       <td className="py-5 px-6 text-right font-black text-lg" colSpan={2}>
+                          {new Intl.NumberFormat('fr-FR').format(advance.montant_restant)} <span className="text-[10px] text-indigo-200">FCFA</span>
+                       </td>
+                    </tr>
+                 </tbody>
+              </table>
+           </div>
+
+           {/* TABLE HISTORY */}
+           <div className="mb-12">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                 <FileBadge size={12} /> Historique des Mouvements du Dépôt
+              </p>
+              <div className="border border-slate-100 rounded-[20px] overflow-hidden">
+                 <table className="w-full text-left">
+                    <thead className="bg-slate-50">
+                       <tr className="text-[9px] font-black text-slate-400 uppercase border-b border-slate-100">
+                          <th className="py-3 px-4">Date</th>
+                          <th className="py-3 px-4">Opération</th>
+                          <th className="py-3 px-4">Référence</th>
+                          <th className="py-3 px-4 text-right">Montant</th>
+                       </tr>
+                    </thead>
+                    <tbody className="text-[10px] font-bold text-slate-700">
+                       {history.map((h, i) => {
+                         const op = h.action === 'CREATE' ? 'Dépôt Initial' : h.action === 'WITHDRAW' ? 'Utilisation (Retrait)' : h.action === 'CANCEL' ? 'Annulation' : 'Modification';
+                         const ref = h.action === 'CREATE' ? (advance.reference_paiement || 'N/A') : (h.notes || 'N/A');
+                         const sign = h.action === 'WITHDRAW' || h.action === 'CANCEL' ? '-' : '+';
+                         const color = h.action === 'WITHDRAW' || h.action === 'CANCEL' ? 'text-rose-500' : 'text-emerald-600';
+                         
+                         return (
+                           <tr key={i} className="border-b border-slate-50 last:border-none">
+                              <td className="py-3 px-4">{new Date(h.date_action).toLocaleString('fr-FR', {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'})}</td>
+                              <td className="py-3 px-4 uppercase">{op}</td>
+                              <td className="py-3 px-4 italic text-slate-500">{ref}</td>
+                              <td className={`py-3 px-4 text-right font-black ${color}`}>
+                                 {h.amount > 0 ? `${sign}${new Intl.NumberFormat('fr-FR').format(h.amount)}` : '—'}
+                              </td>
+                           </tr>
+                         );
+                       })}
+                       {history.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="py-4 text-center text-slate-400 italic font-normal text-[10px]">
+                               Aucun historique disponible.
+                            </td>
+                          </tr>
+                       )}
+                    </tbody>
+                 </table>
+              </div>
+           </div>
 
           {/* OBSERVATIONS */}
           {advance.notes && (
