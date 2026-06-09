@@ -48,7 +48,7 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
             end: filters.end,
             cashier: filters.cashier
         });
-        const res = await fetch(`/api/reports/cash-balance?${params.toString()}`);
+        const res = await fetch(`/api/reports/cash-balance?${params.toString()}`, { cache: "no-store" });
         const json = await res.json();
         setData(json);
 

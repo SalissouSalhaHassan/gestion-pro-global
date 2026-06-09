@@ -31,14 +31,15 @@ export async function GET(request: Request) {
 
     // We will perform multiple queries and combine them in JS to replicate the UNION ALL logic
     
-    // 1. Effective Payments (Paiements)
+    // 1. Effective Payments (Paiements) - Exclude Credit payments to prevent duplication
     let pQuery = supabase
       .from("paiements")
       .select(`
         date_operation, montant_regle, moyen_reglement, utilisateur,
         factures ( bl_number, total_ttc, montant_restant, statut, emplacement, vendeur ),
         avances_clients ( reference_paiement, emplacement, utilisateur )
-      `);
+      `)
+      .neq("moyen_reglement", "Crédit");
     if (start) pQuery = pQuery.gte("date_operation", start);
     if (end) pQuery = pQuery.lte("date_operation", end);
     if (cashier) pQuery = pQuery.eq("utilisateur", cashier);
@@ -87,13 +88,14 @@ export async function GET(request: Request) {
         cimData = data || [];
     } catch(e) {}
 
-    // 6. Unpaid Invoices (Factures Non Payées / Ventes Crédit)
+    // 6. Active Invoices with Unpaid balance (Factures Actives avec Reste à Payer)
     let fData: any[] = [];
     try {
         let fQuery = supabase
           .from("factures")
-          .select("date_facture, bl_number, total_ttc, vendeur, emplacement, statut, clients ( nom )")
-          .in("statut", ["Non Payée", "Non payée", "Non payee", "Non Payee"]);
+          .select("date_facture, bl_number, total_ttc, montant_restant, vendeur, emplacement, statut, clients ( nom )")
+          .neq("statut", "Annulée")
+          .gt("montant_restant", 0.01);
         if (start) fQuery = fQuery.gte("date_facture", start);
         if (end) fQuery = fQuery.lte("date_facture", end);
         if (cashier) fQuery = fQuery.eq("vendeur", cashier);
@@ -113,17 +115,12 @@ export async function GET(request: Request) {
        else if (fact) displayType = "Vente (Caisse)";
        else if (adv) displayType = "Avance Client";
 
-       let entreeValue = p.montant_regle > 0 ? p.montant_regle : 0;
-       if (p.moyen_reglement === "Crédit" && fact) {
-         entreeValue = Number(fact.total_ttc || 0);
-       }
-
        entries.push({
           date: p.date_operation,
           ref: fact?.bl_number || adv?.reference_paiement || "TRANS",
           type: displayType,
           moyen: p.moyen_reglement,
-          entree: entreeValue,
+          entree: p.montant_regle > 0 ? p.montant_regle : 0,
           sortie: p.montant_regle < 0 ? Math.abs(p.montant_regle) : 0,
           user: p.utilisateur,
           emplacement: fact?.emplacement || adv?.emplacement || ""
@@ -205,16 +202,7 @@ export async function GET(request: Request) {
       .filter(item => item.moyen !== "Crédit")
       .reduce((sum, item) => sum + item.entree, 0);
 
-    const fUnpaid = fData?.reduce((sum, f) => sum + Number(f.total_ttc || 0), 0) || 0;
-    const uniqueInvoicesMap = new Map<string, number>();
-    pData?.forEach(p => {
-       const fact = Array.isArray(p.factures) ? p.factures[0] : p.factures;
-       if (fact && p.moyen_reglement === "Crédit") {
-         uniqueInvoicesMap.set(fact.bl_number, Number(fact.montant_restant || 0));
-       }
-    });
-    const pUnpaid = Array.from(uniqueInvoicesMap.values()).reduce((sum, val) => sum + val, 0);
-    const totalUnpaid = fUnpaid + pUnpaid;
+    const totalUnpaid = fData?.reduce((sum, f) => sum + Number(f.montant_restant || 0), 0) || 0;
 
     const totalExpenses = entries.reduce((sum, item) => sum + item.sortie, 0);
 

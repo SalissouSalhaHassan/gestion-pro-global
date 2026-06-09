@@ -57,7 +57,7 @@ export default function CashBalancePage() {
     setLoading(true);
     try {
       const q = new URLSearchParams(filters).toString();
-      const res = await fetch(`/api/reports/cash-balance?${q}`);
+      const res = await fetch(`/api/reports/cash-balance?${q}`, { cache: "no-store" });
       const json = await res.json();
       if (res.ok) setData(json);
     } catch (err) {
