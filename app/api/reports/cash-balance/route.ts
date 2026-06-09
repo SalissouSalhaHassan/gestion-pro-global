@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       .from("paiements")
       .select(`
         date_operation, montant_regle, moyen_reglement, utilisateur,
-        factures ( bl_number, total_ttc, montant_restant, statut, emplacement, vendeur ),
+        factures ( date_facture, bl_number, total_ttc, montant_restant, statut, emplacement, vendeur ),
         avances_clients ( reference_paiement, emplacement, utilisateur )
       `)
       .neq("moyen_reglement", "Crédit");
@@ -93,9 +93,8 @@ export async function GET(request: Request) {
     try {
         let fQuery = supabase
           .from("factures")
-          .select("date_facture, bl_number, total_ttc, montant_restant, vendeur, emplacement, statut, clients ( nom )")
-          .neq("statut", "Annulée")
-          .gt("montant_restant", 0.01);
+          .select("date_facture, bl_number, total_ttc, montant_paye, montant_restant, vendeur, emplacement, statut, clients ( nom )")
+          .neq("statut", "Annulée");
         if (start) fQuery = fQuery.gte("date_facture", start);
         if (end) fQuery = fQuery.lte("date_facture", end);
         if (cashier) fQuery = fQuery.eq("vendeur", cashier);
@@ -180,18 +179,20 @@ export async function GET(request: Request) {
     });
 
     fData?.forEach(f => {
-        const clientName = f.clients?.nom || "Client";
-        entries.push({
-            date: f.date_facture,
-            ref: f.bl_number || "INV",
-            type: "Vente (Crédit)",
-            moyen: "Crédit",
-            entree: Number(f.total_ttc || 0),
-            sortie: 0,
-            user: f.vendeur,
-            emplacement: f.emplacement || "",
-            client: clientName
-        });
+        if (Number(f.montant_restant || 0) > 0.01) {
+            const clientName = f.clients?.nom || "Client";
+            entries.push({
+                date: f.date_facture,
+                ref: f.bl_number || "INV",
+                type: "Vente (Crédit)",
+                moyen: "Crédit",
+                entree: Number(f.montant_restant || 0),
+                sortie: 0,
+                user: f.vendeur,
+                emplacement: f.emplacement || "",
+                client: clientName
+            });
+        }
     });
 
     // Sorting
@@ -206,12 +207,38 @@ export async function GET(request: Request) {
 
     const totalExpenses = entries.reduce((sum, item) => sum + item.sortie, 0);
 
+    // Reconciliation calculations
+    const totalInvoiced = fData?.reduce((sum, f) => sum + Number(f.total_ttc || 0), 0) || 0;
+    const totalPaidInvoicesPeriod = fData?.reduce((sum, f) => sum + Number(f.montant_paye || 0), 0) || 0;
+    const totalAdvancesPeriod = aData?.reduce((sum, a) => sum + Number(a.montant_initial || 0), 0) || 0;
+    const totalRentPeriod = rentData?.reduce((sum, r) => sum + Number(r.montant || 0), 0) || 0;
+    const totalCementPeriod = cimData?.reduce((sum, c) => sum + Number(c.montant || 0), 0) || 0;
+
+    let totalPaidOlderInvoicesPeriod = 0;
+    pData?.forEach(p => {
+        const fact = Array.isArray(p.factures) ? p.factures[0] : p.factures;
+        if (fact && start) {
+            if (fact.date_facture < start) {
+                totalPaidOlderInvoicesPeriod += Number(p.montant_regle || 0);
+            }
+        }
+    });
+
     return NextResponse.json({
       summary: {
         totalIncome,
         totalExpenses,
         totalUnpaid,
-        netBalance: totalIncome - totalExpenses
+        netBalance: totalIncome - totalExpenses,
+        reconciliation: {
+          totalInvoiced,
+          totalUnpaidPeriod: totalUnpaid,
+          totalPaidInvoicesPeriod,
+          totalPaidOlderInvoicesPeriod,
+          totalAdvancesPeriod,
+          totalRentPeriod,
+          totalCementPeriod
+        }
       },
       entries,
       scoping: {

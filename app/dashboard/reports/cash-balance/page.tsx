@@ -16,14 +16,29 @@ import {
   MapPin,
   Download,
   Database,
-  Printer
+  Printer,
+  Info
 } from "lucide-react";
 
 import CashBalanceModal from "./CashBalanceModal";
 
 export default function CashBalancePage() {
   const [data, setData] = useState<{
-    summary: { totalIncome: number; totalExpenses: number; totalUnpaid?: number; netBalance: number };
+    summary: { 
+      totalIncome: number; 
+      totalExpenses: number; 
+      totalUnpaid?: number; 
+      netBalance: number;
+      reconciliation?: {
+        totalInvoiced: number;
+        totalUnpaidPeriod: number;
+        totalPaidInvoicesPeriod: number;
+        totalPaidOlderInvoicesPeriod: number;
+        totalAdvancesPeriod: number;
+        totalRentPeriod: number;
+        totalCementPeriod: number;
+      }
+    };
     entries: any[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -235,6 +250,102 @@ export default function CashBalancePage() {
             </div>
          ))}
       </div>
+
+      {/* Reconciliation Section */}
+      {data?.summary?.reconciliation && (
+        <div className="bg-white/60 backdrop-blur-md rounded-[32px] border border-slate-100 p-8 shadow-xl space-y-6">
+          <div className="flex items-center gap-3">
+             <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600">
+                <Scale size={24} />
+             </div>
+             <div>
+                <h2 className="text-xl font-black text-slate-900">Match Comptable & Réconciliation Caisse</h2>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">Vérification de la concordance Ventes vs Encaissé</p>
+             </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+             {/* Reconciliation details */}
+             <div className="space-y-4">
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-100">
+                   <span className="text-slate-500 font-medium">Chiffre d'Affaires de la période (A)</span>
+                   <span className="font-extrabold text-slate-800">
+                      {new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalInvoiced)} F CFA
+                   </span>
+                </div>
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-rose-600">
+                   <span className="font-medium">(-) Crédits accordés (Ventes non payées)</span>
+                   <span className="font-extrabold">
+                      -{new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalUnpaidPeriod)} F CFA
+                   </span>
+                </div>
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-emerald-600">
+                   <span className="font-medium">(+) Règlements reçus sur anciennes factures</span>
+                   <span className="font-extrabold">
+                      +{new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalPaidOlderInvoicesPeriod)} F CFA
+                   </span>
+                </div>
+                {data.summary.reconciliation.totalAdvancesPeriod > 0 && (
+                   <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-emerald-600">
+                      <span className="font-medium">(+) Avances clients perçues</span>
+                      <span className="font-extrabold">
+                         +{new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalAdvancesPeriod)} F CFA
+                      </span>
+                   </div>
+                )}
+                {data.summary.reconciliation.totalRentPeriod > 0 && (
+                   <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-emerald-600">
+                      <span className="font-medium">(+) Règlements Loyers perçus</span>
+                      <span className="font-extrabold">
+                         +{new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalRentPeriod)} F CFA
+                      </span>
+                   </div>
+                )}
+                {data.summary.reconciliation.totalCementPeriod > 0 && (
+                   <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-emerald-600">
+                      <span className="font-medium">(+) Règlements Ciment perçus</span>
+                      <span className="font-extrabold">
+                         +{new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalCementPeriod)} F CFA
+                      </span>
+                   </div>
+                )}
+                <div className="flex justify-between items-center pt-4 border-t-2 border-slate-200">
+                   <span className="text-slate-800 font-bold uppercase tracking-wider text-sm">Total Recettes en Caisse (B)</span>
+                   <span className="text-xl font-black text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl">
+                      {new Intl.NumberFormat('fr-FR').format(data.summary.totalIncome)} F CFA
+                   </span>
+                </div>
+             </div>
+
+             {/* Explanatory text */}
+             <div className="bg-slate-50 p-6 rounded-[24px] border border-slate-100/50 space-y-4">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                   <div className="w-1.5 h-4 bg-indigo-600 rounded-full"></div>
+                   Pourquoi y a-t-il une différence ?
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed font-outfit">
+                   La <strong>Gestion des Factures</strong> affiche le Chiffre d'Affaires brut basé sur la date de facturation (comptabilité d'engagement).
+                </p>
+                <p className="text-xs text-slate-500 leading-relaxed font-outfit">
+                   Le <strong>Bilan de Caisse</strong> affiche uniquement les flux de trésorerie réels encaissés (comptabilité de caisse). Les crédits accordés sont donc exclus, tandis que les paiements reçus aujourd'hui pour des factures passées ainsi que les avances clients sont inclus.
+                </p>
+                <div className="flex flex-col gap-1.5 bg-white p-4 rounded-xl border border-slate-100 text-[10px] text-indigo-600 font-medium leading-relaxed font-outfit">
+                   <div className="flex items-center gap-2">
+                      <Info size={14} className="shrink-0" />
+                      <span className="font-bold">Formule de réconciliation :</span>
+                   </div>
+                   <span>
+                      CA ({new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalInvoiced)} F)
+                      - Crédits ({new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalUnpaidPeriod)} F)
+                      + Règlements Passés ({new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalPaidOlderInvoicesPeriod)} F)
+                      + Avances ({new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalAdvancesPeriod)} F)
+                      = Recettes ({new Intl.NumberFormat('fr-FR').format(data.summary.totalIncome)} F)
+                   </span>
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
 
       {/* Transactions Table */}
       <div className="bg-white rounded-[40px] border border-slate-100 shadow-2xl overflow-hidden relative">

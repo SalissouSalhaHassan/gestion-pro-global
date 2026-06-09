@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileText, Search, Plus, ArrowUpDown, Banknote, Calendar, BadgeCheck, Loader2, Eye, Printer as PrintIcon, Edit3, Trash2, CreditCard, BarChart3, MapPin } from "lucide-react";
+import { FileText, Search, Plus, ArrowUpDown, Banknote, Calendar, BadgeCheck, Loader2, Eye, Printer as PrintIcon, Edit3, Trash2, CreditCard, BarChart3, MapPin, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import InvoiceModal from "./InvoiceModal";
@@ -246,7 +246,7 @@ export default function InvoicesPage() {
         {[
           { label: "Total Factures", value: invoices.length, bg: "linear-gradient(135deg, #4f46e5, #7c3aed)", icon: FileText, shadowColor: "rgba(79,70,229,0.3)" },
           { label: "Chiffre d'Affaires Total", value: `${new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(totalRevenue)} F CFA`, bg: "linear-gradient(135deg, #f59e0b, #ef4444)", icon: Banknote, shadowColor: "rgba(245,158,11,0.3)" },
-          { label: "Montants en Attente", value: `${new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(pendingRevenue)} F CFA`, bg: "linear-gradient(135deg, #10b981, #34d399)", icon: Calendar, shadowColor: "rgba(16,185,129,0.3)" },
+          { label: "Montants en Attente", value: `${new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(pendingRevenue)} F CFA`, bg: "linear-gradient(135deg, #10b981, #34d399)", icon: Calendar, shadowColor: "rgba(16,185,129,0.3)" }
         ].map((card, i) => (
           <div
             key={i}
@@ -265,6 +265,14 @@ export default function InvoicesPage() {
              <div className="text-2xl font-black mt-2 tracking-tight line-clamp-1">{card.value}</div>
           </div>
         ))}
+      </div>
+
+      {/* Info note */}
+      <div className="flex items-start gap-3 bg-slate-50 border border-slate-100 p-5 rounded-2xl text-xs text-slate-500 font-medium leading-relaxed font-outfit shadow-sm">
+        <Info size={18} className="text-indigo-500 shrink-0 mt-0.5" />
+        <span>
+          <strong>Note explicative :</strong> Le Chiffre d'Affaires correspond au montant total des factures générées (comptabilité d'engagement). Pour consulter les flux de trésorerie réels encaissés en caisse, rendez-vous dans le <a href="/dashboard/reports/cash-balance" className="text-indigo-600 font-extrabold underline hover:text-indigo-700">Bilan de Caisse Global</a>.
+        </span>
       </div>
 
       {/* Vendor Reports Section */}
