@@ -23,6 +23,12 @@ export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, a
   const isAdmin = (session.admin === "Oui" || session.admin === "oui" || session.admin === "true" || (session as any).admin === true) || 
                   (session.role === 1 || session.role === "1" || session.role === "admin");
   
+  console.log(`DEBUG: applyUserScope entity=${entityType} isAdmin=${isAdmin}`, { 
+    sessionId: session.id, 
+    sessionAdmin: session.admin, 
+    sessionRole: session.role 
+  });
+
   if (isAdmin) return query;
 
   // 2. Scoping by Warehouse (for Inventory/Stock related tables)
@@ -51,16 +57,6 @@ export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, a
     
     if (session.username) {
       filter += `,vendeur.eq."${session.username}"`;
-    }
-    
-    if (session.emplacement) {
-      filter += `,emplacement.eq."${session.emplacement}"`;
-    }
-    
-    if (allowedDepots.length > 0) {
-      // Join with quotes for safety if they contain spaces
-      const depotsList = allowedDepots.map(d => `"${d}"`).join(',');
-      filter += `,emplacement.in.(${depotsList})`;
     }
     
     return (query as any).or(filter);

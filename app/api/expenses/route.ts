@@ -62,6 +62,12 @@ export async function POST(request: Request) {
       autorise_par,
       updated_at: new Date().toISOString()
     };
+    
+    // Automatically attach the user's emplacement for scoping if they aren't admin
+    const isAdmin = await isAdminOrManager(user);
+    if (!isAdmin && user.emplacement) {
+      expenseData.emplacement = user.emplacement;
+    }
 
     if (id) {
       const isAdmin = await isAdminOrManager(user);

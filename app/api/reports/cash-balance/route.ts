@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth_helper";
+import { getServerSession, isAdminOrManager } from "@/lib/auth_helper";
 
 export async function GET(request: Request) {
   try {
@@ -11,12 +11,18 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const start = searchParams.get("start");
     const end = searchParams.get("end");
-    let cashier = searchParams.get("cashier");
+    
+    // Use centralized role check (Admin + Manager)
+    const isAdmin = await isAdminOrManager(user);
 
-    const isAdmin = (user.admin === "Oui" || user.admin === "oui" || user.admin === "true" || (user as any).admin === true) || 
-                    (user.role === 1 || user.role === "1" || user.role === "admin");
-
-    if (!isAdmin) {
+    // Strict scoping: sellers ALWAYS see only their own data.
+    // Admins/Managers can filter by a specific cashier or see all.
+    let cashier: string | null;
+    if (isAdmin) {
+      cashier = searchParams.get("cashier");
+      if (cashier === "Tous") cashier = null;
+    } else {
+      // Sellers are locked to their own username — no override possible.
       cashier = user.username || null;
     }
 
@@ -27,12 +33,12 @@ export async function GET(request: Request) {
       .from("paiements")
       .select(`
         date_operation, montant_regle, moyen_reglement, utilisateur,
-        factures ( bl_number, total_ttc, montant_restant, statut, emplacement ),
-        avances_clients ( reference_paiement, emplacement )
+        factures ( bl_number, total_ttc, montant_restant, statut, emplacement, vendeur ),
+        avances_clients ( reference_paiement, emplacement, utilisateur )
       `);
     if (start) pQuery = pQuery.gte("date_operation", start);
     if (end) pQuery = pQuery.lte("date_operation", end);
-    if (cashier && cashier !== "Tous") pQuery = pQuery.eq("utilisateur", cashier);
+    if (cashier) pQuery = pQuery.eq("utilisateur", cashier);
     
     const { data: pData } = await pQuery;
 
@@ -43,35 +49,37 @@ export async function GET(request: Request) {
       .neq("statut", "Annulée");
     if (start) aQuery = aQuery.gte("date_avance", start);
     if (end) aQuery = aQuery.lte("date_avance", end);
-    if (cashier && cashier !== "Tous") aQuery = aQuery.eq("utilisateur", cashier);
+    if (cashier) aQuery = aQuery.eq("utilisateur", cashier);
     
     const { data: aData } = await aQuery;
 
-    // 3. Rent Payments (If table exists)
+    // 3. Rent Payments (Admin/Manager ONLY — sellers don't manage rent)
     let rentData: any[] = [];
-    try {
+    if (isAdmin) {
+      try {
         let rQuery = supabase.from("contrat_paiements").select("*, contrats(locataire_nom_complet)");
         if (start) rQuery = rQuery.gte("date_paiement", start);
         if (end) rQuery = rQuery.lte("date_paiement", end);
         const { data } = await rQuery;
         rentData = data || [];
-    } catch(e) {}
+      } catch(e) {}
+    }
 
     // 4. Expenses (Depenses)
     let eQuery = supabase.from("depenses").select("*");
     if (start) eQuery = eQuery.gte("date_depense", start);
     if (end) eQuery = eQuery.lte("date_depense", end);
-    if (cashier && cashier !== "Tous") eQuery = eQuery.eq("operateur", cashier);
+    if (cashier) eQuery = eQuery.eq("operateur", cashier);
     
     const { data: eData } = await eQuery;
 
-    // 5. Cement Payments (Ciment)
+    // 5. Cement Payments (Ciment) - only admin or the user's own records
     let cimData: any[] = [];
     try {
         let cimQuery = supabase.from("ciment_paiements").select("*");
         if (start) cimQuery = cimQuery.gte("date_paiement", start);
         if (end) cimQuery = cimQuery.lte("date_paiement", end);
-        if (cashier && cashier !== "Tous") cimQuery = cimQuery.eq("utilisateur", cashier);
+        if (cashier) cimQuery = cimQuery.eq("utilisateur", cashier);
         const { data } = await cimQuery;
         cimData = data || [];
     } catch(e) {}
@@ -165,7 +173,11 @@ export async function GET(request: Request) {
         totalExpenses,
         netBalance: totalIncome - totalExpenses
       },
-      entries
+      entries,
+      scoping: {
+        isAdmin,
+        cashier: cashier || "Tous"
+      }
     });
 
   } catch (error: any) {

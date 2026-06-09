@@ -38,7 +38,7 @@ export async function GET() {
       `)
       .eq("is_deleted", false);
     
-    stockQuery = applyUserScope(stockQuery as any, user, 'stocks');
+    stockQuery = applyUserScope(stockQuery as any, user, 'articles');
     const { data: stockData, error: stockError } = await stockQuery;
 
     if (stockError) throw stockError;

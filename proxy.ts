@@ -3,6 +3,32 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
+  const { pathname } = request.nextUrl
+
+  // --- 1. API ROUTES EXCEPTION (FOR MOBILE/CORS) ---
+  if (pathname.startsWith('/api/')) {
+    console.log(`Proxy: Request to ${pathname} [${request.method}]`);
+    console.log('Proxy: All Headers:', JSON.stringify(Object.fromEntries(request.headers.entries())));
+    
+    // Handle OPTIONS (Preflight) explicitly
+    if (request.method === 'OPTIONS') {
+      return new NextResponse(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Max-Age': '86400',
+        },
+      })
+    }
+
+    const response = NextResponse.next()
+    response.headers.set('Access-Control-Allow-Origin', '*')
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    return response
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,7 +47,7 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // --- CUSTOM AUTH PROTECTION ---
+  // --- 2. CUSTOM AUTH PROTECTION (WEB PAGES ONLY) ---
   const gpSessionCookie = request.cookies.get('gp_session')?.value
   let sessionData: any = null
 
@@ -34,22 +60,22 @@ export async function proxy(request: NextRequest) {
   }
 
   // Si l'utilisateur n'est pas connecté et essaie d'ouvrir une page protégée, on le renvoie vers /login
-  if (!sessionData && !request.nextUrl.pathname.startsWith('/login')) {
+  if (!sessionData && !pathname.startsWith('/login') && pathname !== '/') {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
   // Si l'utilisateur est connecté et ouvre /login, on le redirige vers /dashboard
-  if (sessionData && request.nextUrl.pathname === '/login') {
+  if (sessionData && pathname === '/login') {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
   }
 
-  // --- ROLE-BASED PROTECTION ---
+  // --- 3. ROLE-BASED PROTECTION ---
   const adminRoutes = ['/dashboard/users', '/dashboard/permissions', '/dashboard/settings', '/dashboard/depots'];
-  const isTargetingAdminRoute = adminRoutes.some(path => request.nextUrl.pathname.startsWith(path));
+  const isTargetingAdminRoute = adminRoutes.some(path => pathname.startsWith(path));
 
   if (isTargetingAdminRoute && (!sessionData || (sessionData.admin !== "Oui" && sessionData.role !== 1))) {
     const url = request.nextUrl.clone()
@@ -59,7 +85,6 @@ export async function proxy(request: NextRequest) {
 
   return supabaseResponse
 }
-
 
 export const config = {
   matcher:['/((?!_next/static|_next/image|favicon.ico|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],

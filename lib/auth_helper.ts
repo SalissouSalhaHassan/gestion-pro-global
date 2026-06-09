@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 export interface CustomSession {
   id: string | number;
@@ -10,20 +10,44 @@ export interface CustomSession {
 }
 
 /**
- * Gets the custom user session from the 'gp_session' cookie.
+ * Gets the custom user session from the 'gp_session' cookie or Authorization header.
  * @returns The session object or null if not found/invalid.
  */
 export async function getServerSession(): Promise<CustomSession | null> {
   const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("gp_session")?.value;
+  let sessionRaw = cookieStore.get("gp_session")?.value;
 
-  if (!sessionCookie) return null;
+  if (!sessionRaw) {
+    const head = await headers();
+    const auth = head.get("authorization");
+    console.log('getServerSession: Cookie missing. Authorization header:', auth ? 'PRESENT' : 'MISSING');
+    if (auth && auth.startsWith("Bearer ")) {
+      sessionRaw = auth.substring(7);
+      console.log('getServerSession: Bearer token found length:', sessionRaw.length);
+    }
+  } else {
+    console.log('getServerSession: Found session cookie');
+  }
+
+  if (!sessionRaw) return null;
 
   try {
-    const decoded = decodeURIComponent(sessionCookie);
-    return JSON.parse(decoded) as CustomSession;
+    // Try to decode if it looks like it's URL encoded
+    let decoded = sessionRaw;
+    if (sessionRaw.includes('%')) {
+      decoded = decodeURIComponent(sessionRaw);
+    }
+    
+    // If it's still double-encoded (sometimes happens with some clients)
+    if (decoded.includes('%')) {
+       decoded = decodeURIComponent(decoded);
+    }
+
+    const session = JSON.parse(decoded) as CustomSession;
+    console.log('getServerSession: Parsed session for user:', session.username);
+    return session;
   } catch (error) {
-    console.error("Failed to parse custom session cookie:", error);
+    console.error("Failed to parse session. Raw content:", sessionRaw.substring(0, 50) + '...');
     return null;
   }
 }

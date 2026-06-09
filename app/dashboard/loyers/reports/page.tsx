@@ -283,7 +283,7 @@ export default function LoyerReportsPage() {
           </h3>
           <div className="h-[350px] w-full relative z-10">
             {stats && (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minHeight={300}>
                 <BarChart data={stats.monthlyRevenue}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="name" stroke="rgba(255,255,255,0.4)" fontSize={10} tickLine={false} axisLine={false} dy={10} />
@@ -309,7 +309,7 @@ export default function LoyerReportsPage() {
           <div className="flex-1 flex flex-col md:flex-row items-center gap-8">
             <div className="h-[300px] w-full md:w-1/2">
               {stats && (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minHeight={300}>
                   <PieChart>
                     <Pie data={stats.modeRevenue} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={8} dataKey="value">
                       {stats.modeRevenue.map((_: any, index: number) => (

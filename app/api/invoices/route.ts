@@ -3,17 +3,21 @@ import { createClient } from '@/lib/supabase/server';
 import { InvoiceService } from '@/lib/services/invoice.service';
 import { getServerSession, isAdminOrManager } from '@/lib/auth_helper';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get('search');
+    const vendeur = searchParams.get('vendeur');
+
     const isAdmin = await isAdminOrManager(session);
     const invoiceService = new InvoiceService(supabase);
     
     // Admin sees all, Seller sees only their own (scoping handled in service)
-    const invoices = await invoiceService.getInvoices(session);
+    const invoices = await invoiceService.getInvoices(session, { search, vendeur });
     
     return NextResponse.json(invoices);
   } catch (error: any) {
@@ -28,6 +32,7 @@ export async function POST(request: Request) {
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
     const body = await request.json();
+    console.log('DEBUG: Received POST /api/invoices', { userId: session.id, body });
     const invoiceService = new InvoiceService(supabase);
     
     if (!body.client_id || !body.total_ht) {

@@ -33,11 +33,21 @@ export type Invoice = {
 export class InvoiceService {
   constructor(private supabase: SupabaseClient) {}
 
-  async getInvoices(session: any) {
+  async getInvoices(session: any, filters?: { search?: string | null; vendeur?: string | null }) {
     let query = this.supabase
       .from('factures')
       .select('*, clients(nom)')
-      .eq('is_deleted', false)
+      .eq('is_deleted', false);
+
+    if (filters?.vendeur) {
+      query = query.eq('vendeur', filters.vendeur);
+    }
+
+    if (filters?.search) {
+      query = query.ilike('bl_number', `%${filters.search}%`);
+    }
+
+    query = query
       .order('date_facture', { ascending: false })
       .order('id', { ascending: false })
       .limit(1000);
@@ -64,7 +74,7 @@ export class InvoiceService {
   }
 
   async createInvoice(invoiceData: Invoice, userId?: number) {
-    const { items, ...invoiceRow } = invoiceData;
+    const { items, client_nom, ...invoiceRow } = invoiceData as any;
     
     // Insert the main invoice
     const { data: newInvoice, error: invoiceError } = await this.supabase
@@ -98,9 +108,9 @@ export class InvoiceService {
     return newInvoice;
   }
 
-  async payInvoice(invoiceId: number, amount: number, paymentMethod: string, userId?: number, advanceId?: number) {
-    // Logic for paying an invoice
-    const invoice = await this.getInvoiceById(invoiceId, userId);
+  async payInvoice(invoiceId: number, amount: number, paymentMethod: string, sessionOrId: any, advanceId?: number) {
+    const session = typeof sessionOrId === 'object' ? sessionOrId : { id: sessionOrId };
+    const invoice = await this.getInvoiceById(invoiceId, session);
     if (!invoice) throw new Error('Invoice not found or access denied');
 
     const newMontantPaye = Number(invoice.montant_paye) + amount;
@@ -133,7 +143,7 @@ export class InvoiceService {
       montant_regle: amount,
       moyen_reglement: paymentMethod,
       avance_client_id: advanceId,
-      created_by: userId
+      created_by: session.id
     });
 
     return data;
