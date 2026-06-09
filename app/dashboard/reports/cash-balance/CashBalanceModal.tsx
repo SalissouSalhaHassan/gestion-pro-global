@@ -165,6 +165,12 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
                  <span className="flex items-center gap-1">NIF: {company?.nif}</span>
                  <span className="flex items-center gap-1">RC: {company?.rc}</span>
               </div>
+              {pageSize === 'Ticket' && (
+                <div className="mt-3 text-[10px] font-bold text-slate-600 space-y-0.5">
+                    <p>Période: {new Date(filters.start).toLocaleDateString("fr-FR")} → {new Date(filters.end).toLocaleDateString("fr-FR")}</p>
+                    <p>User: {filters.cashier}</p>
+                </div>
+              )}
             </div>
             {pageSize !== 'Ticket' && (
               <div className="text-right">
@@ -172,8 +178,7 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
                     <h2 className="text-xs font-black uppercase tracking-[0.2em]">BILAN DE CAISSE</h2>
                 </div>
                 <div className="text-[10px] font-bold text-slate-500 space-y-0.5">
-                    <p>Du: {new Date(filters.start).toLocaleDateString()}</p>
-                    <p>Au: {new Date(filters.end).toLocaleDateString()}</p>
+                    <p>Période: {new Date(filters.start).toLocaleDateString("fr-FR")} → {new Date(filters.end).toLocaleDateString("fr-FR")}</p>
                     <p>User: {filters.cashier}</p>
                 </div>
               </div>

@@ -84,6 +84,20 @@ export async function GET(request: Request) {
         cimData = data || [];
     } catch(e) {}
 
+    // 6. Unpaid Invoices (Factures Non Payées / Ventes Crédit)
+    let fData: any[] = [];
+    try {
+        let fQuery = supabase
+          .from("factures")
+          .select("date_facture, bl_number, total_ttc, vendeur, emplacement, statut, clients ( nom )")
+          .in("statut", ["Non Payée", "Non payée", "Non payee", "Non Payee"]);
+        if (start) fQuery = fQuery.gte("date_facture", start);
+        if (end) fQuery = fQuery.lte("date_facture", end);
+        if (cashier) fQuery = fQuery.eq("vendeur", cashier);
+        const { data } = await fQuery;
+        fData = data || [];
+    } catch(e) {}
+
     // MAPPING AND COMBINING
     const entries: any[] = [];
 
@@ -157,6 +171,21 @@ export async function GET(request: Request) {
             sortie: 0,
             user: cim.utilisateur,
             emplacement: ""
+        });
+    });
+
+    fData?.forEach(f => {
+        const clientName = f.clients?.nom || "Client";
+        entries.push({
+            date: f.date_facture,
+            ref: f.bl_number || "INV",
+            type: "Vente (Crédit)",
+            moyen: "Crédit",
+            entree: Number(f.total_ttc || 0),
+            sortie: 0,
+            user: f.vendeur,
+            emplacement: f.emplacement || "",
+            client: clientName
         });
     });
 

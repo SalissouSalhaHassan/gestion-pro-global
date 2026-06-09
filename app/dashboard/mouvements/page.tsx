@@ -162,17 +162,15 @@ export default function MouvementsPage() {
         return Number(a.id) - Number(b.id);
     });
 
-    // 3. Recalculate Running Balance per Article & Depot
+    // 3. Use Database Stock Balance directly
     const contextMap: Record<string, number> = {};
     const processed = raw.map(m => {
         const key = `${m.article_id}-${m.depot || "default"}`;
-        const previousApres = contextMap[key] || 0;
-        const delta = Number(m.entree || 0) - Number(m.sortie || 0);
         
         const refined = {
             ...m,
-            stock_avant: previousApres,
-            stock_apres: previousApres + delta
+            stock_avant: Number(m.stock_avant || 0),
+            stock_apres: Number(m.stock_apres || 0)
         };
         
         contextMap[key] = refined.stock_apres;
