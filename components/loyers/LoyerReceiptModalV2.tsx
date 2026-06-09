@@ -213,8 +213,9 @@ export default function LoyerReceiptModalV2({ paymentId, onClose }: LoyerReceipt
 
               {/* 12-Month Status Grid */}
               <div className="mb-6 border-4 border-slate-900 p-4 rounded-3xl bg-slate-50 shadow-xl">
-                <h3 className="text-[14px] font-black uppercase mb-4 text-slate-900 border-b-2 border-slate-900 pb-2">
-                  📊 ÉTAT DE PAIEMENT ANNUEL ({new Date(payment.date_paiement).getFullYear()})
+                <h3 className="text-[18px] font-black uppercase mb-4 text-slate-900 border-b-4 border-slate-900 pb-2 tracking-widest flex items-center gap-2">
+                  <span className="text-2xl">📊</span>
+                  <span style={{fontWeight: 900, letterSpacing: '0.12em'}}>ÉTAT DE PAIEMENT ANNUEL ({new Date(payment.date_paiement).getFullYear()})</span>
                 </h3>
                 <table className="w-full border-collapse">
                   <tbody>
@@ -280,12 +281,7 @@ export default function LoyerReceiptModalV2({ paymentId, onClose }: LoyerReceipt
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot>
-                      <tr className="border-x-2 border-b-2 border-slate-900 font-black bg-slate-50">
-                        <td colSpan={3} className="p-2 text-right uppercase border-r border-slate-300">Total des Versements</td>
-                        <td className="p-2 text-right">{history.reduce((sum, h) => sum + Number(h.montant || 0), 0).toLocaleString("fr-FR")} F</td>
-                      </tr>
-                    </tfoot>
+
                   </table>
                 </div>
               )}
