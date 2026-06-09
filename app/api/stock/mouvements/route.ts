@@ -72,7 +72,18 @@ export async function GET(request: Request) {
 
     // Search
     if (search) {
-      query = query.or(`nr_doc.ilike.%${search}%,fournisseur_client.ilike.%${search}%`);
+      const { data: matchedArticles } = await supabase
+        .from("articles")
+        .select("id")
+        .or(`designation.ilike.%${search}%,reference.ilike.%${search}%`);
+      
+      const matchedIds = matchedArticles?.map((a: any) => a.id) || [];
+      
+      if (matchedIds.length > 0) {
+        query = query.or(`nr_doc.ilike.%${search}%,fournisseur_client.ilike.%${search}%,article_id.in.(${matchedIds.join(",")})`);
+      } else {
+        query = query.or(`nr_doc.ilike.%${search}%,fournisseur_client.ilike.%${search}%`);
+      }
     }
 
     const { data, error } = await query;

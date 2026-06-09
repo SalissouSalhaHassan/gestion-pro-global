@@ -165,7 +165,7 @@ export default function MouvementsPage() {
     // 3. Recalculate Running Balance per Article & Depot
     const contextMap: Record<string, number> = {};
     const processed = raw.map(m => {
-        const key = `${m.article_id}-${m.depot_id}`;
+        const key = `${m.article_id}-${m.depot || "default"}`;
         const previousApres = contextMap[key] || 0;
         const delta = Number(m.entree || 0) - Number(m.sortie || 0);
         
