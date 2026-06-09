@@ -1,5 +1,5 @@
 "use client";
-
+// Rapport Groupé par Bien — v2 — 2026-06-09
 import { useEffect, useState, useMemo } from "react";
 import { X, Printer, Loader2, FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
