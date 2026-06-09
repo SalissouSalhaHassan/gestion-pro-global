@@ -23,7 +23,7 @@ import CashBalanceModal from "./CashBalanceModal";
 
 export default function CashBalancePage() {
   const [data, setData] = useState<{
-    summary: { totalIncome: number; totalExpenses: number; netBalance: number };
+    summary: { totalIncome: number; totalExpenses: number; totalUnpaid?: number; netBalance: number };
     entries: any[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -89,6 +89,15 @@ export default function CashBalancePage() {
       bg: "bg-rose-50",
       text: "text-rose-600",
       gradient: "from-rose-500 to-rose-600"
+    },
+    {
+      label: "Total Non Payé (Crédit)",
+      value: data?.summary.totalUnpaid || 0,
+      icon: Scale,
+      color: "amber",
+      bg: "bg-amber-50",
+      text: "text-amber-600",
+      gradient: "from-amber-500 to-amber-600"
     },
     {
       label: "Solde Net en Caisse",
@@ -205,7 +214,7 @@ export default function CashBalancePage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
          {summaryItems.map((item, i) => (
             <div key={i} className="group relative overflow-hidden bg-white p-8 rounded-[40px] border border-slate-100 shadow-xl transition-all duration-300 hover:scale-[1.02]">
                <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${item.gradient} opacity-[0.03] rounded-bl-[100px] group-hover:opacity-[0.07] transition-opacity`}></div>

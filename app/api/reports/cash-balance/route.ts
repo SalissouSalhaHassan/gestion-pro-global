@@ -113,12 +113,17 @@ export async function GET(request: Request) {
        else if (fact) displayType = "Vente (Caisse)";
        else if (adv) displayType = "Avance Client";
 
+       let entreeValue = p.montant_regle > 0 ? p.montant_regle : 0;
+       if (p.moyen_reglement === "Crédit" && fact) {
+         entreeValue = Number(fact.total_ttc || 0);
+       }
+
        entries.push({
           date: p.date_operation,
           ref: fact?.bl_number || adv?.reference_paiement || "TRANS",
           type: displayType,
           moyen: p.moyen_reglement,
-          entree: p.montant_regle > 0 ? p.montant_regle : 0,
+          entree: entreeValue,
           sortie: p.montant_regle < 0 ? Math.abs(p.montant_regle) : 0,
           user: p.utilisateur,
           emplacement: fact?.emplacement || adv?.emplacement || ""
@@ -196,13 +201,28 @@ export async function GET(request: Request) {
     entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     // Summaries
-    const totalIncome = entries.reduce((sum, item) => sum + item.entree, 0);
+    const totalIncome = entries
+      .filter(item => item.moyen !== "Crédit")
+      .reduce((sum, item) => sum + item.entree, 0);
+
+    const fUnpaid = fData?.reduce((sum, f) => sum + Number(f.total_ttc || 0), 0) || 0;
+    const uniqueInvoicesMap = new Map<string, number>();
+    pData?.forEach(p => {
+       const fact = Array.isArray(p.factures) ? p.factures[0] : p.factures;
+       if (fact && p.moyen_reglement === "Crédit") {
+         uniqueInvoicesMap.set(fact.bl_number, Number(fact.montant_restant || 0));
+       }
+    });
+    const pUnpaid = Array.from(uniqueInvoicesMap.values()).reduce((sum, val) => sum + val, 0);
+    const totalUnpaid = fUnpaid + pUnpaid;
+
     const totalExpenses = entries.reduce((sum, item) => sum + item.sortie, 0);
 
     return NextResponse.json({
       summary: {
         totalIncome,
         totalExpenses,
+        totalUnpaid,
         netBalance: totalIncome - totalExpenses
       },
       entries,

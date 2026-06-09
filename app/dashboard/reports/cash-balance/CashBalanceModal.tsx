@@ -186,7 +186,7 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
           </div>
 
           {/* SUMMARY CARDS */}
-          <div className={`grid ${pageSize === 'Ticket' ? 'grid-cols-1' : 'grid-cols-3'} gap-4 mb-8`}>
+          <div className={`grid ${pageSize === 'Ticket' ? 'grid-cols-1' : 'grid-cols-4'} gap-4 mb-8`}>
             <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex items-center gap-3">
                 <div className="p-2 bg-emerald-500 text-white rounded-lg shadow-lg">
                     <TrendingUp size={18} />
@@ -203,6 +203,15 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
                 <div>
                     <p className="text-[9px] font-black text-rose-600 uppercase tracking-wider">Sorties</p>
                     <p className="text-lg font-black text-rose-900">-{new Intl.NumberFormat('fr-FR').format(data.summary.totalExpenses)}</p>
+                </div>
+            </div>
+            <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center gap-3">
+                <div className="p-2 bg-amber-500 text-white rounded-lg shadow-lg">
+                    <Scale size={18} />
+                </div>
+                <div>
+                    <p className="text-[9px] font-black text-amber-600 uppercase tracking-wider">Non Payé (Crédit)</p>
+                    <p className="text-lg font-black text-amber-900">+{new Intl.NumberFormat('fr-FR').format(data.summary.totalUnpaid || 0)}</p>
                 </div>
             </div>
             <div className={`p-4 rounded-2xl flex items-center gap-3 border ${data.summary.netBalance >= 0 ? 'bg-indigo-50 border-indigo-100' : 'bg-amber-50 border-amber-100'}`}>
@@ -227,6 +236,7 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
                         <th className="p-3">Date</th>
                         <th className="p-3">Référence</th>
                         <th className="p-3">Détails</th>
+                        <th className="p-3">Opération</th>
                         <th className="p-3 text-right">E</th>
                         <th className="p-3 text-right">S</th>
                      </tr>
@@ -237,6 +247,7 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
                            <td className="p-3 text-slate-400">{new Date(item.date).toLocaleDateString('fr-FR').split('/').slice(0,2).join('/')}</td>
                            <td className="p-3 text-slate-800">{item.ref}</td>
                            <td className="p-3 text-slate-500 italic truncate max-w-[100px]">{item.type}</td>
+                           <td className="p-3 text-slate-600 font-bold">{item.moyen}</td>
                            <td className="p-3 text-right text-emerald-600">
                               {item.entree > 0 ? `+${new Intl.NumberFormat('fr-FR').format(item.entree)}` : '—'}
                            </td>
@@ -295,9 +306,11 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
           .bg-indigo-600 { background-color: #4f46e5 !important; color: #fff !important; }
           .bg-emerald-50 { background-color: #ecfdf5 !important; }
           .bg-rose-50 { background-color: #fff1f2 !important; }
+          .bg-amber-50 { background-color: #fef3c7 !important; }
           .bg-indigo-50 { background-color: #eef2ff !important; }
           .text-emerald-600 { color: #059669 !important; }
           .text-rose-600 { color: #e11d48 !important; }
+          .text-amber-600 { color: #d97706 !important; }
         }
       `}</style>
     </div>
