@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { getServerSession, isAdminOrManager } from "@/lib/auth_helper";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
@@ -206,6 +209,12 @@ export async function GET(request: Request) {
       scoping: {
         isAdmin,
         cashier: cashier || "Tous"
+      }
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
       }
     });
 
