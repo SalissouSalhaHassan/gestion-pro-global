@@ -93,7 +93,7 @@ export class InvoiceService {
 
     // Insert items
     if (items && items.length > 0) {
-      const itemsToInsert = items.map(item => ({
+      const itemsToInsert = items.map((item: any) => ({
         ...item,
         facture_id: newInvoice.id
       }));
