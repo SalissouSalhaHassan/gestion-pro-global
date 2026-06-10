@@ -102,12 +102,6 @@ export async function GET(
                         </tr>
                     `).join('')}
                 </tbody>
-                <tfoot>
-                    <tr style="background: #f1f5f9;">
-                        <td colspan="3" style="border: 2px solid #0f172a; padding: 8px; font-size: 10px; font-weight: 900; text-align: right; text-transform: uppercase;">Total des Versements</td>
-                        <td style="border: 2px solid #0f172a; padding: 8px; font-size: 11px; font-weight: 900; text-align: right;">${history.reduce((sum, h) => sum + Number(h.montant || 0), 0).toLocaleString('fr-FR')} F</td>
-                    </tr>
-                </tfoot>
             </table>
         </div>
         `;

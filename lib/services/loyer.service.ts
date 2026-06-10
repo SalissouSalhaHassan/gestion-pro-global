@@ -119,7 +119,9 @@ export class ContractService {
 
     return contracts.map(c => {
       const paid = totals[c.id] || 0;
-      const today = new Date();
+      const today = (c.statut === 'Expiré' || c.statut === 'Annulé') && c.updated_at
+        ? new Date(c.updated_at)
+        : new Date();
       const currentYearReal = today.getFullYear();
       const currentMonthReal = today.getMonth() + 1; // 1-12
       
@@ -209,18 +211,24 @@ export class ContractService {
 
     // Convert date_naissance from dd/mm/yyyy to yyyy-mm-dd if present
     if (payload.date_naissance) {
-      const parts = payload.date_naissance.split('/');
-      if (parts.length === 3) {
-        payload.date_naissance = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      if (payload.date_naissance.includes('-')) {
+        // already yyyy-mm-dd
       } else {
-        payload.date_naissance = null;
+        const parts = payload.date_naissance.split('/');
+        if (parts.length === 3) {
+          payload.date_naissance = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        } else {
+          payload.date_naissance = null;
+        }
       }
     }
 
-    // REMOVE MISSING COLUMNS (annee_debut, mois_debut) to prevent "column not found" error
-    // These should be added to the DB schema via SQL later
-    delete payload.annee_debut;
-    delete payload.mois_debut;
+    if (payload.annee_debut !== undefined) {
+      payload.annee_debut = parseInt(payload.annee_debut) || 2026;
+    }
+    if (payload.mois_debut !== undefined) {
+      payload.mois_debut = parseInt(payload.mois_debut) || 1;
+    }
 
     // Ensure numeric fields
     payload.loyer_mensuel = parseFloat(payload.loyer_mensuel) || 0;
@@ -376,11 +384,15 @@ export class ContractService {
     // Convert dates from dd/mm/yyyy to yyyy-mm-dd
     for (const key of ['date_paiement', 'periode_debut', 'periode_fin'] as const) {
       if (payload[key]) {
-        const parts = payload[key].split('/');
-        if (parts.length === 3) {
-          payload[key] = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        if (payload[key].includes('-')) {
+          // already yyyy-mm-dd
         } else {
-          payload[key] = null;
+          const parts = payload[key].split('/');
+          if (parts.length === 3) {
+            payload[key] = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          } else {
+            payload[key] = null;
+          }
         }
       }
     }
@@ -399,11 +411,15 @@ export class ContractService {
     // Convert dates from dd/mm/yyyy to yyyy-mm-dd
     for (const key of ['date_paiement', 'periode_debut', 'periode_fin'] as const) {
       if (payload[key]) {
-        const parts = payload[key].split('/');
-        if (parts.length === 3) {
-          payload[key] = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        if (payload[key].includes('-')) {
+          // already yyyy-mm-dd
         } else {
-          payload[key] = null;
+          const parts = payload[key].split('/');
+          if (parts.length === 3) {
+            payload[key] = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          } else {
+            payload[key] = null;
+          }
         }
       }
     }
