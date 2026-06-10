@@ -136,9 +136,11 @@ export async function GET(request: Request) {
     };
   }));
 
+  const filteredResults = results.filter(item => item.variation !== 0);
+
   return NextResponse.json({
     date: dateStr,
     depot: depot || "Tous",
-    items: results
+    items: filteredResults
   });
 }

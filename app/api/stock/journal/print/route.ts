@@ -99,8 +99,8 @@ export async function GET(request: NextRequest) {
       return { ...art, avant, variation, apres };
     }));
 
-    // Only show items that had movements or have stock
-    const filteredResults = results.filter(item => item.variation !== 0 || item.avant !== 0 || item.apres !== 0);
+    // Only show items that had movements
+    const filteredResults = results.filter(item => item.variation !== 0);
 
     const formatDate = (date: string) => {
         return new Date(date).toLocaleDateString('fr-FR', {
