@@ -121,6 +121,23 @@ export async function POST(request: Request) {
       }
     }
 
+    // Recalculate Totals before adding
+    const { data: allPaysBefore, error: errAllBefore } = await supabase
+      .from("ciment_paiements")
+      .select("montant")
+      .eq("ciment_id", shipmentId);
+    
+    if (errAllBefore) throw errAllBefore;
+    const totalPaidBefore = (allPaysBefore || []).reduce((sum, p) => sum + Number(p.montant || 0), 0);
+
+    const { data: ship2 } = await supabase.from("gestion_ciment").select("total").eq("id", shipmentId).single();
+    const totalShipment = Number(ship2?.total || 0);
+    const remainder = totalShipment - totalPaidBefore;
+
+    if (amount > remainder + 0.1) {
+      return NextResponse.json({ error: `Le montant du paiement (${amount} F) dépasse le reste à payer (${remainder} F).` }, { status: 400 });
+    }
+
     // Insert ciment_paiements
     const { error: errPay } = await supabase
       .from("ciment_paiements")
@@ -144,10 +161,6 @@ export async function POST(request: Request) {
       .eq("ciment_id", shipmentId);
     
     const totalPaid = (allPays || []).reduce((sum, p) => sum + Number(p.montant || 0), 0);
-
-    // Get total from shipment to update status
-    const { data: ship2 } = await supabase.from("gestion_ciment").select("total").eq("id", shipmentId).single();
-    const totalShipment = Number(ship2?.total || 0);
 
     let status = "Non Payé";
     if (isGreaterOrEqual(totalPaid, totalShipment)) status = "Payé";
