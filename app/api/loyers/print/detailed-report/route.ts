@@ -164,7 +164,7 @@ export async function GET(request: NextRequest) {
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; background: #f1f5f9; padding: 15px; color: #0f172a; }
-        .report { background: white; padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 210mm; margin: 0 auto; }
+        .report { background: white; padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 297mm; margin: 0 auto; }
         .header { display: flex; justify-content: space-between; margin-bottom: 10px; }
         .company h1 { font-size: 18px; font-weight: 900; }
         .divider { height: 1.5px; background: #0f172a; margin: 10px 0; }
@@ -181,7 +181,39 @@ export async function GET(request: NextRequest) {
         .font-black { font-weight: 900; }
         .font-bold { font-weight: 700; }
         .print-btn { position: fixed; top: 15px; right: 15px; background: #0f172a; color: white; padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; }
-        @media print { .print-btn { display: none; } body { padding: 0; background: white; } .report { box-shadow: none; padding: 5mm; max-width: 100%; } }
+        
+        @media print {
+            @page {
+                size: A4 landscape;
+                margin: 5mm;
+            }
+            body {
+                padding: 0;
+                background: white;
+            }
+            .print-btn {
+                display: none;
+            }
+            .report {
+                box-shadow: none;
+                padding: 0mm;
+                max-width: 100% !important;
+                width: 100% !important;
+            }
+            td, th {
+                padding: 5px 6px !important;
+                font-size: 9px !important;
+            }
+            .title, .meta, table, .divider, .header {
+                margin-bottom: 8px !important;
+            }
+            .title {
+                padding: 5px !important;
+            }
+            .divider {
+                margin: 5px 0 !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -223,22 +255,22 @@ export async function GET(request: NextRequest) {
             </tbody>
         </table>
 
-        <div style="display: flex; justify-content: space-between; margin-top: 20px; margin-bottom: 50px;">
-            <div style="background: #f8fafc; border: 2px solid #0f172a; padding: 10px 15px; width: 30%; text-align: center;">
-                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #64748b; margin: 0 0 5px 0;">TOTAL ENCAISSÉ (${periodLabel})</p>
-                <p style="font-size: 14px; font-weight: 900; color: #059669; margin: 0;">${Number(totalEncaisse).toLocaleString('fr-FR')} F</p>
+        <div style="display: flex; justify-content: space-between; margin-top: 15px; margin-bottom: 25px;">
+            <div style="background: #f8fafc; border: 2px solid #0f172a; padding: 8px 12px; width: 30%; text-align: center;">
+                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #64748b; margin: 0 0 4px 0;">TOTAL ENCAISSÉ (${periodLabel})</p>
+                <p style="font-size: 13px; font-weight: 900; color: #059669; margin: 0;">${Number(totalEncaisse).toLocaleString('fr-FR')} F</p>
             </div>
-            <div style="background: #f8fafc; border: 2px solid #0f172a; padding: 10px 15px; width: 30%; text-align: center;">
-                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #64748b; margin: 0 0 5px 0;">TOTAL IMPAYÉ (${periodLabel})</p>
-                <p style="font-size: 14px; font-weight: 900; color: #e11d48; margin: 0;">${Number(totalImpaye).toLocaleString('fr-FR')} F</p>
+            <div style="background: #f8fafc; border: 2px solid #0f172a; padding: 8px 12px; width: 30%; text-align: center;">
+                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #64748b; margin: 0 0 4px 0;">TOTAL IMPAYÉ (${periodLabel})</p>
+                <p style="font-size: 13px; font-weight: 900; color: #e11d48; margin: 0;">${Number(totalImpaye).toLocaleString('fr-FR')} F</p>
             </div>
-            <div style="background: #0f172a; border: 2px solid #0f172a; padding: 10px 15px; width: 30%; text-align: center;">
-                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #94a3b8; margin: 0 0 5px 0;">TOTAL ARRIÉRÉS ${yearParam === 'All' ? 'GLOBAL' : yearParam}</p>
-                <p style="font-size: 14px; font-weight: 900; color: #ffffff; margin: 0;">${Number(totalArrieres).toLocaleString('fr-FR')} F</p>
+            <div style="background: #0f172a; border: 2px solid #0f172a; padding: 8px 12px; width: 30%; text-align: center;">
+                <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; color: #94a3b8; margin: 0 0 4px 0;">TOTAL ARRIÉRÉS ${yearParam === 'All' ? 'GLOBAL' : yearParam}</p>
+                <p style="font-size: 13px; font-weight: 900; color: #ffffff; margin: 0;">${Number(totalArrieres).toLocaleString('fr-FR')} F</p>
             </div>
         </div>
 
-        <div style="margin-top: 50px; text-align: center; font-size: 9px; font-weight: 900; text-transform: uppercase; color: #94a3b8; letter-spacing: 2px;">
+        <div style="margin-top: 25px; text-align: center; font-size: 9px; font-weight: 900; text-transform: uppercase; color: #94a3b8; letter-spacing: 2px;">
             Document de Gestion Interne • ${company?.nom_entreprise || "GESTION PRO"}
         </div>
     </div>

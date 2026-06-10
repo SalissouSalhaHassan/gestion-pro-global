@@ -63,15 +63,15 @@ export async function GET(request: NextRequest) {
         body {
             font-family: 'Inter', sans-serif;
             background: #f1f5f9;
-            padding: 40px 20px;
+            padding: 20px 10px;
             color: #0f172a;
         }
         .report {
             width: 100%;
-            max-width: 297mm; /* A4 Landscape if needed, but let's keep it flexible */
+            max-width: 297mm;
             margin: 0 auto;
             background: white;
-            padding: 50px;
+            padding: 30px;
             box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
         }
         .header {
@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
             font-size: 16px;
         }
         .footer {
-            margin-top: 50px;
+            margin-top: 20px;
             border-top: 1px solid #e2e8f0;
             padding-top: 15px;
             display: flex;
@@ -200,9 +200,36 @@ export async function GET(request: NextRequest) {
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
         @media print {
-            body { background: white; padding: 0; }
-            .report { box-shadow: none; max-width: 100%; padding: 10mm; }
-            .print-btn { display: none; }
+            @page {
+                size: A4 landscape;
+                margin: 5mm;
+            }
+            body {
+                background: white;
+                padding: 0;
+            }
+            .report {
+                box-shadow: none;
+                max-width: 100% !important;
+                width: 100% !important;
+                padding: 0mm;
+            }
+            .print-btn {
+                display: none;
+            }
+            td, th {
+                padding: 6px 8px !important;
+                font-size: 10px !important;
+            }
+            .header, .title-box, .filters-section, table, .summary-container {
+                margin-bottom: 12px !important;
+            }
+            .title-box {
+                padding: 8px !important;
+            }
+            .divider {
+                margin-bottom: 12px !important;
+            }
         }
     </style>
 </head>
