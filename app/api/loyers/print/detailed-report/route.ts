@@ -121,17 +121,7 @@ export async function GET(request: NextRequest) {
     `).join('');
 
     // Totals calculations
-    const filteredTenantIds = new Set(filtered.map(r => r.id));
-    const totalEncaisse = payments
-      .filter(p => {
-        if (!p.date_paiement) return false;
-        if (!filteredTenantIds.has(p.contrat_id)) return false;
-        const d = new Date(p.date_paiement);
-        const matchY = yearParam === 'All' || d.getFullYear() === parseInt(yearParam);
-        const matchM = monthParam === 'All' || (d.getMonth() + 1) === parseInt(monthParam);
-        return matchY && matchM;
-      })
-      .reduce((sum, p) => sum + (p.montant || 0), 0);
+    const totalEncaisse = filtered.reduce((sum, r) => sum + Number(r.total_paye || 0), 0);
 
     const totalImpaye = filtered.reduce((sum, r) => {
         let max_expected_for_period = Number(r.loyer) || 0;
