@@ -93,12 +93,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   });
 
   return (
-    <div className="flex min-h-screen relative overflow-hidden font-sans" dir="ltr" style={{
+    <div className="flex min-h-screen relative overflow-hidden font-sans print:block print:overflow-visible print:h-auto print:bg-none print:shadow-none" dir="ltr" style={{
       background: "radial-gradient(at 0% 0%, rgba(240, 244, 255, 1) 0, transparent 50%), radial-gradient(at 100% 0%, rgba(245, 239, 255, 1) 0, transparent 50%), radial-gradient(at 100% 100%, rgba(235, 250, 255, 1) 0, transparent 50%), radial-gradient(at 0% 100%, rgba(240, 240, 255, 1) 0, transparent 50%), #ffffff"
     }}>
       {/* Sidebar - Precision Premium Dark */}
       <aside
-        className={`flex w-72 flex-col m-4 mr-0 rounded-[32px] backdrop-blur-2xl text-white shadow-[0_10px_50px_rgba(0,0,0,0.4)] transition-all duration-300 ${isPos ? "hidden" : ""}`}
+        className={`flex w-72 flex-col m-4 mr-0 rounded-[32px] backdrop-blur-2xl text-white shadow-[0_10px_50px_rgba(0,0,0,0.4)] transition-all duration-300 no-print print:hidden ${isPos ? "hidden" : ""}`}
         style={{ backgroundColor: 'rgba(2, 6, 23, 0.98)', border: '1px solid rgba(255, 255, 255, 0.05)' }}
       >
         <div className="p-8 pb-4">
@@ -164,16 +164,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main Content Area */}
-      <main className={`flex-1 relative overflow-y-auto ${isPos ? "p-0 h-screen" : "p-6 lg:p-10"}`}>
+      <main className={`flex-1 relative overflow-y-auto print:block print:overflow-visible print:h-auto print:p-0 print:m-0 ${isPos ? "p-0 h-screen" : "p-6 lg:p-10"}`}>
         {/* Background purely decorative blobs */}
         {!isPos && (
-          <>
+          <div className="print:hidden">
             <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-indigo-500/10 blur-[130px] rounded-full -translate-y-1/2 translate-x-1/2 -z-10 animate-pulse"></div>
             <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-purple-500/10 blur-[110px] rounded-full translate-y-1/2 -translate-x-1/2 -z-10"></div>
-          </>
+          </div>
         )}
 
-        <div className="relative z-[60] mb-8 print:hidden flex items-center gap-4">
+        <div className="relative z-[60] mb-8 print:hidden no-print flex items-center gap-4">
           {!isPos && (
             <>
               <div className="flex-1">

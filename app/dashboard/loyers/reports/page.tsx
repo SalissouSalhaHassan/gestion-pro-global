@@ -966,7 +966,7 @@ export default function LoyerReportsPage() {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 print:p-0 print:space-y-0">
       
       {/* ── SCREEN HEADER (Hidden on print) ── */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 print:hidden">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 print:hidden no-print">
         <div className="flex items-center gap-4">
           <Button variant="outline" onClick={() => router.push("/dashboard/loyers")} className="rounded-2xl h-12 border-slate-200 hover:bg-slate-50 shadow-sm px-6 font-bold text-slate-600">
             <ArrowLeft size={18} className="mr-2" /> Retour
@@ -1024,7 +1024,7 @@ export default function LoyerReportsPage() {
       </div>
 
       {/* ── KPI STATISTICS CARDS (Hidden on print) ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 print:hidden">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 print:hidden no-print">
         {[
           { label: "Locataires", value: kpis.totalTenants, icon: Users, color: "text-blue-600", bg: "bg-blue-50/50" },
           { label: "Encaissé", value: `${fmt(kpis.annualRev)} F`, icon: Wallet, color: "text-emerald-600", bg: "bg-emerald-50/50" },
@@ -1047,7 +1047,7 @@ export default function LoyerReportsPage() {
       </div>
 
       {/* ── STATUS & PRINT PREVIEW CONTROL BAR (Hidden on print) ── */}
-      <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-5 flex flex-wrap items-center justify-between gap-4 print:hidden">
+      <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-5 flex flex-wrap items-center justify-between gap-4 print:hidden no-print">
         <div className="flex flex-wrap items-center gap-6 text-xs text-slate-500 font-bold">
           <div>
             Période filtrée :{" "}
@@ -1081,7 +1081,7 @@ export default function LoyerReportsPage() {
       </div>
 
       {/* ── CORE ERP MODULE GRID (Hidden on print) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 print:hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 print:hidden no-print">
         
         {/* Left Column: Report Selector & Advanced Filters */}
         <div className="lg:col-span-1 space-y-6">
@@ -1466,7 +1466,7 @@ export default function LoyerReportsPage() {
       </div>
 
       {/* ── FOOTER ANALYTIC INFO (Hidden on print) ── */}
-      <div className="text-center print:hidden">
+      <div className="text-center print:hidden no-print">
         <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em]">GestionPro Comptabilité Foncière v2.1 • {new Date().getFullYear()}</p>
       </div>
 
@@ -1679,8 +1679,7 @@ export default function LoyerReportsPage() {
           header,
           nav,
           footer,
-          .print\:hidden,
-          .relative.z-\[60\].mb-8,
+          .no-print,
           .space-y-8 > *:not(#printable-section) {
             display: none !important;
           }
