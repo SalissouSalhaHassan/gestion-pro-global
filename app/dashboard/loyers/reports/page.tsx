@@ -1531,7 +1531,7 @@ export default function LoyerReportsPage() {
                   </h3>
 
                   {/* Group Table */}
-                  <table className="w-full border-2 border-black border-collapse text-[10px] table-layout: fixed">
+                  <table className="w-full border-2 border-black border-collapse text-[10px] table-fixed">
                     <thead>
                       <tr className="bg-blue-800 text-white border-b-2 border-black">
                         <th className="border-r border-black p-2 text-center font-black w-[5%]">N°</th>
@@ -1674,34 +1674,56 @@ export default function LoyerReportsPage() {
       {/* Global CSS for Print Layout (Overrides all styles on window.print()) */}
       <style jsx global>{`
         @media print {
-          /* Force container heights to auto and overflow visible to prevent pagination cuts */
-          html, body, main, [dir="ltr"], #__next {
-            height: auto !important;
-            overflow: visible !important;
-            min-height: 0 !important;
+          /* 1. Hide all non-printable UI elements */
+          aside,
+          header,
+          nav,
+          footer,
+          .print\:hidden,
+          .relative.z-\[60\].mb-8,
+          .space-y-8 > *:not(#printable-section) {
+            display: none !important;
           }
-          
-          /* Hide everything except printable layout */
-          body * {
-            visibility: hidden !important;
+
+          /* 2. Reset ancestor containers to allow natural multi-page flow and avoid height collapse */
+          html, body, #__next, [dir="ltr"], main,
+          body > div,
+          body > div > div,
+          body > div > main,
+          main > div,
+          div.space-y-8 {
+            display: block !important;
+            position: static !important;
+            overflow: visible !important;
+            height: auto !important;
+            min-height: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: none !important;
+            box-shadow: none !important;
+          }
+
+          /* 3. Style the printable section using relative flow */
+          #printable-section {
+            display: block !important;
+            position: relative !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+            visibility: visible !important;
+          }
+
+          /* 4. Ensure elements inside print section remain visible */
+          #printable-section,
+          #printable-section * {
+            visibility: visible !important;
             background: none !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          #printable-section,
-          #printable-section * {
-            visibility: visible !important;
-          }
-          #printable-section {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            border: none !important;
-            box-shadow: none !important;
-          }
+
           @page {
             size: ${printLayout === 'landscape' ? 'A4 landscape' : 'A4 portrait'};
             margin: 10mm 10mm 12mm 10mm;
