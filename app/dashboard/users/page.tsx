@@ -204,7 +204,8 @@ export default function UserManagementPage() {
         // 1. Clear existing
         await supabase.from("user_warehouses").delete().eq("user_id", userId);
 
-        // 2. Add new ones
+        // 2. Add new ones and get their names
+        let depotsString = "";
         if (newUser.depots.length > 0) {
           const warehouseEntries = newUser.depots.map(depotId => ({
             user_id: userId,
@@ -212,6 +213,21 @@ export default function UserManagementPage() {
           }));
           const { error: uwErr } = await supabase.from("user_warehouses").insert(warehouseEntries);
           if (uwErr) throw uwErr;
+
+          // Get names of selected depots to update users.depots
+          const selectedDepotNames = availableDepotsData
+            .filter(d => newUser.depots.includes(d.id))
+            .map(d => d.nom);
+          depotsString = selectedDepotNames.join(", ");
+        }
+
+        // Update depots column in users table
+        const { error: updateDepotsErr } = await supabase
+          .from("users")
+          .update({ depots: depotsString })
+          .eq("id", userId);
+        if (updateDepotsErr) {
+          console.warn("Failed to update depots column in users table:", updateDepotsErr);
         }
       }
 

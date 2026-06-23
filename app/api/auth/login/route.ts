@@ -34,6 +34,15 @@ export async function POST(request: Request) {
 
     const permissionKeys = perms?.map((p: any) => p.permissions.permission_key) || [];
 
+    // Fetch user depots from user_warehouses as fallback
+    const { data: userWarehouses } = await supabase
+      .from('user_warehouses')
+      .select('depots(nom)')
+      .eq('user_id', userRecord.id);
+
+    const userDepotsList = userWarehouses?.map((uw: any) => uw.depots?.nom).filter(Boolean) || [];
+    const depotsString = userDepotsList.length > 0 ? userDepotsList.join(", ") : (userRecord.depots || "");
+
     // 3. Create session data (parity with cookie logic)
     const adminVal = userRecord.admin?.toString().toLowerCase();
     const isAdmin = (adminVal === 'oui' || adminVal === 'admin' || adminVal === 'administrateur');
@@ -44,7 +53,7 @@ export async function POST(request: Request) {
       role: userRecord.role_id,
       admin: isAdmin ? 'Oui' : 'Non',
       emplacement: userRecord.emplacement || '',
-      depots: userRecord.depots || '',
+      depots: depotsString,
       permissions: permissionKeys,
     };
 
