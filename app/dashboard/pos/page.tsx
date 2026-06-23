@@ -1580,6 +1580,16 @@ function PosPage() {
     setEditInvoiceId(null);
   }, []);
 
+  const handleDepotChange = useCallback((newDepot: string) => {
+    if (cart.length > 0) {
+      if (!confirm("Changer de dépôt videra votre panier actuel. Voulez-vous continuer ?")) {
+        return;
+      }
+      clearCart();
+    }
+    setSelectedDepot(newDepot);
+  }, [cart, clearCart]);
+
   /* ── Computed ── */
   const filteredArticles = useMemo(() => {
     const q = normalizeText(query);
@@ -2020,7 +2030,7 @@ function PosPage() {
               <PackageSearch size={16} color="#fff" />
               <select
                 value={selectedDepot}
-                onChange={(e) => canChangeDepot && setSelectedDepot(e.target.value)}
+                onChange={(e) => canChangeDepot && handleDepotChange(e.target.value)}
                 disabled={!canChangeDepot}
                 style={{
                   background: "transparent",
