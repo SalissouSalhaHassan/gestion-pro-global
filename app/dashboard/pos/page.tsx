@@ -1012,6 +1012,13 @@ function PosPage() {
   const [editInvoiceId, setEditInvoiceId] = useState<string | number | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(false);
 
+  const allowedDepotsList = useMemo(() => {
+    if (isAdmin) return depots.map(d => d.nom_depot);
+    return splitDepotList(userEmplacement);
+  }, [isAdmin, depots, userEmplacement]);
+
+  const canChangeDepot = !editInvoiceId && (isAdmin || allowedDepotsList.length > 1);
+
   const loadPersistedPriceChanges = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -1302,11 +1309,11 @@ function PosPage() {
             const visibleStocks = stocksArr.filter((stock) => {
               const depotKey = normalizeDepotName(String(stock?.depot_nom || ""));
 
-              if (isAdmin) {
-                return !selectedDepotKey || depotKey === selectedDepotKey;
+              if (!isAdmin && !scopedDepotKeys.includes(depotKey)) {
+                return false;
               }
 
-              return scopedDepotKeys.includes(depotKey);
+              return !selectedDepotKey || depotKey === selectedDepotKey;
             });
 
             const stockTotal = visibleStocks.reduce(
@@ -1316,6 +1323,21 @@ function PosPage() {
             return buildArticle({ ...r, stocks: visibleStocks, stock_total: stockTotal });
           }).filter((a) => !!a.id && a.id !== 0 && a.stock_total > 0); // Only show articles with stock in vendor's depot
           
+          // Check if non-admin vendor has selected BOUTIQUE
+          const normalizedSelected = normalizeDepotName(selectedDepot);
+          if (!isAdmin && normalizedSelected === "boutique") {
+            const hasSonef = scopedDepotKeys.includes("boutique sonef");
+            if (hasSonef) {
+              const sonefRaw = uniqueNames(splitDepotList(userEmplacement)).find(
+                (dep) => normalizeDepotName(dep) === "boutique sonef"
+              ) || "BOUTIQUE SONEF";
+              setSelectedDepot(sonefRaw);
+              setError("Le dépôt BOUTIQUE ne contient aucun produit. Retour automatique à BOUTIQUE SONEF.");
+              setTimeout(() => setError(null), 3000);
+              return;
+            }
+          }
+
           console.log(`✅ Articles fetched: ${mapped.length} (filtered for depot: ${userEmplacement})`);
           const fallbackDepot = findBestDepotMatch(resolvedSelectedDepot, allStockDepotNames) || allStockDepotNames[0] || "";
 
@@ -1994,28 +2016,28 @@ function PosPage() {
               <PackageSearch size={16} color="#fff" />
               <select
                 value={selectedDepot}
-                onChange={(e) => isAdmin && !editInvoiceId && setSelectedDepot(e.target.value)}
-                disabled={!isAdmin || !!editInvoiceId}
+                onChange={(e) => canChangeDepot && setSelectedDepot(e.target.value)}
+                disabled={!canChangeDepot}
                 style={{
                   background: "transparent",
                   border: "none",
                   color: "#fff",
                   fontWeight: 700,
                   outline: "none",
-                  cursor: isAdmin && !editInvoiceId ? "pointer" : "not-allowed",
+                  cursor: canChangeDepot ? "pointer" : "not-allowed",
                   fontSize: 14,
-                  opacity: !isAdmin || !!editInvoiceId ? 0.7 : 1,
+                  opacity: !canChangeDepot ? 0.7 : 1,
                 }}
                 title={
                   editInvoiceId
                     ? `Dépôt verrouillé pour la facture #${editInvoiceId}`
-                    : !isAdmin
-                      ? `Dépôt spécialisé: ${userEmplacement}`
+                    : !canChangeDepot
+                      ? `Dépôt unique ou verrouillé`
                       : "Sélectionner le dépôt"
                 }
               >
-                {!isAdmin && userEmplacement ? (
-                  userEmplacement.split(",").map(dep => dep.trim()).map(dep => (
+                {!isAdmin ? (
+                  allowedDepotsList.map(dep => (
                     <option key={dep} value={dep} style={{ color: "#000" }}>{dep}</option>
                   ))
                 ) : (
