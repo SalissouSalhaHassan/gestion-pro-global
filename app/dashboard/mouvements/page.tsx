@@ -49,11 +49,14 @@ type MouvementRecord = {
   articles?: {
     reference: string;
     designation: string;
+    p_achat_ht?: number;
+    p_vente_ttc?: number;
   } | null;
 };
 
 type StockValuationSummary = {
   total_valeur_achat?: number;
+  total_valeur_vente?: number;
 };
 
 const supabase = createClient();
@@ -110,7 +113,7 @@ export default function MouvementsPage() {
       }
 
       const summary = valuationData?.summary as StockValuationSummary | undefined;
-      setStockValuation(Number(summary?.total_valeur_achat || 0));
+      setStockValuation(Number(summary?.total_valeur_vente || 0));
     } catch (err) {
       console.error("Failed to fetch stock valuation:", err);
       setStockValuation(null);
@@ -216,11 +219,11 @@ export default function MouvementsPage() {
     const totalIn = processed.reduce((s, m) => s + Number(m.entree || 0), 0);
     const totalOut = processed.reduce((s, m) => s + Number(m.sortie || 0), 0);
     
-    // Estimate value of movements (simplified)
+    // Estimate selling value of filtered stock
     const articlesMap: Record<string, number> = {};
     processed.forEach(m => {
        const key = `${m.article_id}`;
-       articlesMap[key] = (m as any).pmp_apres || (m as any).prix || 0;
+       articlesMap[key] = Number(m.articles?.p_vente_ttc || 0);
     });
     
     const valuationVal = Object.entries(contextMap).reduce((sum, [key, stock]) => {
@@ -257,8 +260,10 @@ export default function MouvementsPage() {
   };
 
   const handlePrint = () => setShowPrintJournal(true);
-  const stockValuationValue = stockValuation ?? stats.valuation;
-  const formattedStockValuation = stockValuationLoading && stockValuation === null
+  
+  const isFiltered = !!(startDate || endDate || generalSearch || (typeFilter !== "Tous"));
+  const stockValuationValue = isFiltered ? stats.valuation : (stockValuation ?? stats.valuation);
+  const formattedStockValuation = stockValuationLoading && stockValuation === null && !isFiltered
     ? "..."
     : stockValuationValue.toLocaleString("fr-FR", { minimumFractionDigits: 2 }) + " F CFA";
 

@@ -45,7 +45,8 @@ export async function GET(request: Request) {
         depot,
         utilisateur, 
         user_id,
-        articles ( reference, designation )
+        article_id,
+        articles ( reference, designation, p_achat_ht, p_vente_ttc )
       `)
       .order("date_mouvement", { ascending: false })
       .range(offset, offset + limit - 1);
