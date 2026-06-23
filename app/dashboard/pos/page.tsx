@@ -1292,6 +1292,7 @@ function PosPage() {
               ])
             : []),
           ...allStockDepotNames,
+          ...splitDepotList(userEmplacement),
         ]);
 
         const resolvedSelectedDepot = findBestDepotMatch(selectedDepot, depotNames) || selectedDepot;
@@ -1331,9 +1332,12 @@ function PosPage() {
               const sonefRaw = uniqueNames(splitDepotList(userEmplacement)).find(
                 (dep) => normalizeDepotName(dep) === "boutique sonef"
               ) || "BOUTIQUE SONEF";
-              setSelectedDepot(sonefRaw);
-              setError("Le dépôt BOUTIQUE ne contient aucun produit. Retour automatique à BOUTIQUE SONEF.");
-              setTimeout(() => setError(null), 3000);
+              setArticles([]);
+              setTimeout(() => {
+                setSelectedDepot(sonefRaw);
+                setError("Le dépôt BOUTIQUE ne contient aucun produit. Retour automatique à BOUTIQUE SONEF.");
+                setTimeout(() => setError(null), 3000);
+              }, 1500);
               return;
             }
           }
