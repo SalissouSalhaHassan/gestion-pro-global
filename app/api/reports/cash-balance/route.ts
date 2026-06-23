@@ -57,18 +57,6 @@ export async function GET(request: Request) {
     
     const { data: aData } = await aQuery;
 
-    // 3. Rent Payments (Admin/Manager ONLY — sellers don't manage rent)
-    let rentData: any[] = [];
-    if (isAdmin) {
-      try {
-        let rQuery = supabase.from("contrat_paiements").select("*, contrats(locataire_nom_complet)");
-        if (start) rQuery = rQuery.gte("date_paiement", start);
-        if (end) rQuery = rQuery.lte("date_paiement", end);
-        const { data } = await rQuery;
-        rentData = data || [];
-      } catch(e) {}
-    }
-
     // 4. Expenses (Depenses)
     let eQuery = supabase.from("depenses").select("*");
     if (start) eQuery = eQuery.gte("date_depense", start);
@@ -139,19 +127,6 @@ export async function GET(request: Request) {
        });
     });
 
-    rentData?.forEach(r => {
-        entries.push({
-           date: r.date_paiement,
-           ref: `Loyer-${r.id}`,
-           type: "Paiement Loyer",
-           moyen: r.mode_paiement,
-           entree: r.montant,
-           sortie: 0,
-           user: "Admin",
-           emplacement: ""
-        });
-    });
-
     eData?.forEach(e => {
         entries.push({
            date: e.date_depense,
@@ -211,7 +186,6 @@ export async function GET(request: Request) {
     const totalInvoiced = fData?.reduce((sum, f) => sum + Number(f.total_ttc || 0), 0) || 0;
     const totalPaidInvoicesPeriod = fData?.reduce((sum, f) => sum + Number(f.montant_paye || 0), 0) || 0;
     const totalAdvancesPeriod = aData?.reduce((sum, a) => sum + Number(a.montant_initial || 0), 0) || 0;
-    const totalRentPeriod = rentData?.reduce((sum, r) => sum + Number(r.montant || 0), 0) || 0;
     const totalCementPeriod = cimData?.reduce((sum, c) => sum + Number(c.montant || 0), 0) || 0;
 
     let totalPaidOlderInvoicesPeriod = 0;
@@ -236,7 +210,6 @@ export async function GET(request: Request) {
           totalPaidInvoicesPeriod,
           totalPaidOlderInvoicesPeriod,
           totalAdvancesPeriod,
-          totalRentPeriod,
           totalCementPeriod
         }
       },

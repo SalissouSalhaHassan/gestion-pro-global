@@ -52,6 +52,10 @@ type MouvementRecord = {
   } | null;
 };
 
+type StockValuationSummary = {
+  total_valeur_achat?: number;
+};
+
 const supabase = createClient();
 
 export default function MouvementsPage() {
@@ -59,6 +63,8 @@ export default function MouvementsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stockValuation, setStockValuation] = useState<number | null>(null);
+  const [stockValuationLoading, setStockValuationLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [printTransferRef, setPrintTransferRef] = useState<string | null>(null);
   const [showPrintJournal, setShowPrintJournal] = useState(false);
@@ -87,6 +93,31 @@ export default function MouvementsPage() {
       if (Array.isArray(data)) setDepots(data);
     } catch (err) {}
   };
+
+  const fetchStockValuation = useCallback(async () => {
+    setStockValuationLoading(true);
+    try {
+      const query = new URLSearchParams({
+        depot: selectedDepotName || "Tous",
+        categoryId: "all",
+      });
+
+      const res = await fetch(`/api/stock/valuation?${query.toString()}`);
+      const valuationData = await res.json();
+
+      if (!res.ok) {
+        throw new Error(valuationData?.error || "Erreur de valorisation stock");
+      }
+
+      const summary = valuationData?.summary as StockValuationSummary | undefined;
+      setStockValuation(Number(summary?.total_valeur_achat || 0));
+    } catch (err) {
+      console.error("Failed to fetch stock valuation:", err);
+      setStockValuation(null);
+    } finally {
+      setStockValuationLoading(false);
+    }
+  }, [selectedDepotName]);
 
   useEffect(() => {
     const getCompany = async () => {
@@ -131,6 +162,10 @@ export default function MouvementsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    fetchStockValuation();
+  }, [fetchStockValuation]);
 
   // ─── RUNNING BALANCE & FILTERING LOGIC ───
   const { filteredData, stats, groupedData } = useMemo(() => {
@@ -216,7 +251,16 @@ export default function MouvementsPage() {
     };
   }, [data, typeFilter, groupByProduct]);
 
+  const handleRefresh = () => {
+    fetchData();
+    fetchStockValuation();
+  };
+
   const handlePrint = () => setShowPrintJournal(true);
+  const stockValuationValue = stockValuation ?? stats.valuation;
+  const formattedStockValuation = stockValuationLoading && stockValuation === null
+    ? "..."
+    : stockValuationValue.toLocaleString("fr-FR", { minimumFractionDigits: 2 }) + " F CFA";
 
   return (
     <div className="space-y-8 max-w-[1600px] mx-auto pb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -245,7 +289,7 @@ export default function MouvementsPage() {
             {groupByProduct ? "Vue Liste" : "Grouper par Produit"}
           </button>
           <button
-            onClick={fetchData}
+            onClick={handleRefresh}
             disabled={refreshing}
             className="p-4 rounded-2xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 transition-all active:scale-95 shadow-sm"
           >
@@ -288,7 +332,7 @@ export default function MouvementsPage() {
          />
          <KPICard 
           title="Valeur Stock" 
-          value={stats.valuation.toLocaleString("fr-FR", { minimumFractionDigits: 2 }) + " F CFA"} 
+          value={formattedStockValuation} 
           sub="Estimation Financière" 
           color="slate" 
           icon={Sparkles} 

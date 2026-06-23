@@ -35,7 +35,6 @@ export default function CashBalancePage() {
         totalPaidInvoicesPeriod: number;
         totalPaidOlderInvoicesPeriod: number;
         totalAdvancesPeriod: number;
-        totalRentPeriod: number;
         totalCementPeriod: number;
       }
     };
@@ -220,7 +219,6 @@ export default function CashBalancePage() {
                <option value="Tous">Tous les types</option>
                <option value="Vente (Caisse)">Ventes</option>
                <option value="Paiement Ciment">Ciment</option>
-               <option value="Paiement Loyer">Loyers</option>
                <option value="Dépense (Administrative)">Dépenses</option>
                <option value="Avance Client">Avances</option>
                <option value="Retrait">Retraits</option>
@@ -290,14 +288,6 @@ export default function CashBalancePage() {
                       <span className="font-medium">(+) Avances clients perçues</span>
                       <span className="font-extrabold">
                          +{new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalAdvancesPeriod)} F CFA
-                      </span>
-                   </div>
-                )}
-                {data.summary.reconciliation.totalRentPeriod > 0 && (
-                   <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-emerald-600">
-                      <span className="font-medium">(+) Règlements Loyers perçus</span>
-                      <span className="font-extrabold">
-                         +{new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalRentPeriod)} F CFA
                       </span>
                    </div>
                 )}
