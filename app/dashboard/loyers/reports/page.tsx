@@ -392,9 +392,36 @@ export default function LoyerReportsPage() {
       if (filterAmountMin && Number(c.loyer_mensuel || 0) < parseFloat(filterAmountMin)) return false;
       if (filterAmountMax && Number(c.loyer_mensuel || 0) > parseFloat(filterAmountMax)) return false;
 
+      // 8. Period Filter: Exclude contracts that haven't started yet relative to the filtered month/year
+      if (filterYear !== "All") {
+        const targetY = parseInt(filterYear);
+        const startY = c.annee_debut || 2024;
+        if (startY > targetY) return false;
+        
+        if (filterMonth !== "All") {
+          const targetM = parseInt(filterMonth);
+          const startM = c.mois_debut || 1;
+          if (startY === targetY && startM > targetM) return false;
+        }
+      }
+
+      // 9. Exclude contracts that expired before the filtered month/year
+      if (filterYear !== "All" && (c.statut === "Expiré" || c.statut === "Annulé")) {
+        const targetY = parseInt(filterYear);
+        const targetM = filterMonth !== "All" ? parseInt(filterMonth) : 12;
+        if (c.updated_at) {
+          const expDate = new Date(c.updated_at);
+          const expY = expDate.getFullYear();
+          const expM = expDate.getMonth() + 1;
+          if (expY < targetY || (expY === targetY && expM < targetM)) {
+            return false;
+          }
+        }
+      }
+
       return true;
     });
-  }, [processedContracts, searchTerm, filterTypeBien, filterQuartier, filterStatusPaiement, filterLocataire, filterProprietaire, filterAmountMin, filterAmountMax]);
+  }, [processedContracts, searchTerm, filterTypeBien, filterQuartier, filterStatusPaiement, filterLocataire, filterProprietaire, filterAmountMin, filterAmountMax, filterMonth, filterYear]);
 
   // Apply Advanced Filters to Payments Dataset
   const filteredPayments = useMemo(() => {
