@@ -99,6 +99,23 @@ const MONTHS_FR = [
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
 ];
 
+// Helper to format month display for rows
+function getRowMonthDisplay(r: any, filterMonth: string, filterYear: string) {
+  if (filterMonth && filterMonth !== "All") {
+    const mIdx = parseInt(filterMonth) - 1;
+    const y = filterYear && filterYear !== "All" ? filterYear : new Date().getFullYear().toString();
+    return `${MONTHS_FR[mIdx]} ${y}`;
+  }
+  if (r.last_payment_date) {
+    const d = new Date(r.last_payment_date);
+    return `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
+  }
+  if (r.mois_debut && r.annee_debut) {
+    return `${MONTHS_FR[r.mois_debut - 1]} ${r.annee_debut}`;
+  }
+  return "—";
+}
+
 // Report Types Configuration
 const REPORT_TYPES = [
   { id: "A", name: "Situation des Locataires", desc: "État général des locataires par bien immobilier" },
@@ -143,6 +160,7 @@ export default function LoyerReportsPage() {
   const [sortAsc, setSortAsc] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const pageSize = 10;
+  const [showPrintPreview, setShowPrintPreview] = useState<boolean>(false);
 
   // Print Settings
   const [printLayout, setPrintLayout] = useState<'portrait' | 'landscape'>('landscape');
@@ -206,16 +224,31 @@ export default function LoyerReportsPage() {
 
   // --- Dynamic calculations per contract for the selected period ---
   const processedContracts = useMemo(() => {
-    const targetYear = filterYear === "All" ? new Date().getFullYear() : parseInt(filterYear);
-    const targetMonth = filterMonth === "All" ? 12 : parseInt(filterMonth);
+    const now = new Date();
+    const currentYearReal = now.getFullYear();
+    const currentMonthReal = now.getMonth() + 1;
+
+    const targetYear = filterYear === "All" ? currentYearReal : parseInt(filterYear);
+    let targetMonth = filterMonth === "All" ? 12 : parseInt(filterMonth);
+
+    // If month is "All" and we're looking at current year, clamp to current month
+    if (filterMonth === "All" && targetYear === currentYearReal) {
+      targetMonth = currentMonthReal;
+    }
 
     return contracts.map(c => {
       const startYear = c.annee_debut || 2024;
       const startMonth = c.mois_debut || 1;
 
-      // Months elapsed from contract start up to target period
-      const totalMonthsElapsed = (targetYear - startYear) * 12 + (targetMonth - startMonth + 1);
-      const monthsToCalculate = Math.max(0, totalMonthsElapsed);
+      // Months elapsed from contract start up to target period (clamped so we don't expect future rents)
+      let elapsedMonths = (targetYear - startYear) * 12 + (targetMonth - startMonth + 1);
+      
+      // Clamp to current real month if target is in the future
+      if (targetYear > currentYearReal || (targetYear === currentYearReal && targetMonth > currentMonthReal)) {
+        elapsedMonths = (currentYearReal - startYear) * 12 + (currentMonthReal - startMonth + 1);
+      }
+      
+      const monthsToCalculate = Math.max(0, elapsedMonths);
       const expectedAmount = monthsToCalculate * (c.loyer_mensuel || 0);
 
       // Filter payments made up to target period
@@ -232,13 +265,38 @@ export default function LoyerReportsPage() {
       const retards = Math.max(0, expectedAmount - totalPaid);
       const unpaidMonthsCount = Math.floor(retards / (c.loyer_mensuel || 1));
 
-      // Calculate state for target month specifically
-      let rowState: "Payé" | "Partiel" | "Impayé" = "Payé";
-      if (retards > 0) {
-        if (totalPaid > (expectedAmount - (c.loyer_mensuel || 0))) {
-          rowState = "Partiel";
+      // Calculate state for target period/month
+      let rowState: "Payé" | "Partiel" | "Impayé" | "À vérifier" = "Payé";
+      if ((c.loyer_mensuel || 0) <= 0) {
+        rowState = "À vérifier";
+      } else {
+        if (filterMonth !== "All" && filterYear !== "All") {
+          // If a specific month and year are selected, we evaluate payments for that specific month
+          const targetM = parseInt(filterMonth);
+          const targetY = parseInt(filterYear);
+          const monthPayments = payments.filter(p => {
+            if (p.contrat_id !== c.id) return false;
+            const pDate = new Date(p.date_paiement);
+            return pDate.getFullYear() === targetY && (pDate.getMonth() + 1) === targetM;
+          });
+          const monthPaid = monthPayments.reduce((sum, p) => sum + (p.montant || 0), 0);
+          
+          if (monthPaid >= (c.loyer_mensuel || 0)) {
+            rowState = "Payé";
+          } else if (monthPaid > 0) {
+            rowState = "Partiel";
+          } else {
+            rowState = "Impayé";
+          }
         } else {
-          rowState = "Impayé";
+          // If annual or global, we check the overall balance up to the period
+          if (retards === 0) {
+            rowState = "Payé";
+          } else if (totalPaid > 0) {
+            rowState = "Partiel";
+          } else {
+            rowState = "Impayé";
+          }
         }
       }
 
@@ -431,6 +489,8 @@ export default function LoyerReportsPage() {
       monthlyRev,
       annualRev,
       remainingUnpaid,
+      totalCollected,
+      totalExpected,
       recoveryRate
     };
   }, [filteredContracts, payments, filterYear, filterMonth]);
@@ -927,21 +987,38 @@ export default function LoyerReportsPage() {
           <Button onClick={handleResetFilters} variant="outline" className="rounded-xl h-11 px-4 font-bold border-slate-200 text-slate-600">
             <RefreshCw size={15} className="mr-2" /> Réinitialiser
           </Button>
-          
-          <Button onClick={handleExportCSV} className="rounded-xl h-11 px-4 font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 shadow-sm border border-slate-200">
-            <Download size={15} className="mr-2" /> CSV
-          </Button>
 
           <Button onClick={handleExportExcel} className="rounded-xl h-11 px-4 font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 shadow-sm border border-emerald-200">
             <FileSpreadsheet size={15} className="mr-2" /> Excel
           </Button>
 
-          <Button onClick={() => window.print()} className="rounded-xl h-11 px-4 font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm border border-blue-200">
-            <FileText size={15} className="mr-2" /> PDF A4
+          <Button
+            onClick={() => {
+              setPrintLayout("portrait");
+              setTimeout(() => window.print(), 100);
+            }}
+            className="rounded-xl h-11 px-4 font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm border border-blue-200"
+          >
+            <FileText size={15} className="mr-2" /> PDF A4 Portrait
           </Button>
 
-          <Button onClick={() => window.print()} className="rounded-xl h-11 px-5 font-black bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20">
-            <Printer size={16} className="mr-2" /> Impression Directe
+          <Button
+            onClick={() => {
+              setPrintLayout("landscape");
+              setTimeout(() => window.print(), 100);
+            }}
+            className="rounded-xl h-11 px-4 font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm border border-blue-200"
+          >
+            <FileText size={15} className="mr-2" /> PDF A4 Paysage
+          </Button>
+
+          <Button
+            onClick={() => {
+              setTimeout(() => window.print(), 100);
+            }}
+            className="rounded-xl h-11 px-5 font-black bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20"
+          >
+            <Printer size={16} className="mr-2" /> Imprimer
           </Button>
         </div>
       </div>
@@ -967,6 +1044,40 @@ export default function LoyerReportsPage() {
             <p className="text-sm md:text-base font-black text-slate-800 tracking-tight mt-1">{card.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* ── STATUS & PRINT PREVIEW CONTROL BAR (Hidden on print) ── */}
+      <div className="bg-slate-50 border border-slate-200/60 rounded-3xl p-5 flex flex-wrap items-center justify-between gap-4 print:hidden">
+        <div className="flex flex-wrap items-center gap-6 text-xs text-slate-500 font-bold">
+          <div>
+            Période filtrée :{" "}
+            <span className="text-slate-800 font-black">
+              {filterMonth !== "All" ? `${MONTHS_FR[parseInt(filterMonth) - 1]} ` : ""}
+              {filterYear !== "All" ? filterYear : "Année courante"}
+            </span>
+          </div>
+          <div className="w-1.5 h-1.5 bg-slate-300 rounded-full" />
+          <div>
+            Résultats trouvés :{" "}
+            <span className="text-slate-800 font-black">{reportTableData.length}</span>
+          </div>
+          <div className="w-1.5 h-1.5 bg-slate-300 rounded-full" />
+          <div>
+            Locataires récupérés :{" "}
+            <span className="text-indigo-600 font-black">{filteredContracts.length}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setShowPrintPreview(!showPrintPreview)}
+            variant={showPrintPreview ? "default" : "outline"}
+            className={`rounded-xl h-9 text-xs font-bold ${
+              showPrintPreview ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm" : "border-slate-200 text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            {showPrintPreview ? "Masquer l'aperçu" : "Aperçu avant impression"}
+          </Button>
+        </div>
       </div>
 
       {/* ── CORE ERP MODULE GRID (Hidden on print) ── */}
@@ -1360,9 +1471,15 @@ export default function LoyerReportsPage() {
       </div>
 
       {/* ──────────────────────────────────────────────────────────────────────── */}
-      {/* ── HIGH FIDELITY PRINTABLE ADMINISTRATIVE REPORT VIEW (Only in @media print) ── */}
-      {/* ──────────────────────────────────────────────────────────────────────── */}
-      <div id="printable-section" className="hidden print:block bg-white text-black font-sans w-full p-2">
+      {/* ── HIGH FIDELITY PRINTABLE ADMINISTRATIVE REPORT VIEW (Only in @media print or preview) ── */}
+      <div 
+        id="printable-section" 
+        className={`${
+          showPrintPreview 
+            ? `block border-2 border-slate-300 p-8 my-6 mx-auto shadow-2xl bg-white ${printLayout === 'landscape' ? 'max-w-[297mm]' : 'max-w-[210mm]'}` 
+            : "hidden"
+        } print:block bg-white text-black font-sans w-full p-2`}
+      >
         
         {/* 1. Header Details */}
         <div className="flex justify-between items-start mb-4 border-b border-black pb-3">
@@ -1389,10 +1506,12 @@ export default function LoyerReportsPage() {
 
         {/* 2. Banner Header */}
         <div className="border-4 border-black p-3 text-center mb-6 bg-slate-50">
-          <h2 className="text-xl font-black uppercase tracking-[0.25em] text-black">
-            {activeReport?.name}
+          <h2 className="text-xl font-black uppercase tracking-[0.15em] text-black">
+            {["A", "E", "J"].includes(activeReportId) ? "SITUATION DES LOCATAIRES ET DES LOYERS" : activeReport?.name}
           </h2>
-          <p className="text-[10px] font-bold text-slate-600 mt-1 uppercase tracking-widest">RAPPORT IMMOBILIER GÉNÉRAL</p>
+          <p className="text-[10px] font-bold text-slate-600 mt-1 uppercase tracking-widest">
+            {["A", "E", "J"].includes(activeReportId) ? "Rapport Général" : "Rapport Administratif"}
+          </p>
         </div>
 
         {/* 3. Render Grouped Data specifically for Reports A, E, J (Matches image format exactly) */}
@@ -1401,25 +1520,26 @@ export default function LoyerReportsPage() {
             {printGroups.map(([bienName, rows], gi) => {
               const totalBien = rows.reduce((s, r) => s + cellNumber(r.loyer), 0);
               const paidCount = rows.filter(r => cellText(r.etat) === "Payé").length;
+              const partialCount = rows.filter(r => cellText(r.etat) === "Partiel").length;
               const unpaidCount = rows.filter(r => cellText(r.etat) === "Impayé").length;
 
               return (
                 <div key={gi} className="mb-6 avoid-break">
                   {/* Category Title */}
                   <h3 className="text-xs font-black underline uppercase text-slate-900 mb-2">
-                    Liste de {cellText(rows[0]?.type).toLowerCase()}s — {bienName} {rows[0]?.quartier ? `(${rows[0].quartier})` : ""}
+                    Liste de {rows[0]?.type ? `${cellText(rows[0].type).toLowerCase()}s` : "biens"} — {bienName} {rows[0]?.quartier ? `(${rows[0].quartier})` : ""}
                   </h3>
 
                   {/* Group Table */}
-                  <table className="w-full border-2 border-black border-collapse text-[10px]">
+                  <table className="w-full border-2 border-black border-collapse text-[10px] table-layout: fixed">
                     <thead>
                       <tr className="bg-blue-800 text-white border-b-2 border-black">
-                        <th className="border-r border-black p-2 text-center font-black w-8">N°</th>
-                        <th className="border-r border-black p-2 text-left font-black">Noms</th>
-                        <th className="border-r border-black p-2 text-center w-24">Moi</th>
-                        <th className="border-r border-black p-2 text-right w-28">Prix (F)</th>
-                        <th className="border-r border-black p-2 text-center w-24">État</th>
-                        <th className="p-2 text-center w-28">Contacts</th>
+                        <th className="border-r border-black p-2 text-center font-black w-[5%]">N°</th>
+                        <th className="border-r border-black p-2 text-left font-black w-[35%]">Noms</th>
+                        <th className="border-r border-black p-2 text-center w-[15%] font-black">Mois</th>
+                        <th className="border-r border-black p-2 text-right w-[15%] font-black">Prix (F)</th>
+                        <th className="border-r border-black p-2 text-center w-[15%] font-black">État</th>
+                        <th className="p-2 text-center w-[15%] font-black">Contacts</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1431,7 +1551,7 @@ export default function LoyerReportsPage() {
                             {r.statut_contrat === "Expiré" && <span className="ml-1 text-[8px] font-black text-amber-600">[EXPIRÉ]</span>}
                           </td>
                           <td className="border-r border-black p-2 text-center font-bold">
-                            {filterMonth !== "All" ? `${MONTHS_FR[parseInt(filterMonth) - 1]} ${filterYear}` : "—"}
+                            {getRowMonthDisplay(r, filterMonth, filterYear)}
                           </td>
                           <td className="border-r border-black p-2 text-right font-black text-black">{fmt(cellNumber(r.loyer))}</td>
                           <td className="border-r border-black p-2 text-center">
@@ -1440,7 +1560,9 @@ export default function LoyerReportsPage() {
                                 ? "bg-emerald-100 text-emerald-800 border border-emerald-300" 
                                 : cellText(r.etat) === "Partiel" 
                                   ? "bg-amber-100 text-amber-800 border border-amber-300"
-                                  : "bg-red-100 text-red-800 border border-red-300"
+                                  : cellText(r.etat) === "À vérifier"
+                                    ? "bg-slate-100 text-slate-800 border border-slate-300"
+                                    : "bg-red-100 text-red-800 border border-red-300"
                             }`}>
                               {cellText(r.etat)}
                             </span>
@@ -1457,7 +1579,7 @@ export default function LoyerReportsPage() {
                           {fmt(totalBien)}
                         </td>
                         <td className="border-r border-black p-2 text-center text-[9px] text-emerald-700 bg-emerald-50">
-                          {paidCount} Payé(s)
+                          {paidCount} Payé(s) {partialCount > 0 ? `, ${partialCount} Partiel(s)` : ""}
                         </td>
                         <td className="p-2 text-center text-[9px] text-rose-700 bg-rose-50">
                           {unpaidCount} Impayé(s)
@@ -1506,17 +1628,21 @@ export default function LoyerReportsPage() {
           <div className="bg-slate-900 border-b border-black px-4 py-2 text-white">
             <span className="text-xs font-black uppercase tracking-wider">RECAPITULATIF GENERAL ET ETAT COMPTABLE</span>
           </div>
-          <div className="grid grid-cols-4 divide-x divide-black text-center text-[10px] font-black text-slate-800 py-3">
+          <div className="grid grid-cols-5 divide-x divide-black text-center text-[10px] font-black text-slate-800 py-3">
             <div>
               <p className="text-slate-400 uppercase text-[8px] mb-1">TOTAL LOCATAIRES</p>
               <p className="text-base font-black text-black">{kpis.totalTenants}</p>
             </div>
             <div>
-              <p className="text-slate-400 uppercase text-[8px] mb-1">LOYERS REÇUS</p>
-              <p className="text-base font-black text-emerald-600">{fmt(kpis.annualRev)} F</p>
+              <p className="text-slate-400 uppercase text-[8px] mb-1">MONTANT TOTAL EXIGIBLE</p>
+              <p className="text-base font-black text-blue-800">{fmt(kpis.totalExpected)} F</p>
             </div>
             <div>
-              <p className="text-slate-400 uppercase text-[8px] mb-1">TOTAL IMPAYÉS</p>
+              <p className="text-slate-400 uppercase text-[8px] mb-1">TOTAL PAYÉ (REÇU)</p>
+              <p className="text-base font-black text-emerald-600">{fmt(kpis.totalCollected)} F</p>
+            </div>
+            <div>
+              <p className="text-slate-400 uppercase text-[8px] mb-1">TOTAL IMPAYÉS (SOLDE DÛ)</p>
               <p className="text-base font-black text-rose-600">{fmt(kpis.remainingUnpaid)} F</p>
             </div>
             <div>
@@ -1548,6 +1674,13 @@ export default function LoyerReportsPage() {
       {/* Global CSS for Print Layout (Overrides all styles on window.print()) */}
       <style jsx global>{`
         @media print {
+          /* Force container heights to auto and overflow visible to prevent pagination cuts */
+          html, body, main, [dir="ltr"], #__next {
+            height: auto !important;
+            overflow: visible !important;
+            min-height: 0 !important;
+          }
+          
           /* Hide everything except printable layout */
           body * {
             visibility: hidden !important;
@@ -1564,17 +1697,30 @@ export default function LoyerReportsPage() {
             left: 0 !important;
             top: 0 !important;
             width: 100% !important;
-            padding: 5mm !important;
+            padding: 0 !important;
             margin: 0 !important;
             border: none !important;
             box-shadow: none !important;
           }
           @page {
             size: ${printLayout === 'landscape' ? 'A4 landscape' : 'A4 portrait'};
-            margin: 5mm;
+            margin: 10mm 10mm 12mm 10mm;
           }
           .avoid-break {
-            page-break-inside: avoid;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          thead {
+            display: table-header-group !important;
+          }
+          tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          table {
+            page-break-inside: auto !important;
+            width: 100% !important;
+            table-layout: fixed !important;
           }
           /* Retain print colors */
           .bg-blue-800 { background-color: #1e40af !important; color: #ffffff !important; }
@@ -1582,6 +1728,10 @@ export default function LoyerReportsPage() {
           .bg-slate-900 { background-color: #0f172a !important; color: #ffffff !important; }
           .bg-emerald-50 { background-color: #ecfdf5 !important; }
           .bg-rose-50 { background-color: #fff1f2 !important; }
+          .bg-emerald-100 { background-color: #d1fae5 !important; }
+          .bg-amber-100 { background-color: #fef3c7 !important; }
+          .bg-red-100 { background-color: #fee2e2 !important; }
+          .bg-slate-100 { background-color: #f1f5f9 !important; }
           .text-emerald-600 { color: #059669 !important; }
           .text-rose-600 { color: #e11d48 !important; }
           .text-blue-700 { color: #1d4ed8 !important; }
