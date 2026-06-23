@@ -48,6 +48,7 @@ type ContractReport = {
   etat_calcule?: string;
   last_payment_date?: string | null;
   expected_amount?: number;
+  updated_at?: string;
 };
 
 type PaymentReport = {
