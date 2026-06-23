@@ -582,6 +582,9 @@ export default function LoyerReportsPage() {
           etat: c.etat_calcule,
           echeance: c.echeance || "—",
           last_payment: c.last_payment_date ? new Date(c.last_payment_date).toLocaleDateString("fr-FR") : "—",
+          last_payment_date: c.last_payment_date,
+          mois_debut: c.mois_debut,
+          annee_debut: c.annee_debut,
           caution: c.caution || 0,
           quartier: c.quartier || "—",
           statut_contrat: c.statut
@@ -1718,9 +1721,16 @@ export default function LoyerReportsPage() {
           #printable-section,
           #printable-section * {
             visibility: visible !important;
-            background: none !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+          }
+
+          /* Force highly legible black text, borders, and light-gray background on print table headers */
+          #printable-section thead th {
+            color: #000000 !important;
+            background-color: #f1f5f9 !important;
+            border: 1px solid #000000 !important;
+            font-weight: 800 !important;
           }
 
           @page {
