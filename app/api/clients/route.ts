@@ -11,10 +11,10 @@ export async function GET() {
 
     const isAdmin = await isAdminOrManager(user);
     
-    // Fetch specifically id, nom and ref_client
+    // Fetch specifically id, nom, ref_client, tel, credit_facture, and credit_bl
     let query = supabase
       .from('clients')
-      .select('id, nom, ref_client')
+      .select('id, nom, ref_client, tel, credit_facture, credit_bl')
       .order('nom', { ascending: true });
 
     // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──

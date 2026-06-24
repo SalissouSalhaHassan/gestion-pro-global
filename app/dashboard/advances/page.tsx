@@ -11,6 +11,7 @@ import {
 import AdvanceReceiptModal from "./AdvanceReceiptModal";
 import DepositListModal from "./DepositListModal";
 import HistoryModal from "./HistoryModal";
+import ClientStatementModal from "./ClientStatementModal";
 
 export default function AdvancesPage() {
   const { advances, fetchAdvances, isLoading, addAdvance, withdraw, updateAdvance, cancelAdvance } = useAdvanceStore();
@@ -25,6 +26,9 @@ export default function AdvancesPage() {
   const [historyAdvanceId, setHistoryAdvanceId] = useState<number | null>(null);
   const [printAdvanceId, setPrintAdvanceId] = useState<number | null>(null);
   const [isGlobalPrintOpen, setIsGlobalPrintOpen] = useState(false);
+  const [activeView, setActiveView] = useState<'individual' | 'client-summary'>('individual');
+  const [selectedClientIdForStatement, setSelectedClientIdForStatement] = useState<number | null>(null);
+  const [selectedClientNomForStatement, setSelectedClientNomForStatement] = useState<string>("");
   
   // -- SELECTION STATE --
   const [selectedAdvance, setSelectedAdvance] = useState<any>(null);
@@ -79,6 +83,33 @@ export default function AdvancesPage() {
   });
 
   const uniqueSellers = Array.from(new Set(advances.map(a => a.utilisateur).filter(Boolean)));
+
+  const clientSummaries = useMemo(() => {
+    return clients
+      .map(client => {
+        const clientAdvances = advances.filter(a => Number(a.client_id) === Number(client.id) && a.statut !== "Annulée");
+        const totalDeposited = clientAdvances.reduce((sum, a) => sum + Number(a.montant_initial), 0);
+        const soldeAvances = clientAdvances.reduce((sum, a) => sum + Number(a.montant_restant), 0);
+        const creditFacture = Number(client.credit_facture) || 0;
+        const positionNette = soldeAvances - creditFacture;
+        return {
+          ...client,
+          total_depose: totalDeposited,
+          solde_avances: soldeAvances,
+          credit_facture: creditFacture,
+          position_nette: positionNette,
+          has_activity: totalDeposited > 0 || creditFacture > 0
+        };
+      })
+      .filter(c => c.has_activity);
+  }, [clients, advances]);
+
+  const filteredClientSummaries = useMemo(() => {
+    return clientSummaries.filter(c => {
+      return c.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             (c.ref_client && c.ref_client.toLowerCase().includes(searchTerm.toLowerCase()));
+    });
+  }, [clientSummaries, searchTerm]);
 
   // -- HANDLERS --
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -203,6 +234,30 @@ export default function AdvancesPage() {
         </div>
       </div>
 
+    {/* View Selector Tabs */}
+    <div className="flex border-b border-slate-100 dark:border-slate-800 gap-6">
+      <button 
+        onClick={() => setActiveView('individual')}
+        className={`pb-4 px-2 font-black text-sm uppercase tracking-wider border-b-2 transition-all active:scale-95 ${
+          activeView === 'individual' 
+            ? 'border-blue-600 text-blue-600' 
+            : 'border-transparent text-slate-400 hover:text-slate-600'
+        }`}
+      >
+        Dépôts Individuels
+      </button>
+      <button 
+        onClick={() => setActiveView('client-summary')}
+        className={`pb-4 px-2 font-black text-sm uppercase tracking-wider border-b-2 transition-all active:scale-95 ${
+          activeView === 'client-summary' 
+            ? 'border-blue-600 text-blue-600' 
+            : 'border-transparent text-slate-400 hover:text-slate-600'
+        }`}
+      >
+        Synthèse par Client
+      </button>
+    </div>
+
       {/* Filters Bar */}
       <div className="bg-white/60 backdrop-blur-2xl border border-white p-6 rounded-[32px] shadow-sm flex flex-wrap items-center gap-8">
          <div className="flex items-center gap-3 flex-1 min-w-[300px]">
@@ -258,6 +313,7 @@ export default function AdvancesPage() {
       </div>
 
       {/* Main Table */}
+    {activeView === 'individual' ? (
       <div className="bg-white rounded-[40px] border border-slate-100 shadow-2xl overflow-hidden relative">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -360,6 +416,64 @@ export default function AdvancesPage() {
           </table>
         </div>
       </div>
+    ) : (
+      <div className="bg-white rounded-[40px] border border-slate-100 shadow-2xl overflow-hidden relative animate-in fade-in duration-300">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/50 border-b border-slate-50">
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Client</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Téléphone</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total Déposé</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Solde d'avances</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Dette Factures</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Situation Nette</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {isLoading ? (
+                <tr><td colSpan={7} className="px-8 py-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600 mb-2" /><p className="font-black text-slate-400 uppercase text-[10px]">Chargement...</p></td></tr>
+              ) : filteredClientSummaries.length === 0 ? (
+                <tr><td colSpan={7} className="px-8 py-20 text-center grayscale opacity-30"><Wallet size={48} className="mx-auto mb-4" /><p className="font-black text-lg">Aucun client trouvé.</p></td></tr>
+              ) : (
+                filteredClientSummaries.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50/50 transition-all group">
+                    <td className="px-8 py-6">
+                      <div className="flex flex-col">
+                        <span className="font-black text-slate-800 text-[13px] tracking-tight">{c.nom}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">REF: {c.ref_client || '—'}</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6 text-slate-500 font-bold text-xs">{c.tel || "—"}</td>
+                    <td className="px-8 py-6 text-right font-bold text-slate-400 text-xs">
+                      {new Intl.NumberFormat('fr-FR').format(c.total_depose)}
+                    </td>
+                    <td className="px-8 py-6 text-right font-black text-blue-600 text-sm">
+                      {new Intl.NumberFormat('fr-FR').format(c.solde_avances)}
+                    </td>
+                    <td className="px-8 py-6 text-right font-bold text-rose-600 text-xs">
+                      {new Intl.NumberFormat('fr-FR').format(c.credit_facture)}
+                    </td>
+                    <td className={`px-8 py-6 text-right font-black text-sm ${c.position_nette >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {c.position_nette >= 0 ? '+' : ''}{new Intl.NumberFormat('fr-FR').format(c.position_nette)}
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                      <button 
+                        onClick={() => { setSelectedClientIdForStatement(c.id); setSelectedClientNomForStatement(c.nom); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-blue-100 transition-colors shadow-sm ml-auto"
+                      >
+                        <FileSpreadsheet size={12} /> Relevé
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )}
 
       {/* --- MODALS --- */}
 
@@ -373,6 +487,14 @@ export default function AdvancesPage() {
 
       {isGlobalPrintOpen && (
         <DepositListModal onClose={() => setIsGlobalPrintOpen(false)} />
+      )}
+
+      {selectedClientIdForStatement && (
+        <ClientStatementModal 
+          clientId={selectedClientIdForStatement} 
+          clientNom={selectedClientNomForStatement} 
+          onClose={() => { setSelectedClientIdForStatement(null); setSelectedClientNomForStatement(""); }} 
+        />
       )}
 
       {/* Create Modal */}
