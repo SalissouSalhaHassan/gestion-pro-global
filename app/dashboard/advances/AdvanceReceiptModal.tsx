@@ -268,11 +268,11 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
 
           {/* BIG AMOUNT */}
           <div className="mb-6 text-center">
-             <div className={`inline-block ${pageSize === 'Ticket' ? 'px-6 py-4' : 'px-10 py-6'} bg-slate-900 text-white rounded-[40px] shadow-2xl relative`}>
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-[0.2em]">Montant Principal</div>
-                <p className={`${pageSize === 'Ticket' ? 'text-2xl' : 'text-5xl'} font-black tracking-tighter`}>
+             <div className={`inline-block ${pageSize === 'Ticket' ? 'px-5 py-3' : 'px-8 py-4'} bg-slate-900 text-white rounded-[24px] shadow-2xl relative`}>
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-[9px] font-black px-4 py-1 rounded-full uppercase tracking-[0.2em] whitespace-nowrap">Montant Principal</div>
+                <p className={`${pageSize === 'Ticket' ? 'text-xl' : 'text-3xl'} font-black tracking-tighter`}>
                    {new Intl.NumberFormat('fr-FR').format(advance.montant_initial)}
-                   <span className={`${pageSize === 'Ticket' ? 'text-xs' : 'text-xl'} ml-2 text-indigo-400`}>FCFA</span>
+                   <span className={`${pageSize === 'Ticket' ? 'text-[10px]' : 'text-sm'} ml-2 text-indigo-400 font-bold`}>FCFA</span>
                 </p>
              </div>
           </div>
