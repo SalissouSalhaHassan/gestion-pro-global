@@ -183,11 +183,11 @@ BEGIN
         NEW.entreprise_id := COALESCE(NEW.entreprise_id, v_entreprise_id);
         
         -- Find a POS linked to this user and depot, or fall back to any POS of this depot
-        IF NEW.created_by IS NOT NULL THEN
+        IF NEW.user_id IS NOT NULL THEN
             SELECT pos_id INTO v_pos_id 
             FROM user_pos up
             JOIN points_de_vente p ON up.pos_id = p.id
-            WHERE up.user_id = NEW.created_by AND p.depot_id = NEW.warehouse_id
+            WHERE up.user_id = NEW.user_id AND p.depot_id = NEW.warehouse_id
             LIMIT 1;
         END IF;
 
