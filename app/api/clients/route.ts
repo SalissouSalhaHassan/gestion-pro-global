@@ -41,14 +41,14 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
     const body = await request.json();
-    const { nom, email, telephone, adresse, ref_client } = body;
+    const { nom, email, telephone, tel, adresse, ref_client } = body;
 
     const { data, error } = await supabase
       .from('clients')
       .insert([{
         nom,
         email,
-        telephone,
+        tel: tel || telephone || null,
         adresse,
         ref_client,
         created_by: user.id  // Track which user created this client

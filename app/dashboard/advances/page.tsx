@@ -28,7 +28,14 @@ export default function AdvancesPage() {
   const [isGlobalPrintOpen, setIsGlobalPrintOpen] = useState(false);
   const [activeView, setActiveView] = useState<'individual' | 'client-summary'>('individual');
   const [selectedClientIdForStatement, setSelectedClientIdForStatement] = useState<number | null>(null);
-  const [selectedClientNomForStatement, setSelectedClientNomForStatement] = useState<string>("");
+  const [selectedClientNomForStatement, setSelectedClientNomForStatement] = useState<string>( "");
+  
+  const [isCreateClientModalOpen, setIsCreateClientModalOpen] = useState(false);
+  const [createClientData, setCreateClientData] = useState({
+    nom: "",
+    tel: "",
+    ref_client: ""
+  });
   
   // -- SELECTION STATE --
   const [selectedAdvance, setSelectedAdvance] = useState<any>(null);
@@ -134,6 +141,49 @@ export default function AdvancesPage() {
     }
   };
 
+  const handleCreateClientSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createClientData.nom) return;
+    setIsSubmitting(true);
+    try {
+      let finalRef = createClientData.ref_client;
+      if (!finalRef) {
+        const year = new Date().getFullYear();
+        const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+        finalRef = `CL-${year}-${randomPart}`;
+      }
+
+      const res = await fetch("/api/clients", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          nom: createClientData.nom,
+          tel: createClientData.tel || null,
+          ref_client: finalRef
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Erreur lors de la création.");
+      }
+
+      const newClient = await res.json();
+
+      setClients(prev => [newClient, ...prev]);
+      setCreateData(prev => ({ ...prev, client_id: String(newClient.id) }));
+      setIsCreateClientModalOpen(false);
+      setCreateClientData({ nom: "", tel: "", ref_client: "" });
+      alert("Client créé avec succès !");
+    } catch (error: any) {
+      alert(error.message || "Erreur lors de la création du client.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleWithdrawSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -224,6 +274,13 @@ export default function AdvancesPage() {
             className="flex items-center gap-2 px-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-slate-800 transition-all active:scale-95 shadow-xl uppercase tracking-widest"
           >
             <Printer size={18} /> Imprimer Relevé
+          </button>
+          <button 
+            type="button"
+            onClick={() => setIsCreateClientModalOpen(true)}
+            className="flex items-center gap-2 px-6 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs hover:bg-emerald-700 transition-all active:scale-95 shadow-xl shadow-emerald-500/20 uppercase tracking-widest"
+          >
+            <Plus size={18} /> Nouveau Client
           </button>
           <button 
             onClick={() => setIsCreateModalOpen(true)}
@@ -511,7 +568,16 @@ export default function AdvancesPage() {
             </div>
             <form onSubmit={handleCreateSubmit} className="p-8 space-y-6">
               <div>
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 block">Client *</label>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">Client *</label>
+                  <button 
+                    type="button"
+                    onClick={() => setIsCreateClientModalOpen(true)}
+                    className="text-[11px] font-black text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+                  >
+                    <Plus size={12} /> Nouveau Client
+                  </button>
+                </div>
                 <select 
                   className="w-full rounded-2xl border-2 border-slate-100 p-4 bg-slate-50 focus:border-blue-500 focus:bg-white outline-none font-bold transition-all"
                   value={createData.client_id} onChange={e => setCreateData({...createData, client_id: e.target.value})} required
@@ -539,6 +605,65 @@ export default function AdvancesPage() {
               <div className="flex justify-end pt-4">
                 <button type="submit" disabled={isSubmitting} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20 active:scale-95">
                   {isSubmitting ? "Traitement..." : "Confirmer le dépôt"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Client Modal */}
+      {isCreateClientModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsCreateClientModalOpen(false)}></div>
+          <div className="bg-white rounded-[32px] overflow-hidden relative z-10 w-full max-w-lg border border-slate-100 shadow-2xl">
+            <div className="px-8 py-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+              <div>
+                <h3 className="text-xl font-black text-slate-900">Nouveau Client</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ajouter un nouveau client au système</p>
+              </div>
+              <button type="button" onClick={() => setIsCreateClientModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors"><X size={20} className="text-slate-400" /></button>
+            </div>
+            <form onSubmit={handleCreateClientSubmit} className="p-8 space-y-6">
+              <div>
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 block">Nom complet *</label>
+                <input 
+                  type="text" 
+                  className="w-full rounded-2xl border-2 border-slate-100 p-4 bg-slate-50 font-bold focus:border-emerald-500 focus:bg-white outline-none transition-all"
+                  value={createClientData.nom} 
+                  onChange={e => setCreateClientData({...createClientData, nom: e.target.value})} 
+                  placeholder="Ex: Jean Dupont"
+                  required
+                  autoFocus
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 block">Téléphone</label>
+                  <input 
+                    type="text" 
+                    className="w-full rounded-2xl border-2 border-slate-100 p-4 bg-slate-50 font-bold focus:border-emerald-500 focus:bg-white outline-none transition-all"
+                    value={createClientData.tel} 
+                    onChange={e => setCreateClientData({...createClientData, tel: e.target.value})} 
+                    placeholder="Ex: 22890000000"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 block">Référence Client</label>
+                  <input 
+                    type="text" 
+                    className="w-full rounded-2xl border-2 border-slate-100 p-4 bg-slate-50 font-bold focus:border-emerald-500 focus:bg-white outline-none transition-all"
+                    value={createClientData.ref_client} 
+                    onChange={e => setCreateClientData({...createClientData, ref_client: e.target.value})} 
+                    placeholder="Auto-générée si vide"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <button type="submit" disabled={isSubmitting} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-500/20 active:scale-95">
+                  {isSubmitting ? "Création..." : "Enregistrer le client"}
                 </button>
               </div>
             </form>
