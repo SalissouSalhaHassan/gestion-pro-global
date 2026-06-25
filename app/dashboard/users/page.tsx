@@ -207,12 +207,24 @@ export default function UserManagementPage() {
         // 2. Add new ones and get their names
         let depotsString = "";
         if (newUser.depots.length > 0) {
+          const primaryDepotObj = availableDepotsData.find(d => d.nom.toLowerCase() === newUser.emplacement.toLowerCase().trim());
+          const primaryDepotId = primaryDepotObj ? primaryDepotObj.id : newUser.depots[0];
+
           const warehouseEntries = newUser.depots.map(depotId => ({
             user_id: userId,
-            depot_id: depotId
+            depot_id: depotId,
+            is_primary: depotId === primaryDepotId
           }));
           const { error: uwErr } = await supabase.from("user_warehouses").insert(warehouseEntries);
-          if (uwErr) throw uwErr;
+          if (uwErr) {
+            console.warn("Failed to insert with is_primary, attempting fallback without it...", uwErr.message);
+            const fallbackEntries = newUser.depots.map(depotId => ({
+              user_id: userId,
+              depot_id: depotId
+            }));
+            const { error: fallbackErr } = await supabase.from("user_warehouses").insert(fallbackEntries);
+            if (fallbackErr) throw fallbackErr;
+          }
 
           // Get names of selected depots to update users.depots
           const selectedDepotNames = availableDepotsData
