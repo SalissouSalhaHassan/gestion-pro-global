@@ -24,7 +24,8 @@ import {
   Home,
   Layers,
   Car,
-  BarChart3
+  BarChart3,
+  Landmark
 } from "lucide-react";
 import UnifiedSearch from "@/components/UnifiedSearch";
 import NotificationBell from "@/components/NotificationBell";
@@ -75,6 +76,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/purchases", label: "Achats", icon: ShoppingCart, perm: "purchase.access" },
     { href: "/dashboard/expenses", label: "Dépenses", icon: TrendingDown, perm: "expense.access" },
     { href: "/dashboard/reports/cash-balance", label: "Bilan de Caisse", icon: Scale, perm: "expense.cash_balance" },
+    { href: "/dashboard/finance", label: "Gestion Financière", icon: Landmark, perm: "report.finance" },
     { href: "/dashboard/advances", label: "Dépôts & Avances", icon: Wallet, perm: "deposit.access" },
     { href: "/dashboard/loyers", label: "Gestion des Loyers", icon: Home, perm: "rent.access" },
     { href: "/dashboard/vehicles", label: "Gestion des Véhicules", icon: Car, perm: "vehicles.access" },
