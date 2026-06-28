@@ -4,10 +4,12 @@ import { createClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const dateStr = searchParams.get("date") || new Date().toISOString().split('T')[0];
+    const startDateStr = searchParams.get("startDate") || searchParams.get("date") || new Date().toISOString().split('T')[0];
+    const endDateStr = searchParams.get("endDate") || searchParams.get("date") || new Date().toISOString().split('T')[0];
     const depot = searchParams.get("depot") || "Tous";
     const search = searchParams.get("search");
     const categoryId = searchParams.get("categoryId");
+    const variationType = searchParams.get("variation") || "Tous";
 
     const supabase = await createClient();
 
@@ -31,16 +33,16 @@ export async function GET(request: NextRequest) {
     const { data: articles, error: artError } = await articlesQuery.order("designation");
     if (artError) throw artError;
 
-    const startOfDay = `${dateStr}T00:00:00.000Z`;
-    const endOfDay = `${dateStr}T23:59:59.999Z`;
+    const startRange = `${startDateStr}T00:00:00.000Z`;
+    const endRange = `${endDateStr}T23:59:59.999Z`;
 
     const results = await Promise.all(articles.map(async (art) => {
       let mvtQuery = supabase
         .from("mouvements")
         .select("quantite, stock_avant, stock_apres, date_mouvement")
         .eq("article_id", art.id)
-        .gte("date_mouvement", startOfDay)
-        .lte("date_mouvement", endOfDay)
+        .gte("date_mouvement", startRange)
+        .lte("date_mouvement", endRange)
         .order("date_mouvement", { ascending: false });
 
       if (depot && depot !== "Tous") {
@@ -62,7 +64,7 @@ export async function GET(request: NextRequest) {
           .from("mouvements")
           .select("stock_apres")
           .eq("article_id", art.id)
-          .lt("date_mouvement", startOfDay)
+          .lt("date_mouvement", startRange)
           .order("date_mouvement", { ascending: false })
           .limit(1);
 
@@ -99,8 +101,13 @@ export async function GET(request: NextRequest) {
       return { ...art, avant, variation, apres };
     }));
 
-    // Only show items that had movements
-    const filteredResults = results.filter(item => item.variation !== 0);
+    // Only show items that had movements and match variationType filter
+    const filteredResults = results.filter(item => {
+        if (item.variation === 0) return false;
+        if (variationType === "Entrees") return item.variation > 0;
+        if (variationType === "Sorties") return item.variation < 0;
+        return true;
+    });
 
     const formatDate = (date: string) => {
         return new Date(date).toLocaleDateString('fr-FR', {
@@ -108,11 +115,16 @@ export async function GET(request: NextRequest) {
         });
     };
 
+    const formatDateStr = (start: string, end: string) => {
+        if (start === end) return formatDate(start);
+        return `Du ${formatDate(start)} au ${formatDate(end)}`;
+    };
+
     const html = `<!DOCTYPE html>
 <html lang="fr" dir="ltr">
 <head>
     <meta charset="UTF-8">
-    <title>Journal de Stock - ${dateStr}</title>
+    <title>Journal de Stock - ${startDateStr === endDateStr ? startDateStr : `${startDateStr}_au_${endDateStr}`}</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
@@ -163,8 +175,8 @@ export async function GET(request: NextRequest) {
         </div>
         <div class="report-title">
             <div class="title-badge">JOURNAL QUOTIDIEN DE STOCK</div>
-            <div class="report-date">${formatDate(dateStr)}</div>
-            <p style="font-size: 10px; font-weight: 700; color: #64748b; margin-top: 5px;">Dépôt: ${depot}</p>
+            <div class="report-date">${formatDateStr(startDateStr, endDateStr)}</div>
+            <p style="font-size: 10px; font-weight: 700; color: #64748b; margin-top: 5px;">Dépôt: ${depot} | Type: ${variationType === 'Entrees' ? 'Entrées uniquement' : variationType === 'Sorties' ? 'Sorties uniquement' : 'Tous'}</p>
         </div>
     </div>
 

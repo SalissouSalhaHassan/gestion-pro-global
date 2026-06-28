@@ -8,7 +8,8 @@ export async function GET(request: Request) {
   const supabase = await createClient();
   const { searchParams } = new URL(request.url);
 
-  const dateStr = searchParams.get("date") || new Date().toISOString().split('T')[0];
+  const startDateStr = searchParams.get("startDate") || searchParams.get("date") || new Date().toISOString().split('T')[0];
+  const endDateStr = searchParams.get("endDate") || searchParams.get("date") || new Date().toISOString().split('T')[0];
   const depot = searchParams.get("depot");
   const search = searchParams.get("search");
   const categoryId = searchParams.get("categoryId");
@@ -34,9 +35,9 @@ export async function GET(request: Request) {
   const { data: articles, error: artError } = await articlesQuery.order("designation");
   if (artError) return NextResponse.json({ error: artError.message }, { status: 500 });
 
-  // 2. Define the time range for the selected day
-  const startOfDay = `${dateStr}T00:00:00.000Z`;
-  const endOfDay = `${dateStr}T23:59:59.999Z`;
+  // 2. Define the time range for the selected days
+  const startRange = `${startDateStr}T00:00:00.000Z`;
+  const endRange = `${endDateStr}T23:59:59.999Z`;
 
   const results = await Promise.all(articles.map(async (art) => {
     // 3. Fetch all movements for this article on the selected date
@@ -44,8 +45,8 @@ export async function GET(request: Request) {
       .from("mouvements")
       .select("quantite, stock_avant, stock_apres, date_mouvement")
       .eq("article_id", art.id)
-      .gte("date_mouvement", startOfDay)
-      .lte("date_mouvement", endOfDay)
+      .gte("date_mouvement", startRange)
+      .lte("date_mouvement", endRange)
       .order("date_mouvement", { ascending: false });
 
     if (depot && depot !== "Tous") {
@@ -73,7 +74,7 @@ export async function GET(request: Request) {
         .from("mouvements")
         .select("stock_apres")
         .eq("article_id", art.id)
-        .lt("date_mouvement", startOfDay)
+        .lt("date_mouvement", startRange)
         .order("date_mouvement", { ascending: false })
         .limit(1);
 
@@ -106,8 +107,9 @@ export async function GET(request: Request) {
             avant = Number(firstMvts[0].stock_avant || 0);
             apres = avant;
         } else {
-            // No movements at all. Check current stock if today, else 0.
-            if (dateStr === new Date().toISOString().split('T')[0]) {
+            // No movements at all. Check current stock if range includes today, else 0.
+            const todayStr = new Date().toISOString().split('T')[0];
+            if (todayStr >= startDateStr && todayStr <= endDateStr) {
                 const { data: currentStock } = await supabase
                     .from("stocks")
                     .select("quantite")
@@ -139,7 +141,9 @@ export async function GET(request: Request) {
   const filteredResults = results.filter(item => item.variation !== 0);
 
   return NextResponse.json({
-    date: dateStr,
+    date: startDateStr === endDateStr ? startDateStr : `${startDateStr} au ${endDateStr}`,
+    startDate: startDateStr,
+    endDate: endDateStr,
     depot: depot || "Tous",
     items: filteredResults
   });

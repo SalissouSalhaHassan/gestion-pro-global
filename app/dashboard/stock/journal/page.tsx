@@ -32,9 +32,13 @@ type JournalItem = {
 };
 
 export default function StockJournal() {
-  const [items, setItems] = useState<JournalItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1); // Default to start of current month
+    return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [variationFilter, setVariationFilter] = useState("Tous");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDepot, setSelectedDepot] = useState("Tous");
   const [depots, setDepots] = useState<string[]>([]);
@@ -46,7 +50,8 @@ export default function StockJournal() {
     setLoading(true);
     try {
       const queryParams = new URLSearchParams({
-        date,
+        startDate,
+        endDate,
         depot: selectedDepot,
         search: searchTerm,
         categoryId: selectedCategory
@@ -61,7 +66,7 @@ export default function StockJournal() {
     } finally {
       setLoading(false);
     }
-  }, [date, selectedDepot, searchTerm, selectedCategory]);
+  }, [startDate, endDate, selectedDepot, searchTerm, selectedCategory]);
 
   useEffect(() => {
     fetchDepots();
@@ -89,19 +94,27 @@ export default function StockJournal() {
     }
   };
 
+  const displayedItems = items.filter(item => {
+    if (variationFilter === "Entrees") return item.variation > 0;
+    if (variationFilter === "Sorties") return item.variation < 0;
+    return true;
+  });
+
   const stats = {
-    totalArticles: items.length,
-    totalVariation: items.reduce((sum, item) => sum + Math.abs(item.variation), 0),
-    positiveChanges: items.filter(i => i.variation > 0).length,
-    negativeChanges: items.filter(i => i.variation < 0).length,
+    totalArticles: displayedItems.length,
+    totalVariation: displayedItems.reduce((sum, item) => sum + Math.abs(item.variation), 0),
+    positiveChanges: displayedItems.filter(i => i.variation > 0).length,
+    negativeChanges: displayedItems.filter(i => i.variation < 0).length,
   };
 
   const handlePrint = () => {
     const queryParams = new URLSearchParams({
-        date,
+        startDate,
+        endDate,
         depot: selectedDepot,
         search: searchTerm,
-        categoryId: selectedCategory
+        categoryId: selectedCategory,
+        variation: variationFilter
       });
     window.open(`/api/stock/journal/print?${queryParams.toString()}`, '_blank');
   };
@@ -123,7 +136,11 @@ export default function StockJournal() {
               Journal Quotidien du Stock
             </h1>
             <p className="text-slate-500 mt-1 font-medium italic">
-              Journal détaillé des états de stock pour la journée du <span className="text-indigo-600 font-bold underline">{new Date(date).toLocaleDateString('fr-FR')}</span>
+              Journal détaillé des états de stock pour la période {startDate === endDate ? (
+                <>du <span className="text-indigo-600 font-bold underline">{new Date(startDate).toLocaleDateString('fr-FR')}</span></>
+              ) : (
+                <>du <span className="text-indigo-600 font-bold underline">{new Date(startDate).toLocaleDateString('fr-FR')}</span> au <span className="text-indigo-600 font-bold underline">{new Date(endDate).toLocaleDateString('fr-FR')}</span></>
+              )}
             </p>
           </div>
         </div>
@@ -131,11 +148,19 @@ export default function StockJournal() {
         <div className="flex flex-wrap items-center gap-3">
            <div className="flex items-center gap-2 px-4 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm">
              <Calendar className="w-5 h-5 text-indigo-500" />
+             <span className="text-xs font-black text-slate-400 uppercase">Du</span>
              <input 
                type="date" 
-               className="bg-transparent font-bold text-slate-700 outline-none"
-               value={date}
-               onChange={(e) => setDate(e.target.value)}
+               className="bg-transparent font-bold text-slate-700 outline-none w-36"
+               value={startDate}
+               onChange={(e) => setStartDate(e.target.value)}
+             />
+             <span className="text-xs font-black text-slate-400 uppercase ml-2">Au</span>
+             <input 
+               type="date" 
+               className="bg-transparent font-bold text-slate-700 outline-none w-36"
+               value={endDate}
+               onChange={(e) => setEndDate(e.target.value)}
              />
            </div>
            
@@ -198,6 +223,20 @@ export default function StockJournal() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+
+        <div className="relative w-full md:w-56">
+          <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <select 
+            className="w-full pl-12 pr-10 py-4 bg-slate-50 border-transparent border focus:border-indigo-200 focus:bg-white rounded-2xl outline-none transition-all font-semibold text-slate-700 appearance-none cursor-pointer"
+            value={variationFilter}
+            onChange={(e) => setVariationFilter(e.target.value)}
+          >
+            <option value="Tous">Toutes les variations</option>
+            <option value="Entrees">Entrées uniquement</option>
+            <option value="Sorties">Sorties uniquement</option>
+          </select>
+          <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+        </div>
         
         <div className="flex items-center gap-3 w-full md:w-auto">
             <div className="relative flex-1 md:w-64">
@@ -244,7 +283,7 @@ export default function StockJournal() {
                     </td>
                   </tr>
                 ))
-              ) : items.length === 0 ? (
+              ) : displayedItems.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-8 py-20 text-center">
                     <div className="inline-flex p-8 bg-slate-50 rounded-full mb-4">
@@ -254,7 +293,7 @@ export default function StockJournal() {
                     <p className="text-slate-400 mt-1">Essayez d'ajuster les filtres ou la date.</p>
                   </td>
                 </tr>
-              ) : items.map((item) => (
+              ) : displayedItems.map((item) => (
                 <tr key={item.id} className="group hover:bg-slate-50/80 transition-all duration-300">
                   <td className="px-8 py-5">
                     <div className="flex items-center gap-4">
@@ -296,7 +335,7 @@ export default function StockJournal() {
 
                   <td className="px-8 py-5 text-right">
                     <Link 
-                      href={`/dashboard/mouvements?articleId=${item.id}&date=${date}`}
+                      href={`/dashboard/mouvements?articleId=${item.id}&startDate=${startDate}&endDate=${endDate}`}
                       className="inline-flex p-3 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
                       title="Voir les détails"
                     >
