@@ -32,6 +32,8 @@ type JournalItem = {
 };
 
 export default function StockJournal() {
+  const [items, setItems] = useState<JournalItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setDate(1); // Default to start of current month
