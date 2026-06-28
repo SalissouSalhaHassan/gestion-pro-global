@@ -1,6 +1,4 @@
-"use client";
-
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { 
   X, 
   Printer, 
@@ -28,10 +26,68 @@ type AdvanceReceiptModalProps = {
 export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceReceiptModalProps) {
   const [loading, setLoading] = useState(true);
   const [advance, setAdvance] = useState<any>(null);
-  const [history, setHistory] = useState<any[]>([]);
+  const [allAdvances, setAllAdvances] = useState<any[]>([]);
+  const [allHistory, setAllHistory] = useState<any[]>([]);
   const [company, setCompany] = useState<any>(null);
   const [pageSize, setPageSize] = useState<'A4' | 'A5' | 'Ticket'>('A5');
   const [docType, setDocType] = useState<'Facture' | 'Bon de Livraison'>('Facture');
+
+  const transactions = useMemo(() => {
+    const list: any[] = [];
+    
+    // Add all deposits
+    allAdvances.forEach(a => {
+      list.push({
+        id: `dep-${a.id}`,
+        date: a.date_avance || a.created_at,
+        ref: a.reference_paiement || `DEP-${a.id}`,
+        montant: Number(a.montant_initial),
+        operation: "DEPOT",
+        timestamp: new Date(a.date_avance || a.created_at).getTime()
+      });
+    });
+
+    // Add all withdrawals/cancellations
+    allHistory.forEach(h => {
+      if (h.action === "WITHDRAW") {
+        let ref = h.notes || "";
+        const rx = /^[0-9]{2}[A-Z]{5}-[0-9]+$/;
+        if (!rx.test(ref)) {
+          const dateAction = new Date(h.date_action);
+          const yy = String(dateAction.getFullYear()).slice(-2);
+          const mm = String(dateAction.getMonth() + 1).padStart(2, '0');
+          const suffix = String(h.id).padStart(4, '0');
+          ref = `${yy}DRSNO-${mm}${suffix}`;
+        }
+
+        list.push({
+          id: `wdr-${h.id}`,
+          date: h.date_action,
+          ref: ref,
+          montant: -Number(h.amount),
+          operation: "RETRAIT",
+          timestamp: new Date(h.date_action).getTime()
+        });
+      } else if (h.action === "CANCEL") {
+        list.push({
+          id: `cnc-${h.id}`,
+          date: h.date_action,
+          ref: `ANN-${h.advance_id}`,
+          montant: -Number(h.amount),
+          operation: "RETRAIT",
+          timestamp: new Date(h.date_action).getTime()
+        });
+      }
+    });
+
+    // Sort chronologically by date
+    list.sort((a, b) => a.timestamp - b.timestamp);
+    return list;
+  }, [allAdvances, allHistory]);
+
+  const totalBalance = useMemo(() => {
+    return transactions.reduce((sum, tx) => sum + tx.montant, 0);
+  }, [transactions]);
 
   const numberToWordsFr = (total: number) => {
     if (total === 0) return "zéro";
@@ -80,19 +136,33 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
 
         const { data: adv } = await supabase
           .from("avances_clients")
-          .select("*, clients(nom, tel, adresse)")
+          .select("*, clients(id, nom, tel, adresse)")
           .eq("id", advanceId)
           .single();
         
         setAdvance(adv);
 
-        const { data: hist } = await supabase
-          .from("avances_history")
-          .select("*")
-          .eq("advance_id", advanceId)
-          .order("date_action", { ascending: true });
-        
-        setHistory(hist || []);
+        if (adv) {
+          const { data: allAdvs } = await supabase
+            .from("avances_clients")
+            .select("*")
+            .eq("client_id", adv.client_id)
+            .order("date_avance", { ascending: true });
+          
+          const advancesList = allAdvs || [];
+          setAllAdvances(advancesList);
+
+          if (advancesList.length > 0) {
+            const advIds = advancesList.map(a => a.id);
+            const { data: allHist } = await supabase
+              .from("avances_history")
+              .select("*")
+              .in("advance_id", advIds)
+              .order("date_action", { ascending: true });
+            
+            setAllHistory(allHist || []);
+          }
+        }
 
       } catch (err) {
         console.error("Error fetching advance data:", err);
@@ -190,212 +260,109 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
         pageSize === 'A4' ? 'max-w-[210mm]' : pageSize === 'Ticket' ? 'max-w-[80mm]' : 'max-w-[148mm]'
       } w-full rounded-[40px] border border-slate-100 print:border-none`}>
         
-        <div id="printable-advance" className={`p-6 text-slate-900 font-outfit leading-tight relative overflow-hidden ${
-           pageSize === 'Ticket' ? 'px-4 py-4' : 'p-6'
-        }`}>
+        <div id="printable-advance" className="p-8 text-slate-950 font-outfit leading-tight relative overflow-hidden print:p-4">
           
-          {/* Watermark */}
-          {pageSize !== 'Ticket' && (
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-45 text-[100px] font-black text-slate-50 opacity-[0.03] select-none pointer-events-none uppercase">
-              DÉPÔT VALIDE
+          {/* Header Info like the photo */}
+          <div className="text-center w-full flex flex-col items-center mb-6 border-b border-dashed border-slate-300 pb-6">
+            <h1 className="text-xl font-black uppercase text-slate-900 tracking-tight leading-none">{company?.nom_entreprise || "ETSOUNO"}</h1>
+            <p className="text-xs font-bold text-slate-600 mt-1">Etablissement SOUNA</p>
+            <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">
+               {company?.slogan || "Ventes de matériaux de construction"}
+            </p>
+            <p className="text-[9px] text-slate-400 font-bold mt-1">
+               {company?.adresse || "sous la route PMI 17 Portes BP 281"}
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-1 text-[8px] font-black text-slate-400">
+               <span>RCCM: {company?.rccm || 'NI-MAR-2007-A-93'}</span>
+               <span>NIF: {company?.nif || '11835/R'}</span>
             </div>
-          )}
-
-          {/* HEADER */}
-          <div className={`flex justify-between items-start mb-4 pb-4 border-b-2 border-slate-900 ${
-             pageSize === 'Ticket' ? 'flex-col items-center text-center gap-4' : ''
-          }`}>
-            <div className={pageSize === 'Ticket' ? 'text-center' : 'text-left'}>
-              <h1 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{company?.nom_entreprise || "ETS SOUNO"}</h1>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1 max-w-[200px] leading-relaxed mx-auto">
-                {company?.adresse || "MARADI-NIGER"}
-              </p>
-              <div className={`flex items-center gap-3 mt-3 text-[9px] font-black text-slate-400 ${pageSize === 'Ticket' ? 'justify-center' : ''}`}>
-                 <span className="flex items-center gap-1"><Info size={10}/> NIF: {company?.nif || '11835/R'}</span>
-                 <span className="flex items-center gap-1"><Calendar size={10}/> {new Date().toLocaleDateString()}</span>
-              </div>
-            </div>
-            {pageSize !== 'Ticket' && (
-              <div className="text-right flex flex-col items-end">
-                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg mb-2">
-                    <ShieldCheck size={28} />
-                </div>
-                <p className="text-[10px] font-black text-slate-900 uppercase">Document Certifié</p>
-                <p className="text-[8px] font-bold text-slate-400">Tél: {company?.telephone || '98 41 03 99'}</p>
-              </div>
-            )}
+            <p className="text-[8px] font-bold text-slate-400 mt-1">
+               Tél: {company?.telephone || '96.29.77.03 - 96.97.01.57'}
+            </p>
           </div>
 
-          {/* TITLE SECTION */}
-          <div className="text-center mb-6">
-            <h2 className={`${pageSize === 'Ticket' ? 'text-lg' : 'text-3xl'} font-black uppercase tracking-[0.1em] text-slate-900 relative inline-block`}>
-               {docType === 'Facture' ? 'REÇU DE DÉPÔT' : 'BON DE LIVRAISON'}
-               <div className="absolute -bottom-2 left-0 w-full h-1 bg-indigo-600 rounded-full"></div>
+          {/* Title Section */}
+          <div className="text-center mb-6 border-b-2 border-slate-900 pb-4">
+            <h2 className="text-md font-black uppercase tracking-wider text-slate-900">
+               SITUATION DEPOTS TIERS
             </h2>
+            <p className="text-sm font-black text-slate-900 uppercase mt-2">
+               {advance.clients?.tel ? `${advance.clients.tel} ` : ""}{advance.clients?.nom}
+            </p>
+            <p className="text-xs font-black text-indigo-600 uppercase mt-1 tracking-widest">
+               {advance.emplacement || "SOUNO SIEGE"}
+            </p>
           </div>
 
-          {/* DÉTAILS SECTION */}
-          <div className={`grid ${pageSize === 'Ticket' ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'} mb-6 text-[11px]`}>
-             <div className="space-y-4">
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Détails du Reçu</p>
-                   <div className="flex justify-between mb-1"><span className="font-bold text-slate-500">N°:</span> <span className="font-black text-indigo-600">#{advance.id} / {advance.reference_paiement || 'NCR'}</span></div>
-                   <div className="flex justify-between mb-1"><span className="font-bold text-slate-500">Date:</span> <span className="font-black">{new Date(advance.date_avance).toLocaleDateString('fr-FR')}</span></div>
-                   <div className="flex justify-between"><span className="font-bold text-slate-500">Mode:</span> <span className="font-black">{advance.moyen_paiement}</span></div>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Localisation & Vente</p>
-                   <div className="flex items-center gap-2 mb-1"><MapPin size={12} className="text-indigo-500"/><span className="font-black uppercase">{advance.emplacement || "Général"}</span></div>
-                   <div className="flex items-center gap-2"><User size={12} className="text-indigo-500"/><span className="font-bold text-slate-500 text-[9px]">Vendeur:</span> <span className="font-black">{advance.utilisateur}</span></div>
-                </div>
-             </div>
-
-             <div className="space-y-4">
-                <div className="bg-indigo-50/50 p-5 rounded-3xl border-2 border-indigo-100 relative overflow-hidden">
-                   <div className="absolute top-0 right-0 p-2 opacity-10"><User size={40} /></div>
-                   <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">Informations Client</p>
-                   <p className={`${pageSize === 'Ticket' ? 'text-sm' : 'text-lg'} font-black text-slate-900 uppercase tracking-tighter mb-1`}>{advance.clients?.nom}</p>
-                   <p className="text-[10px] font-bold text-slate-500">Tél: {advance.clients?.tel || 'N/A'}</p>
-                   <div className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                      advance.statut === 'Disponible' ? 'bg-emerald-100 text-emerald-700' : 
-                      advance.statut === 'Annulée' ? 'bg-rose-100 text-rose-700' : 'bg-indigo-100 text-indigo-700'
-                   }`}>
-                      <CheckCircle size={10}/> {advance.statut}
-                   </div>
-                </div>
-             </div>
-          </div>
-
-          {/* BIG AMOUNT */}
-          <div className="mb-6 text-center">
-             <div className={`inline-block ${pageSize === 'Ticket' ? 'px-5 py-3' : 'px-8 py-4'} bg-slate-900 text-white rounded-[24px] shadow-2xl relative`}>
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-[9px] font-black px-4 py-1 rounded-full uppercase tracking-[0.2em] whitespace-nowrap">Montant Principal</div>
-                <p className={`${pageSize === 'Ticket' ? 'text-xl' : 'text-3xl'} font-black tracking-tighter`}>
-                   {new Intl.NumberFormat('fr-FR').format(advance.montant_initial)}
-                   <span className={`${pageSize === 'Ticket' ? 'text-[10px]' : 'text-sm'} ml-2 text-indigo-400 font-bold`}>FCFA</span>
-                </p>
-             </div>
-          </div>
-
-          {/* WORDS */}
-          <div className="bg-slate-50 p-4 rounded-[24px] border-2 border-slate-100 mb-6">
-             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Montant en toutes lettres</p>
-             <p className="text-sm font-black text-slate-900 uppercase italic tracking-tight leading-relaxed">
-                {numberToWordsFr(advance.montant_initial)} francs CFA.
-             </p>
-          </div>
-
-           {/* TABLE RECAP */}
-           <div className="mb-4">
-              <table className="w-full text-left">
-                 <thead>
-                    <tr className="text-[10px] font-black text-slate-400 uppercase border-b border-slate-100">
-                       <th className="py-2 px-3">Désignation</th>
-                       <th className="py-2 px-3 text-right">Crédit</th>
-                       <th className="py-2 px-3 text-right">Débit</th>
-                    </tr>
-                 </thead>
-                 <tbody className="text-xs font-bold text-slate-700">
-                    <tr className="border-b border-slate-50">
-                       <td className="py-2 px-3 font-black text-[10px]">Dépôt Initial</td>
-                       <td className="py-2 px-3 text-right text-emerald-600">+{new Intl.NumberFormat('fr-FR').format(advance.montant_initial)}</td>
-                       <td className="py-2 px-3 text-right text-slate-300">—</td>
-                    </tr>
-                    <tr className="border-b border-slate-50">
-                       <td className="py-2 px-3 font-bold italic text-slate-400 text-[10px]">Utilisation (-)</td>
-                       <td className="py-2 px-3 text-right text-slate-300">—</td>
-                       <td className="py-2 px-3 text-right text-rose-500">-{new Intl.NumberFormat('fr-FR').format(advance.montant_initial - advance.montant_restant)}</td>
-                    </tr>
-                    <tr className="bg-indigo-600 text-white">
-                       <td className={`py-3 px-4 ${pageSize === 'Ticket' ? 'rounded-l-2xl' : 'rounded-l-[24px]'} font-black uppercase text-[10px]`}>Solde Nette</td>
-                       <td className="py-3 px-4 text-right font-black text-lg" colSpan={2}>
-                          {new Intl.NumberFormat('fr-FR').format(advance.montant_restant)} <span className="text-[10px] text-indigo-200">FCFA</span>
+          {/* Transaction Ledger Table like the photo */}
+          <div className="mb-6 overflow-hidden">
+             <table className="w-full text-left border border-slate-950 border-collapse">
+                <thead>
+                   <tr className="text-[9px] font-black bg-slate-50 text-slate-900 uppercase border-b-2 border-slate-950">
+                      <th className="py-2.5 px-3 border-r border-slate-950">REF.</th>
+                      <th className="py-2.5 px-3 border-r border-slate-950 text-center">DATE</th>
+                      <th className="py-2.5 px-3 border-r border-slate-950 text-right">MONTANT</th>
+                      <th className="py-2.5 px-3 text-center">OPERATIONS</th>
+                   </tr>
+                </thead>
+                <tbody className="text-[11px] font-bold text-slate-900">
+                   {transactions.map((tx, idx) => (
+                     <tr key={tx.id} className="border-b border-slate-300 last:border-none">
+                        <td className="py-2.5 px-3 border-r border-slate-950 font-mono text-[10px]">{tx.ref}</td>
+                        <td className="py-2.5 px-3 border-r border-slate-950 text-center">
+                           {new Date(tx.date).toLocaleDateString('fr-FR')}
+                        </td>
+                        <td className="py-2.5 px-3 border-r border-slate-950 text-right font-black">
+                           {tx.montant < 0 ? '-' : ''}{new Intl.NumberFormat('fr-FR').format(Math.abs(tx.montant))}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-black text-[9px] uppercase tracking-wider">{tx.operation}</td>
+                     </tr>
+                   ))}
+                   {transactions.length === 0 && (
+                     <tr>
+                       <td colSpan={4} className="py-6 text-center text-slate-400 italic font-normal text-xs">
+                         Aucun mouvement de dépôt disponible.
                        </td>
-                    </tr>
-                 </tbody>
-              </table>
-           </div>
+                     </tr>
+                   )}
+                </tbody>
+             </table>
+          </div>
 
-           {/* TABLE HISTORY */}
-           <div className="mb-6">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                 <FileBadge size={12} /> Historique des Mouvements du Dépôt
-              </p>
-              <div className="border border-slate-100 rounded-[16px] overflow-hidden">
-                 <table className="w-full text-left">
-                    <thead className="bg-slate-50">
-                       <tr className="text-[9px] font-black text-slate-400 uppercase border-b border-slate-100">
-                          <th className="py-2 px-3">Date</th>
-                          <th className="py-2 px-3">Opération</th>
-                          <th className="py-2 px-3">Référence</th>
-                          <th className="py-2 px-3 text-right">Montant</th>
-                       </tr>
-                    </thead>
-                    <tbody className="text-[10px] font-bold text-slate-700">
-                       {history.map((h, i) => {
-                         const op = h.action === 'CREATE' ? 'Dépôt Initial' : h.action === 'WITHDRAW' ? 'Utilisation (Retrait)' : h.action === 'CANCEL' ? 'Annulation' : 'Modification';
-                         const ref = h.action === 'CREATE' ? (advance.reference_paiement || 'N/A') : (h.notes || 'N/A');
-                         const sign = h.action === 'WITHDRAW' || h.action === 'CANCEL' ? '-' : '+';
-                         const color = h.action === 'WITHDRAW' || h.action === 'CANCEL' ? 'text-rose-500' : 'text-emerald-600';
-                         
-                         return (
-                           <tr key={i} className="border-b border-slate-50 last:border-none">
-                              <td className="py-2 px-3">{new Date(h.date_action).toLocaleString('fr-FR', {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'})}</td>
-                              <td className="py-2 px-3 uppercase">{op}</td>
-                              <td className="py-2 px-3 italic text-slate-500">{ref}</td>
-                              <td className={`py-2 px-3 text-right font-black ${color}`}>
-                                 {h.amount > 0 ? `${sign}${new Intl.NumberFormat('fr-FR').format(h.amount)}` : '—'}
-                              </td>
-                           </tr>
-                         );
-                       })}
-                       {history.length === 0 && (
-                          <tr>
-                            <td colSpan={4} className="py-3 text-center text-slate-400 italic font-normal text-[10px]">
-                               Aucun historique disponible.
-                            </td>
-                          </tr>
-                       )}
-                    </tbody>
-                 </table>
-              </div>
-           </div>
-
-          {/* OBSERVATIONS */}
-          {advance.notes && (
-             <div className="mb-6">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                   <FileText size={12} /> Observations
-                </p>
-                <div className="p-4 bg-slate-50 rounded-[16px] italic text-[10px] text-slate-600 border border-slate-100 leading-relaxed">
-                   {advance.notes}
-                </div>
-             </div>
-          )}
+          {/* TOTAL & CURRENCY */}
+          <div className="flex justify-between items-center py-2.5 border-t-2 border-slate-950 border-b-2 border-slate-950 font-black text-sm uppercase mb-3">
+             <span>TOTAL</span>
+             <span>{new Intl.NumberFormat('fr-FR').format(totalBalance)}</span>
+          </div>
+          <div className="text-center font-extrabold text-[11px] italic uppercase tracking-wider mb-8 text-slate-800">
+             Francs CFA
+          </div>
 
           {/* SIGNATURES */}
-          <div className="grid grid-cols-2 gap-16 mt-6">
+          <div className="grid grid-cols-2 gap-12 mt-6">
              <div className="text-center">
-                <div className="h-[60px] flex items-center justify-center opacity-10">
-                   <User size={50} />
-                </div>
-                <p className="text-[10px] font-black uppercase text-slate-300 mb-2">Signature Client</p>
-                <div className="h-px bg-slate-100"></div>
+                <p className="text-[9px] font-black uppercase text-slate-900 mb-12">Signature Client</p>
+                <div className="h-px bg-slate-950 w-3/4 mx-auto"></div>
              </div>
              <div className="text-center">
-                <div className="h-[60px] flex items-center justify-center opacity-10">
-                   <ShieldCheck size={50} />
-                </div>
-                <p className="text-[10px] font-black uppercase text-slate-300 mb-2">Signature Vendeur</p>
-                <div className="h-px bg-slate-100"></div>
+                <p className="text-[9px] font-black uppercase text-slate-900 mb-12">Signature Vendeur</p>
+                <div className="h-px bg-slate-950 w-3/4 mx-auto"></div>
              </div>
           </div>
 
-          {/* FOOTER */}
-          <div className="mt-16 text-center border-t border-slate-50 pt-6">
-             <p className="text-[8px] font-black text-slate-300 uppercase tracking-[0.3em]">
-                {company?.nom_entreprise} — {new Date().getFullYear()}
-             </p>
+          {/* Date of Print & Page Footer */}
+          <div className="mt-12 flex justify-between items-center border-t border-slate-200 pt-4 text-[8px] font-bold text-slate-400">
+             <span>
+                {(() => {
+                  const now = new Date();
+                  const mm = String(now.getMonth() + 1).padStart(2, '0');
+                  const dd = String(now.getDate()).padStart(2, '0');
+                  const yyyy = now.getFullYear();
+                  const timeStr = now.toTimeString().split(' ')[0];
+                  return `${mm}-${dd}-${yyyy} ${timeStr}`;
+                })()}
+             </span>
+             <span>Page 1</span>
           </div>
 
         </div>
@@ -440,6 +407,8 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
           .text-indigo-400 { color: #818cf8 !important; }
           .border-indigo-100 { border-color: #e0e7ff !important; }
           .border-slate-100 { border-color: #f1f5f9 !important; }
+          .border-slate-950 { border-color: #000000 !important; }
+          .border-slate-300 { border-color: #cbd5e1 !important; }
         }
       `}</style>
     </div>
