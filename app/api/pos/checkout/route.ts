@@ -427,7 +427,13 @@ export async function POST(request: Request) {
 
     // ─── SECURITY: WAREHOUSE SCOPING ───
     const isAdmin = await isAdminOrManager(user);
-    const requestedScopeDepots = uniqueNames(splitDepotList(user.depots, user.emplacement));
+    let requestedScopeDepots = uniqueNames(splitDepotList(user.depots, user.emplacement));
+    
+    // SPECIFIC RULE: KADER cannot use 'BOUTIQUE' in POS
+    if (String(user.username || user.utilisateur).toLowerCase() === "kader") {
+      requestedScopeDepots = requestedScopeDepots.filter(d => d.toLowerCase() !== "boutique");
+    }
+
     if (!isAdmin) {
       if (
         requestedScopeDepots.length === 0 ||

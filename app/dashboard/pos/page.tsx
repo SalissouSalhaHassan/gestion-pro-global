@@ -949,10 +949,14 @@ function PosPage() {
       if (!session) return;
 
       const admin = isAdminSession(session);
-      const scopedDepots = splitDepotList(session.depots, session.emplacement);
+      let scopedDepots = splitDepotList(session.depots, session.emplacement);
 
       if (session.username) {
         setCashierName(session.username);
+        // SPECIFIC RULE: KADER cannot use 'BOUTIQUE' in POS
+        if (session.username.toLowerCase() === "kader") {
+          scopedDepots = scopedDepots.filter(d => d.toLowerCase() !== "boutique");
+        }
       }
 
       setIsAdmin(admin);
