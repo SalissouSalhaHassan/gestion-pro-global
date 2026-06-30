@@ -430,7 +430,7 @@ export async function POST(request: Request) {
     let requestedScopeDepots = uniqueNames(splitDepotList(user.depots, user.emplacement));
     
     // SPECIFIC RULE: KADER cannot use 'BOUTIQUE' in POS
-    if (String(user.username || user.utilisateur).toLowerCase() === "kader") {
+    if (String(user.username || "").toLowerCase() === "kader") {
       requestedScopeDepots = requestedScopeDepots.filter(d => d.toLowerCase() !== "boutique");
     }
 
