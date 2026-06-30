@@ -428,17 +428,18 @@ export async function POST(request: Request) {
     // ─── SECURITY: WAREHOUSE SCOPING ───
     const isAdmin = await isAdminOrManager(user);
     const requestedScopeDepots = uniqueNames(splitDepotList(user.depots, user.emplacement));
-    if (
-      !isAdmin &&
-      requestedScopeDepots.length > 0 &&
-      !requestedScopeDepots.some(
-        (name) =>
-          normalizeDepotName(name) === requestedDepotKey ||
-          !!findBestDepotMatch(name, [depotName]) ||
-          !!findBestDepotMatch(depotName, [name])
-      )
-    ) {
-       return NextResponse.json({ error: `Permission refusée pour le dépôt: ${depotName}` }, { status: 403 });
+    if (!isAdmin) {
+      if (
+        requestedScopeDepots.length === 0 ||
+        !requestedScopeDepots.some(
+          (name) =>
+            normalizeDepotName(name) === requestedDepotKey ||
+            !!findBestDepotMatch(name, [depotName]) ||
+            !!findBestDepotMatch(depotName, [name])
+        )
+      ) {
+        return NextResponse.json({ error: `Permission refusée pour le dépôt: ${depotName}` }, { status: 403 });
+      }
     }
 
     // ─── SYSTEM SETTINGS: STOCK POLICY ───

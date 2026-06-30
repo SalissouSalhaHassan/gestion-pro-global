@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getServerSession, isAdminOrManager } from "@/lib/auth_helper";
+import { getServerSession, isAdminOrManager, getAllowedDepots } from "@/lib/auth_helper";
 
 export const revalidate = 0;
 
@@ -60,11 +60,19 @@ export async function GET(request: Request) {
     const valuationItems = articles.map(art => {
       let articleStocks = stocks.filter(s => s.article_id === art.id);
       
+      const allowedDepots = getAllowedDepots(user);
+
       // Filter by depot if requested
       if (requestedDepot && requestedDepot !== "Tous") {
-        articleStocks = articleStocks.filter(s => s.depot_nom === requestedDepot);
-      } else if (!isAdmin && userEmplacement !== "Tous") {
-        articleStocks = articleStocks.filter(s => s.depot_nom === userEmplacement);
+        if (!isAdmin && !allowedDepots.some(ad => ad.toLowerCase() === requestedDepot.toLowerCase()) && requestedDepot.toLowerCase() !== userEmplacement.toLowerCase()) {
+          // Skip stock records if not authorized
+          articleStocks = [];
+        } else {
+          articleStocks = articleStocks.filter(s => s.depot_nom && s.depot_nom.toLowerCase() === requestedDepot.toLowerCase());
+        }
+      } else if (!isAdmin) {
+        const depotsToFilter = allowedDepots.length > 0 ? allowedDepots : (userEmplacement !== "Tous" ? [userEmplacement] : []);
+        articleStocks = articleStocks.filter(s => s.depot_nom && depotsToFilter.some(ad => ad.toLowerCase() === s.depot_nom.toLowerCase()));
       }
 
       const totalQty = articleStocks.reduce((sum, s) => sum + Number(s.quantite || 0), 0);

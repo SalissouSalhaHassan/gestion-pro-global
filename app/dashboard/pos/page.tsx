@@ -1369,7 +1369,8 @@ function PosPage() {
           setDepots(depotNames.map((name, i) => ({ id: i + 1, nom_depot: name })));
           
           if (!selectedDepot && depotNames.length > 0) {
-             setSelectedDepot(depotNames[0]);
+             const allowed = splitDepotList(userEmplacement);
+             setSelectedDepot(isAdmin ? depotNames[0] : (allowed[0] || ""));
           } else if (resolvedSelectedDepot && resolvedSelectedDepot !== selectedDepot) {
              setSelectedDepot(resolvedSelectedDepot);
           }

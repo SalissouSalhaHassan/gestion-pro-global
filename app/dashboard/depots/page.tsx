@@ -59,6 +59,8 @@ export default function DepotManagementPage() {
     responsable: "",
     is_active: true
   });
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [allowedDepots, setAllowedDepots] = useState<string[]>([]);
 
   const loadData = async () => {
     setRefreshing(true);
@@ -73,6 +75,20 @@ export default function DepotManagementPage() {
         setUsers(userData.map(u => u.nom_prenom || u.utilisateur));
       }
 
+      // Read session to set initial default depot & admin flag
+      const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
+      let isUserAdmin = false;
+      let allowed: string[] = [];
+      if (cookie) {
+        try {
+          const session = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
+          isUserAdmin = session?.admin === "Oui" || session?.role === 1 || session?.role === "1";
+          setIsAdmin(isUserAdmin);
+          allowed = session?.depots ? session.depots.split(",").map((d: any) => d.trim()) : [];
+          setAllowedDepots(allowed);
+        } catch (e) { console.error(e); }
+      }
+
       // 2. Fetch Depots
       const { data, error } = await supabase
         .from("depots")
@@ -83,7 +99,12 @@ export default function DepotManagementPage() {
       if (error) throw error;
 
       if (data) {
-        setDepots(data);
+        if (isUserAdmin) {
+          setDepots(data);
+        } else {
+          // Non-admin can only see their allowed depots
+          setDepots(data.filter(d => allowed.some(ad => ad.toLowerCase() === d.nom.toLowerCase())));
+        }
       }
     } catch (err) {
       console.error("Failed to load depots:", err);
@@ -212,12 +233,14 @@ export default function DepotManagementPage() {
           <p className="text-slate-500 text-sm font-medium ml-11">Configurez vos points de stockage et responsables</p>
         </div>
 
-        <button 
-          onClick={handleOpenAdd}
-          className="flex items-center gap-2 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all active:scale-95 group bg-[#6366f1] shadow-indigo-200">
-          <Plus size={18} className="group-hover:rotate-90 transition-transform" />
-          Nouveau Dépôt
-        </button>
+        {isAdmin && (
+          <button 
+            onClick={handleOpenAdd}
+            className="flex items-center gap-2 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all active:scale-95 group bg-[#6366f1] shadow-indigo-200">
+            <Plus size={18} className="group-hover:rotate-90 transition-transform" />
+            Nouveau Dépôt
+          </button>
+        )}
       </div>
 
       {/* Stats */}
@@ -266,7 +289,7 @@ export default function DepotManagementPage() {
                 <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Emplacement</th>
                 <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Responsable</th>
                 <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Statut</th>
-                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Actions</th>
+                {isAdmin && <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -316,16 +339,18 @@ export default function DepotManagementPage() {
                         {depot.is_active ? "Actif" : "Inactif"}
                       </span>
                     </td>
-                    <td className="px-8 py-5 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => handleEdit(depot)} className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all">
-                          <Edit3 size={18} />
-                        </button>
-                        <button onClick={() => handleDelete(depot.id)} className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg transition-all">
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
+                    {isAdmin && (
+                      <td className="px-8 py-5 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => handleEdit(depot)} className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all">
+                            <Edit3 size={18} />
+                          </button>
+                          <button onClick={() => handleDelete(depot.id)} className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg transition-all">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

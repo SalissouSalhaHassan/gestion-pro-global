@@ -46,6 +46,7 @@ export default function StockJournal() {
   const [depots, setDepots] = useState<string[]>([]);
   const [categories, setCategories] = useState<{id: number, nom: string}[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const supabase = createClient();
 
   const fetchJournal = useCallback(async () => {
@@ -71,6 +72,20 @@ export default function StockJournal() {
   }, [startDate, endDate, selectedDepot, searchTerm, selectedCategory]);
 
   useEffect(() => {
+    // Read session to set initial default depot & admin flag
+    const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
+    if (cookie) {
+      try {
+        const session = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
+        const adminVal = session?.admin === "Oui" || session?.role === 1 || session?.role === "1";
+        setIsAdmin(adminVal);
+        const allowed = session?.depots ? session.depots.split(",").map((d: any) => d.trim()) : [];
+        if (!adminVal) {
+          const defaultDepot = allowed[0] || session.emplacement || "Tous";
+          setSelectedDepot(defaultDepot);
+        }
+      } catch (e) { console.error(e); }
+    }
     fetchDepots();
     fetchCategories();
   }, []);
@@ -81,8 +96,15 @@ export default function StockJournal() {
   }, [fetchJournal]);
 
   const fetchDepots = async () => {
-    const { data } = await supabase.from("depots").select("nom").eq("is_active", true);
-    if (data) setDepots(data.map(d => d.nom));
+    try {
+      const res = await fetch("/api/stock/depots");
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setDepots(data.map((d: any) => d.nom));
+      }
+    } catch (err) {
+      console.error("Failed to load depots", err);
+    }
   };
 
   const fetchCategories = async () => {
@@ -167,13 +189,14 @@ export default function StockJournal() {
            </div>
            
            <select 
-             className="px-5 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
-             value={selectedDepot}
-             onChange={(e) => setSelectedDepot(e.target.value)}
-           >
-              <option value="Tous">Tous les dépôts</option>
-              {depots.map(d => <option key={d} value={d}>{d}</option>)}
-           </select>
+              className="px-5 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm disabled:opacity-50"
+              value={selectedDepot}
+              onChange={(e) => setSelectedDepot(e.target.value)}
+              disabled={!isAdmin && depots.length <= 1}
+            >
+               {isAdmin && <option value="Tous">Tous les dépôts</option>}
+               {depots.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
 
            <button 
              onClick={handlePrint}

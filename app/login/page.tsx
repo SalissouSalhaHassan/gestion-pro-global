@@ -192,11 +192,18 @@ export default function LoginPage() {
     // Fetch user depots from user_warehouses as fallback
     const { data: userWarehouses } = await supabase
       .from("user_warehouses")
-      .select("depots(nom)")
+      .select("depot_id, is_primary, depots(nom)")
       .eq("user_id", userRecord.id);
 
     const userDepotsList = userWarehouses?.map((uw: any) => uw.depots?.nom).filter(Boolean) || [];
     const depotsString = userDepotsList.length > 0 ? userDepotsList.join(", ") : (userRecord.depots || "");
+
+    // Determine primary depot (emplacement) dynamically with safe fallback
+    let primaryDepot = userRecord.emplacement || '';
+    if (!primaryDepot && userWarehouses && userWarehouses.length > 0) {
+      const primaryUw = (userWarehouses as any[]).find((uw: any) => uw.is_primary) || userWarehouses[0];
+      primaryDepot = primaryUw.depots?.nom || '';
+    }
 
     // Set custom session cookie (24 hours)
     const sessionData = {
@@ -204,7 +211,7 @@ export default function LoginPage() {
       username: userRecord.utilisateur,
       role: userRecord.role_id,
       admin: userRecord.admin,
-      emplacement: userRecord.emplacement || "",
+      emplacement: primaryDepot,
       depots: depotsString,
       permissions: permissionKeys
     };

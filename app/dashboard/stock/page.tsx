@@ -52,6 +52,9 @@ export default function StockDashboard() {
   const [activeDepotNom, setActiveDepotNom] = useState("Tous");
   const [stats, setStats] = useState({ total: 0, low: 0, out: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [selectedFilterDepot, setSelectedFilterDepot] = useState("Tous");
+  const [allowedDepots, setAllowedDepots] = useState<string[]>([]);
+  const [userRole, setUserRole] = useState("vendeur");
 
   // Modal States
   const [selectedItem, setSelectedItem] = useState<StockItem | null>(null);
@@ -64,7 +67,12 @@ export default function StockDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/stock?search=${searchTerm}`);
+      const queryParams = new URLSearchParams();
+      queryParams.set("search", searchTerm);
+      if (selectedFilterDepot && selectedFilterDepot !== "Tous") {
+        queryParams.set("depot", selectedFilterDepot);
+      }
+      const res = await fetch(`/api/stock?${queryParams.toString()}`);
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data?.error || "Erreur de chargement du stock.");
@@ -73,6 +81,9 @@ export default function StockDashboard() {
         setItems(data.items);
         setActiveDepotId(data.depot_id || null);
         setActiveDepotNom(data.depot_nom || "Tous");
+        
+        if (data.allowedDepots) setAllowedDepots(data.allowedDepots);
+        if (data.role) setUserRole(data.role);
         
         const low = data.items.filter((i: any) => i.is_low).length;
         const out = data.items.filter((i: any) => i.is_out).length;
@@ -91,7 +102,7 @@ export default function StockDashboard() {
   useEffect(() => {
     const timer = setTimeout(() => fetchStock(), 300);
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchTerm, selectedFilterDepot]);
 
   const handleAdjust = (item: StockItem) => {
     setSelectedItem(item);
@@ -199,6 +210,24 @@ export default function StockDashboard() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        
+        {/* Depot Filter Selector */}
+        {(userRole === "admin" || allowedDepots.length > 1) && (
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 h-14">
+            <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Dépôt:</span>
+            <select
+              value={selectedFilterDepot}
+              onChange={(e) => setSelectedFilterDepot(e.target.value)}
+              className="bg-transparent border-none text-slate-700 font-bold focus:outline-none text-sm cursor-pointer"
+            >
+              <option value="Tous">Tous les dépôts</option>
+              {allowedDepots.map(dep => (
+                <option key={dep} value={dep}>{dep}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <button 
           onClick={() => setIsAddOpen(true)}
           className="px-6 py-4 bg-slate-900 text-white rounded-2xl flex items-center gap-2 font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"

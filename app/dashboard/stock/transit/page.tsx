@@ -97,12 +97,33 @@ export default function TransitPage() {
       await fetchTransfers();
 
       // Fetch depots
-      const { data: depotsData } = await supabase
-        .from("depots")
-        .select("id, nom")
-        .eq("is_active", true)
-        .order("nom");
-      if (depotsData) setDepots(depotsData);
+      const resDepots = await fetch("/api/stock/depots");
+      const depotsData = await resDepots.json();
+      if (Array.isArray(depotsData)) {
+        setDepots(depotsData);
+        
+        // Find default source depot from session cookie
+        const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
+        if (cookie) {
+          try {
+            const session = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
+            const isAdmin = session?.admin === "Oui" || session?.role === 1 || session?.role === "1";
+            const allowed = session?.depots ? session.depots.split(",").map((d: any) => d.trim().toLowerCase()) : [];
+            
+            if (!isAdmin && allowed.length > 0) {
+              const match = depotsData.find(d => allowed.includes(d.nom.toLowerCase()));
+              if (match) {
+                setFormSourceDepot(String(match.id));
+              }
+            } else if (!isAdmin && session.emplacement) {
+              const match = depotsData.find(d => d.nom.toLowerCase() === session.emplacement.toLowerCase());
+              if (match) {
+                setFormSourceDepot(String(match.id));
+              }
+            }
+          } catch (e) { console.error(e); }
+        }
+      }
 
       // Fetch articles
       const { data: articlesData } = await supabase

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getServerSession, isAdminOrManager } from "@/lib/auth_helper";
+import { getServerSession, isAdminOrManager, getAllowedDepots } from "@/lib/auth_helper";
 
 // Use the Edge runtime for high-performance reporting and scalability
 export const runtime = 'edge';
@@ -51,16 +51,33 @@ export async function GET(request: Request) {
       .order("date_mouvement", { ascending: false })
       .range(offset, offset + limit - 1);
 
-    // Security: Sellers only see movements in their depot.
-    if (!isAdmin && userDepot) {
-       query = query.eq("depot", userDepot);
+    const allowedDepots = getAllowedDepots(user);
+
+    // Security: Sellers only see movements in their allowed depots.
+    if (!isAdmin) {
+      const depotsToFilter = allowedDepots.length > 0 ? allowedDepots : (userDepot ? [userDepot] : []);
+      if (depotsToFilter.length > 0) {
+        query = query.in("depot", depotsToFilter);
+      }
     } 
     
     if (depotName && depotName !== "Tous") {
+      if (!isAdmin) {
+        const isAuthorized = allowedDepots.some(d => d.toLowerCase() === depotName.toLowerCase()) || 
+                            (userDepot && userDepot.toLowerCase() === depotName.toLowerCase());
+        if (!isAuthorized) {
+          return NextResponse.json({ error: "Non autorisé pour ce dépôt" }, { status: 403 });
+        }
+      }
       query = query.eq("depot", depotName);
     } else if (depotId && depotId !== "Tous") {
-      // If we only have an ID, we might need to resolve it or just skip if the table only has names
-      // For now, let's assume we can filter by name if depotId is actually a name (common in this app)
+      if (!isAdmin) {
+        const isAuthorized = allowedDepots.some(d => d.toLowerCase() === String(depotId).toLowerCase()) || 
+                            (userDepot && userDepot.toLowerCase() === String(depotId).toLowerCase());
+        if (!isAuthorized) {
+          return NextResponse.json({ error: "Non autorisé pour ce dépôt" }, { status: 403 });
+        }
+      }
       query = query.eq("depot", depotId);
     }
 

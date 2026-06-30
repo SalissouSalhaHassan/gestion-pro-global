@@ -78,6 +78,8 @@ export default function ArticlesPage() {
   const [suppliers, setSuppliers] = useState<string[]>([]);
   const [units, setUnits] = useState<string[]>([]);
   const [allDepots, setAllDepots] = useState<string[]>([]);
+  const [allowedDepots, setAllowedDepots] = useState<string[]>([]);
+  const [selectedFilterDepot, setSelectedFilterDepot] = useState<string>("Tous");
   const [toast, setToast] = useState<{message: string, type: "success" | "error"} | null>(null);
 
   const handleSaveArticle = async (e: React.FormEvent) => {
@@ -288,10 +290,10 @@ export default function ArticlesPage() {
     async function loadInitialData() {
       try {
         const [cats, supps, unts, deps] = await Promise.all([
-          supabase.from("categories").select("nom").order("nom"),
-          supabase.from("fournisseurs").select("nom").order("nom"),
-          supabase.from("types").select("nom").order("nom"),
-          supabase.from("depots").select("nom").eq("is_deleted", false).order("nom")
+          supabase.from("categories_articles").select("nom"),
+          supabase.from("fournisseurs").select("nom"),
+          supabase.from("unites_mesure").select("nom"),
+          supabase.from("depots").select("nom").eq("is_active", true)
         ]);
 
         if (cats.data) setCategories(cats.data.map(c => c.nom));
@@ -303,10 +305,17 @@ export default function ArticlesPage() {
       }
     }
     loadInitialData();
+  }, []);
 
+  useEffect(() => {
     async function loadArticles() {
+      setLoading(true);
       try {
-        const res = await fetch("/api/articles");
+        const queryParams = new URLSearchParams();
+        if (selectedFilterDepot && selectedFilterDepot !== "Tous") {
+          queryParams.set("depot", selectedFilterDepot);
+        }
+        const res = await fetch(`/api/articles?${queryParams.toString()}`);
         const result = await res.json();
         
         if (!res.ok) {
@@ -317,28 +326,27 @@ export default function ArticlesPage() {
         // Set role and depot from API response
         if (result.role) setUserRole(result.role);
         if (result.depot) setUserDepot(result.depot);
+        if (result.allowedDepots) setAllowedDepots(result.allowedDepots);
 
         const rawArticles = Array.isArray(result) ? result : (result.items || []);
 
-        if (rawArticles.length > 0) {
-          const mapped: Article[] = rawArticles.map((r: any) => {
-            const stockTotal = Array.isArray(r.stocks)
-              ? r.stocks.reduce((acc: number, cur: any) => acc + (Number(cur.quantite) || 0), 0)
-              : 0;
+        const mapped: Article[] = rawArticles.map((r: any) => {
+          const stockTotal = Array.isArray(r.stocks)
+            ? r.stocks.reduce((acc: number, cur: any) => acc + (Number(cur.quantite) || 0), 0)
+            : 0;
 
-            return {
-              id: r.id,
-              reference: r.reference || "",
-              code_barre: r.code_barre || null,
-              designation: String(r.designation || r.nom || ""),
-              p_vente_ht: Number(r.p_vente_ht) || 0,
-              p_vente_ttc: Number(r.p_vente_ttc) || 0,
-              image_path: r.image_path || null,
-              stock_total: stockTotal,
-            };
-          });
-          setArticles(mapped);
-        }
+          return {
+            id: r.id,
+            reference: r.reference || "",
+            code_barre: r.code_barre || null,
+            designation: String(r.designation || r.nom || ""),
+            p_vente_ht: Number(r.p_vente_ht) || 0,
+            p_vente_ttc: Number(r.p_vente_ttc) || 0,
+            image_path: r.image_path || null,
+            stock_total: stockTotal,
+          };
+        });
+        setArticles(mapped);
       } catch (err) {
         console.error("Failed to load articles", err);
       } finally {
@@ -346,7 +354,7 @@ export default function ArticlesPage() {
       }
     }
     loadArticles();
-  }, []);
+  }, [selectedFilterDepot]);
 
   const { filteredArticles, totalValue, lowStockCount } = useMemo(() => {
     let filtered = articles;
@@ -480,6 +488,29 @@ export default function ArticlesPage() {
               className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-13 pr-4 py-4 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-[#6366f1]/5 transition-all text-slate-700"
             />
           </div>
+          
+          {/* Depot Filter Selector */}
+          {(userRole === "admin" || allowedDepots.length > 1) && (
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
+              <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Dépôt:</span>
+              <select
+                value={selectedFilterDepot}
+                onChange={(e) => setSelectedFilterDepot(e.target.value)}
+                className="bg-transparent border-none text-slate-700 font-bold focus:outline-none text-sm cursor-pointer"
+              >
+                <option value="Tous">Tous les dépôts</option>
+                {userRole === "admin" ? (
+                  allDepots.map(dep => (
+                    <option key={dep} value={dep}>{dep}</option>
+                  ))
+                ) : (
+                  allowedDepots.map(dep => (
+                    <option key={dep} value={dep}>{dep}</option>
+                  ))
+                )}
+              </select>
+            </div>
+          )}
           {userRole === "admin" && (
             <button 
               onClick={() => { resetForm(); setIsModalOpen(true); }}

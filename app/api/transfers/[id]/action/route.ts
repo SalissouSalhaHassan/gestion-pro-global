@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getServerSession } from '@/lib/auth_helper';
+import { getServerSession, isAdminOrManager, getAllowedDepots } from '@/lib/auth_helper';
 
 export async function POST(
   request: Request,
@@ -29,6 +29,36 @@ export async function POST(
 
     if (fetchErr || !transfer) {
       return NextResponse.json({ error: 'Transfert introuvable.' }, { status: 404 });
+    }
+
+    // ─── SECURITY: ACTION DEPOSIT SCOPING ───
+    const isAdmin = await isAdminOrManager(session);
+    const allowedDepots = getAllowedDepots(session);
+    const userDepot = session.emplacement || "";
+
+    if (!isAdmin) {
+      const depotsToFilter = allowedDepots.length > 0 ? allowedDepots : (userDepot ? [userDepot] : []);
+      const { data: userDeps } = await supabase
+        .from("depots")
+        .select("id, nom")
+        .in("nom", depotsToFilter);
+      const allowedIds = userDeps?.map(d => d.id) || [];
+      const allowedNames = userDeps?.map(d => d.nom.toLowerCase()) || [];
+
+      const departureId = Number(transfer.depot_depart_id);
+      const arrivalId = Number(transfer.depot_arrivee_id);
+      const departureName = (transfer.depot_depart as any)?.nom || "";
+      const arrivalName = (transfer.depot_arrivee as any)?.nom || "";
+
+      if (['validate', 'prepare', 'ship'].includes(action)) {
+        if (!allowedIds.includes(departureId) && !allowedNames.includes(departureName.toLowerCase())) {
+          return NextResponse.json({ error: "Permission refusée pour modifier ce transfert (dépôt de départ non autorisé)" }, { status: 403 });
+        }
+      } else if (['receive', 'confirm'].includes(action)) {
+        if (!allowedIds.includes(arrivalId) && !allowedNames.includes(arrivalName.toLowerCase())) {
+          return NextResponse.json({ error: "Permission refusée pour modifier ce transfert (dépôt d'arrivée non autorisé)" }, { status: 403 });
+        }
+      }
     }
 
     // 2. Fetch items for this transfer

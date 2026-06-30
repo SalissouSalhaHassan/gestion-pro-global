@@ -67,8 +67,10 @@ export default function StockValuationPage() {
         const session = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
         setUserSession(session);
         const isAdmin = session?.admin === "Oui" || session?.role === 1 || session?.role === "1";
-        // If seller has a specific emplacement/depot, lock it
-        if (!isAdmin && session.emplacement) {
+        const allowedDepots = session?.depots ? session.depots.split(",").map((d: any) => d.trim()) : [];
+        if (!isAdmin && allowedDepots.length > 0) {
+          setFilters(f => ({ ...f, depot: allowedDepots[0] }));
+        } else if (!isAdmin && session.emplacement) {
           setFilters(f => ({ ...f, depot: session.emplacement }));
         }
       } catch (e) { console.error(e); }
@@ -155,19 +157,26 @@ export default function StockValuationPage() {
           <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
             <div className="w-full lg:w-48">
               <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Dépôt</Label>
-              <Select 
-                value={filters.depot} 
-                onValueChange={(v) => setFilters({ ...filters, depot: v })}
-                disabled={!(userSession?.admin === "Oui" || userSession?.role === 1 || userSession?.role === "1")}
-              >
-                <SelectTrigger className="h-12 rounded-xl border-slate-100 bg-slate-50/50 font-bold transition-all">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Tous">Tous les dépôts</SelectItem>
-                  {depots.map(d => <SelectItem key={d.id} value={d.nom}>{d.nom}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              {(() => {
+                const isUserAdmin = userSession?.admin === "Oui" || userSession?.role === 1 || userSession?.role === "1";
+                const allowedDepotsList = userSession?.depots ? userSession.depots.split(",").map((d: any) => d.trim().toLowerCase()) : [];
+                const canChangeDepot = isUserAdmin || allowedDepotsList.length > 1;
+                return (
+                  <Select 
+                    value={filters.depot} 
+                    onValueChange={(v) => setFilters({ ...filters, depot: v })}
+                    disabled={!canChangeDepot}
+                  >
+                    <SelectTrigger className="h-12 rounded-xl border-slate-100 bg-slate-50/50 font-bold transition-all">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isUserAdmin && <SelectItem value="Tous">Tous les dépôts</SelectItem>}
+                      {depots.map(d => <SelectItem key={d.id} value={d.nom}>{d.nom}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                );
+              })()}
             </div>
             <div className="w-full lg:w-48">
               <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Famille</Label>

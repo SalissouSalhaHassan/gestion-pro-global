@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth_helper";
+import { getServerSession, isAdminOrManager, getAllowedDepots } from "@/lib/auth_helper";
 
 export const revalidate = 0;
 
@@ -17,6 +17,19 @@ export async function GET(request: Request) {
   const user = await getServerSession();
   if (!user) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  }
+
+  const isAdmin = await isAdminOrManager(user);
+  const allowedDepots = getAllowedDepots(user);
+  const userDepot = user.emplacement || "";
+
+  // Security check: Vendeur can only query within their allowed depots
+  if (depot && depot !== "Tous" && !isAdmin) {
+    const isAuthorized = allowedDepots.some(d => d.toLowerCase() === depot.toLowerCase()) || 
+                        (userDepot && userDepot.toLowerCase() === depot.toLowerCase());
+    if (!isAuthorized) {
+      return NextResponse.json({ error: "Non autorisé pour ce dépôt" }, { status: 403 });
+    }
   }
 
   // 1. Start building the articles query
@@ -51,6 +64,11 @@ export async function GET(request: Request) {
 
     if (depot && depot !== "Tous") {
       mvtQuery = mvtQuery.eq("depot", depot);
+    } else if (!isAdmin) {
+      const depotsToFilter = allowedDepots.length > 0 ? allowedDepots : (userDepot ? [userDepot] : []);
+      if (depotsToFilter.length > 0) {
+        mvtQuery = mvtQuery.in("depot", depotsToFilter);
+      }
     }
 
     const { data: mvts } = await mvtQuery;
@@ -80,6 +98,11 @@ export async function GET(request: Request) {
 
       if (depot && depot !== "Tous") {
         lastMvtQuery = lastMvtQuery.eq("depot", depot);
+      } else if (!isAdmin) {
+        const depotsToFilter = allowedDepots.length > 0 ? allowedDepots : (userDepot ? [userDepot] : []);
+        if (depotsToFilter.length > 0) {
+          lastMvtQuery = lastMvtQuery.in("depot", depotsToFilter);
+        }
       }
 
       const { data: lastMvts } = await lastMvtQuery;
@@ -99,6 +122,11 @@ export async function GET(request: Request) {
         
         if (depot && depot !== "Tous") {
             firstMvtQuery = firstMvtQuery.eq("depot", depot);
+        } else if (!isAdmin) {
+          const depotsToFilter = allowedDepots.length > 0 ? allowedDepots : (userDepot ? [userDepot] : []);
+          if (depotsToFilter.length > 0) {
+            firstMvtQuery = firstMvtQuery.in("depot", depotsToFilter);
+          }
         }
 
         const { data: firstMvts } = await firstMvtQuery;
@@ -110,11 +138,21 @@ export async function GET(request: Request) {
             // No movements at all. Check current stock if range includes today, else 0.
             const todayStr = new Date().toISOString().split('T')[0];
             if (todayStr >= startDateStr && todayStr <= endDateStr) {
-                const { data: currentStock } = await supabase
+                let stockQuery = supabase
                     .from("stocks")
                     .select("quantite")
-                    .eq("article_id", art.id)
-                    .maybeSingle();
+                    .eq("article_id", art.id);
+                
+                if (depot && depot !== "Tous") {
+                    stockQuery = stockQuery.ilike("depot_nom", depot);
+                } else if (!isAdmin) {
+                    const depotsToFilter = allowedDepots.length > 0 ? allowedDepots : (userDepot ? [userDepot] : []);
+                    if (depotsToFilter.length > 0) {
+                        stockQuery = stockQuery.in("depot_nom", depotsToFilter);
+                    }
+                }
+                
+                const { data: currentStock } = await stockQuery.maybeSingle();
                 
                 avant = Number(currentStock?.quantite || 0);
                 apres = avant;

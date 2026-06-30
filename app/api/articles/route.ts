@@ -1,11 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getServerSession, isAdminOrManager } from "@/lib/auth_helper";
+import { getServerSession, isAdminOrManager, getAllowedDepots } from "@/lib/auth_helper";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     console.log('GET /api/articles called');
     const supabase = await createClient();
+    const { searchParams } = new URL(request.url);
+    const requestedDepot = searchParams.get("depot");
+
     const user = await getServerSession();
     console.log('User session:', user ? user.username : 'NULL');
     
@@ -15,8 +18,21 @@ export async function GET() {
     }
 
     const isAdmin = await isAdminOrManager(user);
-    const userDepot = user.emplacement;
+    const allowedDepots = getAllowedDepots(user);
+    const userDepot = user.emplacement || "";
+
+    // Determine target depot or scope
+    let targetDepot = requestedDepot || "Tous";
     
+    // Security check: Vendeur can only query within their allowed depots
+    if (targetDepot !== "Tous" && !isAdmin) {
+      const isAuthorized = allowedDepots.some(d => d.toLowerCase() === targetDepot.toLowerCase()) || 
+                          (userDepot && userDepot.toLowerCase() === targetDepot.toLowerCase());
+      if (!isAuthorized) {
+        return NextResponse.json({ error: "Non autorisé pour ce dépôt" }, { status: 403 });
+      }
+    }
+
     // Fetch all non-deleted articles with their stock records
     const { data, error } = await supabase
       .from("articles")
@@ -31,24 +47,44 @@ export async function GET() {
     // Add total quantity sum to each article for mobile compatibility
     articles = articles.map((art: any) => {
       let relevantStocks = art.stocks || [];
-      if (!isAdmin && userDepot && userDepot !== "Tous") {
-        relevantStocks = relevantStocks.filter((s: any) => String(s.depot_nom || "").toLowerCase() === userDepot.toLowerCase());
+      
+      if (targetDepot && targetDepot !== "Tous") {
+        relevantStocks = relevantStocks.filter((s: any) => 
+          String(s.depot_nom || "").toLowerCase() === targetDepot.toLowerCase()
+        );
+      } else if (!isAdmin) {
+        // If not admin and "Tous" is selected/requested, limit stocks to allowed depots
+        const depotsToFilter = allowedDepots.length > 0 ? allowedDepots : (userDepot ? [userDepot] : []);
+        relevantStocks = relevantStocks.filter((s: any) => 
+          depotsToFilter.some(d => d.toLowerCase() === String(s.depot_nom || "").toLowerCase())
+        );
       }
+
       const totalQty = relevantStocks.reduce((sum: number, s: any) => sum + (Number(s.quantite) || 0), 0);
-      return { ...art, quantite: totalQty };
+      return { ...art, stocks: relevantStocks, quantite: totalQty };
     });
 
     // VENDEUR: Filter to only show articles that have stock in their assigned depot
-    if (!isAdmin && userDepot && userDepot !== "Tous") {
-      console.log(`Filtering for depot: ${userDepot}`);
+    if (!isAdmin) {
       articles = articles.filter((art: any) => art.quantite > 0);
-      console.log(`Articles remaining after filtering: ${articles.length}`);
+    }
+
+    // Fetch all active depots to populate options for admin
+    let systemDepots: string[] = [];
+    if (isAdmin) {
+      const { data: depData } = await supabase
+        .from("depots")
+        .select("nom")
+        .eq("is_deleted", false)
+        .eq("is_active", true);
+      systemDepots = depData?.map(d => d.nom) || [];
     }
 
     const response = NextResponse.json({ 
       items: articles, 
       role: isAdmin ? "admin" : "vendeur",
-      depot: userDepot || "Tous"
+      depot: targetDepot,
+      allowedDepots: isAdmin ? systemDepots : (allowedDepots.length > 0 ? allowedDepots : (userDepot ? [userDepot] : []))
     });
 
     response.headers.set('Access-Control-Allow-Origin', '*');

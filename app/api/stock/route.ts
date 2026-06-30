@@ -115,6 +115,16 @@ export async function GET(request: Request) {
     };
   });
 
+  let systemDepots: string[] = [];
+  if (isAdmin) {
+    const { data: depData } = await supabase
+      .from("depots")
+      .select("nom")
+      .eq("is_deleted", false)
+      .eq("is_active", true);
+    systemDepots = depData?.map((d) => d.nom) || [];
+  }
+
   let filteredResults = results;
   if (lowStockOnly) {
     filteredResults = results.filter((row) => row.is_low || row.is_out);
@@ -123,5 +133,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     depot_nom: requestedDepot || (scopeDepots[0] || primaryDepot) || "Tous",
     items: filteredResults,
+    role: isAdmin ? "admin" : "vendeur",
+    allowedDepots: isAdmin ? systemDepots : (scopeDepots.length > 0 ? scopeDepots : (primaryDepot && primaryDepot !== "Tous" ? [primaryDepot] : [])),
   });
 }

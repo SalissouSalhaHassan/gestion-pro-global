@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getServerSession } from '@/lib/auth_helper';
+import { getServerSession, isAdminOrManager, getAllowedDepots } from '@/lib/auth_helper';
 
 export async function GET(request: Request) {
   try {
@@ -13,10 +13,33 @@ export async function GET(request: Request) {
     const sourceDepotId = searchParams.get('source_depot_id');
     const destDepotId = searchParams.get('dest_depot_id');
 
+    const isAdmin = await isAdminOrManager(session);
+    const allowedDepots = getAllowedDepots(session);
+    const userDepot = session.emplacement || "";
+
     let query = supabase
       .from('transferts_stock')
       .select('*, depot_depart:depot_depart_id(nom), depot_arrivee:depot_arrivee_id(nom), transferts_etapes(*), users:created_by(utilisateur)')
       .order('created_at', { ascending: false });
+
+    if (!isAdmin) {
+      const depotsToFilter = allowedDepots.length > 0 ? allowedDepots : (userDepot ? [userDepot] : []);
+      if (depotsToFilter.length === 0) {
+        return NextResponse.json([]);
+      }
+      
+      const { data: userDeps } = await supabase
+        .from("depots")
+        .select("id")
+        .in("nom", depotsToFilter);
+      const allowedIds = userDeps?.map(d => d.id) || [];
+      
+      if (allowedIds.length === 0) {
+        return NextResponse.json([]);
+      }
+      
+      query = query.or(`depot_depart_id.in.(${allowedIds.join(",")}),depot_arrivee_id.in.(${allowedIds.join(",")})`);
+    }
 
     if (status) {
       query = query.eq('statut', status);
@@ -45,6 +68,23 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const { depot_depart_id, depot_arrivee_id, items, notes } = body;
+
+    const isAdmin = await isAdminOrManager(session);
+    const allowedDepots = getAllowedDepots(session);
+    const userDepot = session.emplacement || "";
+
+    if (!isAdmin) {
+      const depotsToFilter = allowedDepots.length > 0 ? allowedDepots : (userDepot ? [userDepot] : []);
+      const { data: userDeps } = await supabase
+        .from("depots")
+        .select("id")
+        .in("nom", depotsToFilter);
+      const allowedIds = userDeps?.map(d => d.id) || [];
+      
+      if (!allowedIds.includes(Number(depot_depart_id))) {
+        return NextResponse.json({ error: "Permission refusée pour le dépôt de départ" }, { status: 403 });
+      }
+    }
 
     if (!depot_depart_id || !depot_arrivee_id || !items || items.length === 0) {
       return NextResponse.json({ error: 'Champs requis manquants.' }, { status: 400 });
