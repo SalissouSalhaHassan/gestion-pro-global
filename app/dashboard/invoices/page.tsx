@@ -52,6 +52,7 @@ export default function InvoicesPage() {
   const [filterDepot, setFilterDepot] = useState<string | null>(null);
   const [filterDateStart, setFilterDateStart] = useState<string>("");
   const [filterDateEnd, setFilterDateEnd] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const [vendorsList, setVendorsList] = useState<string[]>([]);
   const [depotsList, setDepotsList] = useState<string[]>([]);
 
@@ -182,6 +183,18 @@ export default function InvoicesPage() {
       filtered = filtered.filter(i => new Date(i.date_facture) <= endDate);
     }
 
+    // Status Filter
+    if (filterStatus) {
+      filtered = filtered.filter(i => {
+        const restant = Number(i.montant_restant) || 0;
+        const total = Number(i.total_ttc) || 0;
+        if (filterStatus === "soldee") return restant <= 0;
+        if (filterStatus === "partielle") return restant > 0 && restant < total;
+        if (filterStatus === "impayee") return restant >= total && total > 0;
+        return true;
+      });
+    }
+
     filtered.sort((a, b) => {
       let aVal = a[sortField];
       let bVal = b[sortField];
@@ -206,7 +219,7 @@ export default function InvoicesPage() {
     const pending = filtered.reduce((acc, curr) => acc + (Number(curr.montant_restant) || 0), 0);
 
     return { filteredInvoices: filtered, totalRevenue: total, pendingRevenue: pending };
-  }, [invoices, query, sortField, sortAsc]);
+  }, [invoices, query, sortField, sortAsc, filterVendor, filterDepot, filterDateStart, filterDateEnd, filterStatus]);
 
   const toggleSort = (field: keyof Invoice) => {
     if (sortField === field) {
@@ -486,6 +499,21 @@ export default function InvoicesPage() {
               className="w-full px-3 py-2 border border-indigo-200 rounded-xl bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
           </div>
+
+          {/* Status Filter */}
+          <div>
+            <label className="block text-xs font-bold text-slate-600 mb-2">Statut</label>
+            <select
+              value={filterStatus || ""}
+              onChange={(e) => setFilterStatus(e.target.value || null)}
+              className="w-full px-3 py-2 border border-indigo-200 rounded-xl bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              <option value="">Tous les statuts</option>
+              <option value="soldee">✅ Soldée</option>
+              <option value="partielle">🟡 Paiement Partiel</option>
+              <option value="impayee">🔴 Impayée</option>
+            </select>
+          </div>
           
           {/* Clear Filters Button */}
           <div className="flex items-end">
@@ -495,6 +523,7 @@ export default function InvoicesPage() {
                 setFilterDepot(null);
                 setFilterDateStart("");
                 setFilterDateEnd("");
+                setFilterStatus(null);
               }}
               className="w-full px-4 py-2 bg-red-500 text-white text-xs font-bold rounded-xl hover:bg-red-600 transition-colors"
             >

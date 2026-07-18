@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle, BarChart3, Bell, Calendar, ChevronLeft, ChevronRight, Columns3, Download,
+  AlertTriangle, BarChart3, Bell, Calendar, CheckCircle2, ChevronLeft, ChevronRight, CloudOff, Columns3, Download,
   Eye, FileSpreadsheet, FileText, Filter, Mail, Printer, RefreshCw, Search, Send, Shield,
   SlidersHorizontal, TrendingUp, Wallet
 } from "lucide-react";
@@ -14,6 +14,7 @@ import {
 const colors = ["#2563eb", "#10b981", "#f59e0b", "#ef4444", "#7c3aed", "#0891b2", "#db2777"];
 const fmt = (n: number) => new Intl.NumberFormat("fr-FR").format(Math.round(Number(n || 0)));
 const today = new Date().toISOString().slice(0, 10);
+const FINANCE_CACHE_PREFIX = "offline-finance-center";
 
 type FinanceData = {
   summary: Record<string, number>;
@@ -28,9 +29,37 @@ type FinanceData = {
 
 const defaultHidden = new Set<string>();
 
+function financeCacheKey(filters: { start: string; end: string; caissier: string }, period: string) {
+  return `${FINANCE_CACHE_PREFIX}:${filters.start}:${filters.end}:${period}:${filters.caissier || "Tous"}`;
+}
+
+function readFinanceCache(key: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as { savedAt: string; data: FinanceData }) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeFinanceCache(key: string, data: FinanceData) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify({ savedAt: new Date().toISOString(), data }));
+    window.localStorage.setItem(`${FINANCE_CACHE_PREFIX}:latest`, key);
+  } catch {
+    // Le cache local est une aide offline; l'application reste utilisable sans stockage.
+  }
+}
+
 export default function FinanceCenterPage() {
   const [data, setData] = useState<FinanceData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(true);
+  const [offlineMode, setOfflineMode] = useState(false);
+  const [lastCachedAt, setLastCachedAt] = useState<string | null>(null);
+  const [syncMessage, setSyncMessage] = useState("");
   const [query, setQuery] = useState("");
   const [period, setPeriod] = useState("jour");
   const [page, setPage] = useState(1);
@@ -59,14 +88,54 @@ export default function FinanceCenterPage() {
 
   const load = async () => {
     setLoading(true);
-    const params = new URLSearchParams({ start: filters.start, end: filters.end, period, cashier: filters.caissier || "Tous" });
-    const res = await fetch(`/api/finance?${params.toString()}`, { cache: "no-store" });
-    const json = await res.json();
-    setData(json);
-    setLoading(false);
+    setSyncMessage("");
+    const cacheKey = financeCacheKey(filters, period);
+    try {
+      const params = new URLSearchParams({ start: filters.start, end: filters.end, period, cashier: filters.caissier || "Tous" });
+      const res = await fetch(`/api/finance?${params.toString()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Finance API indisponible");
+      const json = await res.json();
+      setData(json);
+      setOfflineMode(false);
+      setLastCachedAt(new Date().toISOString());
+      writeFinanceCache(cacheKey, json);
+      setSyncMessage("Données financières synchronisées.");
+    } catch {
+      const cached = readFinanceCache(cacheKey);
+      const latestKey = typeof window !== "undefined" ? window.localStorage.getItem(`${FINANCE_CACHE_PREFIX}:latest`) : null;
+      const latest = !cached && latestKey ? readFinanceCache(latestKey) : null;
+      const fallback = cached || latest;
+      if (fallback?.data) {
+        setData(fallback.data);
+        setOfflineMode(true);
+        setLastCachedAt(fallback.savedAt);
+        setSyncMessage("Mode hors ligne: affichage de la dernière copie financière disponible.");
+      } else {
+        setData(null);
+        setOfflineMode(true);
+        setSyncMessage("Mode hors ligne: aucune copie financière locale n'est encore disponible.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load().catch(console.error); }, [period]);
+
+  useEffect(() => {
+    setIsOnline(typeof navigator === "undefined" ? true : navigator.onLine);
+    const goOnline = () => {
+      setIsOnline(true);
+      load().catch(console.error);
+    };
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, [period, filters.start, filters.end, filters.caissier]);
 
   const rows = useMemo(() => {
     let list = data?.rows || [];
@@ -127,6 +196,13 @@ export default function FinanceCenterPage() {
           <h1 className="text-3xl font-black tracking-tight md:text-4xl">Gestion Financière</h1>
         </div>
         <div className="flex flex-wrap gap-2 print:hidden">
+          <span className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black shadow-sm ${offlineMode || !isOnline ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+            {offlineMode || !isOnline ? <CloudOff size={16} /> : <CheckCircle2 size={16} />}
+            {offlineMode || !isOnline ? "Offline-First actif" : "Synchronisé"}
+          </span>
+          <button onClick={load} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black shadow-sm hover:border-indigo-300 hover:text-indigo-600">
+            <RefreshCw size={16} /> Synchroniser
+          </button>
           {[["PDF", FileText, printReport], ["Excel", FileSpreadsheet, exportCsv], ["CSV", Download, exportCsv], ["Impression", Printer, printReport], ["Partager", Send, exportCsv], ["Email", Mail, exportCsv]].map(([label, Icon, action]: any) => (
             <button key={label} onClick={action} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black shadow-sm hover:border-indigo-300 hover:text-indigo-600">
               <Icon size={16} />{label}
@@ -134,6 +210,13 @@ export default function FinanceCenterPage() {
           ))}
         </div>
       </div>
+
+      {(syncMessage || offlineMode || !isOnline) && (
+        <div className={`rounded-2xl border px-4 py-3 text-sm font-bold print:hidden ${offlineMode || !isOnline ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+          {syncMessage || "Connexion indisponible. Le centre financier continue avec les données locales."}
+          {lastCachedAt && <span className="ml-2 text-xs opacity-80">Dernière copie: {new Date(lastCachedAt).toLocaleString("fr-FR")}</span>}
+        </div>
+      )}
 
       <div className="grid gap-3">
         {cardRows.map((line, i) => (
