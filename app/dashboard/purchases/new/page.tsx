@@ -207,7 +207,7 @@ export default function NewPurchasePage() {
       fetchRecentPurchases();
     } catch (error) {
       console.error("Failed to fetch initial data", error);
-    } fontally {
+    } finally {
       setLoading(false);
     }
   };
