@@ -123,20 +123,18 @@ export default function NewPurchasePage() {
   const carouselRef = useRef<HTMLDivElement>(null);
 
   // Financial Summary Inputs
-  const [remiseGlobale, setRemiseGlobale] = useState(15000);
-  const [tvaGlobalePercent, setTvaGlobalePercent] = useState(19);
-  const [transport, setTransport] = useState(10000);
+  const [remiseGlobale, setRemiseGlobale] = useState(0);
+  const [tvaGlobalePercent, setTvaGlobalePercent] = useState(0);
+  const [transport, setTransport] = useState(0);
   const [isEditingTransport, setIsEditingTransport] = useState(false);
 
   // Payment Inputs
-  const [acompte, setAcompte] = useState(100000);
+  const [acompte, setAcompte] = useState(0);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [newPaymentAmount, setNewPaymentAmount] = useState(0);
 
   // Attachments Drag & Drop
-  const [attachments, setAttachments] = useState<{ name: string; size: string }[]>([
-    { name: "Facture_Fournisseur_Scan.pdf", size: "1.2 MB" }
-  ]);
+  const [attachments, setAttachments] = useState<{ name: string; size: string }[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
   // Print Modal
@@ -148,6 +146,15 @@ export default function NewPurchasePage() {
     fetchInitialData();
   }, []);
 
+  // Fetch supplier dynamic history when active supplier changes
+  useEffect(() => {
+    if (activeSupplier?.nom) {
+      fetchSupplierHistory(activeSupplier.nom);
+    } else {
+      setRecentPurchases([]);
+    }
+  }, [selectedSupplier, suppliers]);
+
   const fetchInitialData = async () => {
     try {
       const [suppRes, depRes, artRes, refRes] = await Promise.all([
@@ -158,53 +165,25 @@ export default function NewPurchasePage() {
       ]);
       
       const suppData = await suppRes.json();
-      setSuppliers(Array.isArray(suppData) ? suppData : []);
-      if (Array.isArray(suppData) && suppData.length > 0) {
-        setSelectedSupplier(suppData[0].id);
+      const suppList = Array.isArray(suppData) ? suppData : [];
+      setSuppliers(suppList);
+      if (suppList.length > 0) {
+        setSelectedSupplier(suppList[0].id);
       }
 
       const depData = await depRes.json();
-      setDepots(Array.isArray(depData) ? depData : []);
-      if (Array.isArray(depData) && depData.length > 0) {
-        setSelectedDepot(depData[0].nom);
+      const depList = Array.isArray(depData) ? depData : [];
+      setDepots(depList);
+      if (depList.length > 0) {
+        setSelectedDepot(depList[0].nom);
       }
       
       const artData = await artRes.json();
       const artList: Article[] = Array.isArray(artData) ? artData : (artData.items || []);
       setArticles(artList);
 
-      // Pre-fill initial workspace items for rich demonstration if starting fresh
-      if (artList.length > 0) {
-        const demoItems: PurchaseItem[] = artList.slice(0, 4).map((art, idx) => {
-          const qty = [10, 20, 15, 8][idx] || 5;
-          const pu = art.p_achat_ht || [300, 250, 600, 1200][idx] || 500;
-          const remise = [5, 0, 2, 3][idx] || 0;
-          const tva = 19;
-          const sub = qty * pu;
-          const montantRemise = (sub * remise) / 100;
-          const montantTva = ((sub - montantRemise) * tva) / 100;
-          return {
-            article_id: art.id,
-            reference: art.reference || `REF-000${idx + 1}`,
-            designation: art.designation,
-            categorie: art.categorie || (idx === 0 ? "Boisson gazeuse" : idx === 1 ? "Eau de source" : idx === 2 ? "Sucre" : "Lait"),
-            unite: art.unite || "unité",
-            quantite: qty,
-            prix_unitaire_ht: pu,
-            remise_percent: remise,
-            tva_percent: tva,
-            montant_ligne: sub - montantRemise + montantTva,
-            depot_nom: depData[0]?.nom || "BOUTIQUE"
-          };
-        });
-        setItems(demoItems);
-      }
-
       const refData = await refRes.json();
       if (refData.ref) setRefFacture(refData.ref);
-
-      // Fetch recent purchases for selected supplier history
-      fetchRecentPurchases();
     } catch (error) {
       console.error("Failed to fetch initial data", error);
     } finally {
@@ -212,9 +191,9 @@ export default function NewPurchasePage() {
     }
   };
 
-  const fetchRecentPurchases = async () => {
+  const fetchSupplierHistory = async (supplierNom: string) => {
     try {
-      const res = await fetch("/api/purchases");
+      const res = await fetch(`/api/purchases?supplier=${encodeURIComponent(supplierNom)}`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -222,7 +201,7 @@ export default function NewPurchasePage() {
         }
       }
     } catch (err) {
-      console.error("Error loading recent purchases", err);
+      console.error("Error loading supplier history", err);
     }
   };
 
@@ -1029,15 +1008,17 @@ export default function NewPurchasePage() {
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 font-medium">Téléphone:</span>
-                  <span className="font-bold text-slate-900">{activeSupplier?.tel || "+227 90 12 34 56"}</span>
+                  <span className="font-bold text-slate-900">{activeSupplier?.tel || activeSupplier?.contact || "Non renseigné"}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 font-medium">Solde dû (Dette):</span>
-                  <span className="font-black text-rose-600">{new Intl.NumberFormat("fr-FR").format(activeSupplier?.credit || 125000)} FCFA</span>
+                  <span className="font-black text-rose-600">{new Intl.NumberFormat("fr-FR").format(activeSupplier?.credit || 0)} {devise}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 font-medium">Dernier achat:</span>
-                  <span className="font-bold text-slate-800">15/06/2026</span>
+                  <span className="font-bold text-slate-800">
+                    {recentPurchases[0]?.date_achat ? new Date(recentPurchases[0].date_achat).toLocaleDateString("fr-FR") : "Aucun"}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 font-medium">Note fournisseur:</span>
@@ -1064,38 +1045,33 @@ export default function NewPurchasePage() {
               </div>
 
               <div className="space-y-2 text-[11px]">
-                <div className="flex justify-between items-center py-1 border-b border-slate-50">
-                  <div>
-                    <div className="font-bold text-slate-800">15/06/2026</div>
-                    <div className="text-[10px] text-slate-400">FAC-ACH-2026-0009</div>
+                {recentPurchases.length === 0 ? (
+                  <div className="py-6 text-center text-slate-400 font-medium text-xs">
+                    Aucun achat antérieur trouvé pour ce fournisseur
                   </div>
-                  <div className="text-right">
-                    <div className="font-black text-slate-900">250 000 FCFA</div>
-                    <span className="bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.5 rounded text-[9px]">Payé</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center py-1 border-b border-slate-50">
-                  <div>
-                    <div className="font-bold text-slate-800">02/06/2026</div>
-                    <div className="text-[10px] text-slate-400">FAC-ACH-2026-0008</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-black text-slate-900">175 000 FCFA</div>
-                    <span className="bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.5 rounded text-[9px]">Payé</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center py-1">
-                  <div>
-                    <div className="font-bold text-slate-800">20/05/2026</div>
-                    <div className="text-[10px] text-slate-400">FAC-ACH-2026-0007</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-black text-slate-900">320 000 FCFA</div>
-                    <span className="bg-amber-50 text-amber-600 font-bold px-1.5 py-0.5 rounded text-[9px]">Partiel</span>
-                  </div>
-                </div>
+                ) : (
+                  recentPurchases.map((purchase) => (
+                    <div key={purchase.id} className="flex justify-between items-center py-1.5 border-b border-slate-50 last:border-0">
+                      <div>
+                        <div className="font-bold text-slate-800">
+                          {new Date(purchase.date_achat).toLocaleDateString("fr-FR")}
+                        </div>
+                        <div className="text-[10px] text-slate-400">{purchase.numero_facture}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-black text-slate-900">
+                          {new Intl.NumberFormat("fr-FR").format(purchase.montant_total)} {devise}
+                        </div>
+                        <span className={`font-bold px-1.5 py-0.5 rounded text-[9px] ${
+                          purchase.statut === "Payée" ? "bg-emerald-50 text-emerald-600" :
+                          purchase.statut === "Partiellement Payée" ? "bg-amber-50 text-amber-600" : "bg-rose-50 text-rose-600"
+                        }`}>
+                          {purchase.statut}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
