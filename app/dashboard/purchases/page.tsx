@@ -96,24 +96,6 @@ export default function PurchasesPage() {
         </div>
       )}
 
-      {/* Global Top Bar */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex-1 max-w-xl mx-auto">
-          <div className="relative">
-            <Search className="absolute left-4 top-3 text-slate-400" size={16} />
-            <input 
-              type="text" 
-              placeholder="Recherche globale (Article, Client, Facture...)" 
-              className="w-full bg-white/80 border border-slate-200/80 rounded-full pl-10 pr-12 py-2.5 text-xs font-bold text-slate-700 shadow-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
-            />
-            <span className="absolute right-4 top-3 text-[10px] font-black text-slate-400 uppercase tracking-widest border border-slate-200 px-1.5 py-0.5 rounded-md">⌘ K</span>
-          </div>
-        </div>
-
-        <button className="p-2.5 bg-white rounded-full border border-slate-200/80 text-slate-500 hover:text-indigo-600 shadow-sm transition-all">
-          <Bell size={18} />
-        </button>
-      </div>
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
