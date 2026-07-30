@@ -26,6 +26,7 @@ export type Purchase = {
   statut: string;
   notes?: string;
   depot_nom: string;
+  auto_stock?: boolean;
   items?: PurchaseItem[];
 };
 
@@ -67,7 +68,7 @@ export class PurchaseService {
   }
 
   async createPurchase(purchaseData: Purchase, userId?: number, username?: string) {
-    const { items, ...purchaseRow } = purchaseData;
+    const { items, auto_stock, ...purchaseRow } = purchaseData;
 
     // 1. Insert Purchase
     const { data: newPurchase, error: purchaseError } = await this.supabase
