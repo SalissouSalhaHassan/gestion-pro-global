@@ -793,6 +793,7 @@ function PurchaseWorkspaceContent() {
                   <option value="FCFA">FCFA</option>
                   <option value="EUR">EUR (€)</option>
                   <option value="USD">USD ($)</option>
+                  <option value="NGN">Naira (₦)</option>
                 </select>
               </div>
             </div>
