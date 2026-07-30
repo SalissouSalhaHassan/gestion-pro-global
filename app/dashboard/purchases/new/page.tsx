@@ -151,6 +151,56 @@ function PurchaseWorkspaceContent() {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [lastSavedPurchase, setLastSavedPurchase] = useState<any>(null);
 
+  // Currency Converter State
+  const [targetCurrency, setTargetCurrency] = useState<string>("EUR");
+  const [customExchangeRate, setCustomExchangeRate] = useState<number>(0.001524);
+
+  const getDefaultExchangeRate = (from: string, to: string): number => {
+    if (from === to) return 1;
+
+    const ratesInFcfa: Record<string, number> = {
+      FCFA: 1,
+      EUR: 655.957,
+      USD: 600,
+      NGN: 0.40
+    };
+
+    const fromInFcfa = ratesInFcfa[from] || 1;
+    const toInFcfa = ratesInFcfa[to] || 1;
+
+    return Number((fromInFcfa / toInFcfa).toFixed(6));
+  };
+
+  useEffect(() => {
+    const defaultTarget = devise === "EUR" ? "FCFA" : "EUR";
+    setTargetCurrency(defaultTarget);
+    setCustomExchangeRate(getDefaultExchangeRate(devise, defaultTarget));
+  }, [devise]);
+
+  const handleTargetCurrencyChange = (newTarget: string) => {
+    setTargetCurrency(newTarget);
+    setCustomExchangeRate(getDefaultExchangeRate(devise, newTarget));
+  };
+
+  const handleConvertAllItemPrices = () => {
+    if (customExchangeRate <= 0) return;
+    if (confirm(`Voulez-vous vraiment convertir tous les prix d'achat de ${devise} vers ${targetCurrency} au taux de ${customExchangeRate} ?`)) {
+      const convertedItems = items.map(item => {
+        const newPu = Number((item.prix_unitaire_ht * customExchangeRate).toFixed(2));
+        const sub = item.quantite * newPu;
+        const rem = (sub * item.remise_percent) / 100;
+        const tax = ((sub - rem) * item.tva_percent) / 100;
+        return {
+          ...item,
+          prix_unitaire_ht: newPu,
+          montant_ligne: Number((sub - rem + tax).toFixed(2))
+        };
+      });
+      setItems(convertedItems);
+      setDevise(targetCurrency);
+    }
+  };
+
   const searchParams = useSearchParams();
   const editId = searchParams.get("id");
   const isEditMode = Boolean(editId);
@@ -1370,6 +1420,72 @@ function PurchaseWorkspaceContent() {
                   <span className="text-2xl font-black text-indigo-600">{new Intl.NumberFormat("fr-FR").format(totals.totalTTC)} {devise}</span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* 7.5 CONVERTISSEUR DE DEVISES CARD */}
+          <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-2xl p-6 shadow-md text-white space-y-4 border border-indigo-900/50">
+            <div className="flex items-center justify-between border-b border-indigo-800/60 pb-3">
+              <h3 className="text-xs font-black uppercase tracking-wider flex items-center gap-2 text-indigo-300">
+                <RotateCcw size={16} className="text-indigo-400" /> Convertisseur de Devises
+              </h3>
+              <span className="text-[10px] font-black bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-md">
+                Taux de change
+              </span>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400">Devise Cible</label>
+                  <select 
+                    value={targetCurrency}
+                    onChange={e => handleTargetCurrencyChange(e.target.value)}
+                    className="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  >
+                    <option value="EUR">EUR (€)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="FCFA">FCFA</option>
+                    <option value="NGN">Naira (₦)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400">Taux (1 {devise} =)</label>
+                  <input 
+                    type="number"
+                    step="0.000001"
+                    value={customExchangeRate}
+                    onChange={e => setCustomExchangeRate(Number(e.target.value))}
+                    className="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-bold text-emerald-400 text-right focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Conversion Result */}
+              <div className="bg-indigo-900/40 rounded-xl p-3 border border-indigo-800/50 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400">Équivalent Total TTC</p>
+                  <p className="text-lg font-black text-emerald-400">
+                    {new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(totals.totalTTC * customExchangeRate)} {targetCurrency}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold text-slate-400">Reste à Payer</p>
+                  <p className="text-xs font-black text-rose-300">
+                    {new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(totals.resteDuaPayer * customExchangeRate)} {targetCurrency}
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick convert button for items prices */}
+              <button
+                type="button"
+                onClick={handleConvertAllItemPrices}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 active:scale-95 border border-indigo-500/50"
+              >
+                <RotateCcw size={14} /> Convertir les prix des articles ({devise} ➔ {targetCurrency})
+              </button>
             </div>
           </div>
 
