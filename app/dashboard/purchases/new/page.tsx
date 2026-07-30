@@ -122,6 +122,9 @@ export default function NewPurchasePage() {
   const [isArticleListOpen, setIsArticleListOpen] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
 
+  // Auto stock entry control state (Decoupled by default)
+  const [autoStockEntry, setAutoStockEntry] = useState(false);
+
   // Financial Summary Inputs
   const [remiseGlobale, setRemiseGlobale] = useState(0);
   const [tvaGlobalePercent, setTvaGlobalePercent] = useState(0);
@@ -377,9 +380,9 @@ export default function NewPurchasePage() {
     return {
       entreePrevue: totalUnits,
       valeurEntree: totalValue,
-      stockApresAchat: currentStockTotal + totalUnits
+      stockApresAchat: autoStockEntry ? currentStockTotal + totalUnits : currentStockTotal
     };
-  }, [items, totals.totalTTC, articles, selectedDepot]);
+  }, [items, totals.totalTTC, articles, selectedDepot, autoStockEntry]);
 
   // Save Purchase
   const handleSavePurchase = async (statusOverride?: string) => {
@@ -403,13 +406,14 @@ export default function NewPurchasePage() {
         date_achat: dateAchat,
         sous_total: totals.sousTotalHT,
         remise: totals.totalRemise,
-        taxe: totals.tvaTotal,
-        transport: totals.transport,
+        taxe: totals.totalTaxes,
+        transport: totals.totalFraisAncillary,
         montant_total: totals.totalTTC,
         montant_paye: totals.acompte,
         statut: finalStatus,
         notes: notes,
         depot_nom: selectedDepot,
+        auto_stock: autoStockEntry,
         items: items.map(i => ({
           article_id: i.article_id,
           designation: i.designation,
@@ -630,7 +634,11 @@ export default function NewPurchasePage() {
           <div className="space-y-1">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Dépôt de destination</span>
             <div className="text-lg font-black text-slate-900 uppercase tracking-tight">{selectedDepot}</div>
-            <p className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-md w-fit">Entrée de stock direct</p>
+            <p className={`text-[10px] font-bold px-2 py-0.5 rounded-md w-fit ${
+              autoStockEntry ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
+            }`}>
+              {autoStockEntry ? "Entrée de stock directe" : "Stock séparé (Différé)"}
+            </p>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
             <Warehouse size={22} />
@@ -1364,7 +1372,9 @@ export default function NewPurchasePage() {
               <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
                 <Package size={18} className="text-emerald-600" /> Impact sur le stock
               </h3>
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                autoStockEntry ? "bg-emerald-50 text-emerald-600" : "bg-purple-50 text-purple-600"
+              }`}>
                 <Check size={16} />
               </div>
             </div>
@@ -1376,11 +1386,29 @@ export default function NewPurchasePage() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Valeur d'entrée:</span>
-                <span className="font-bold text-slate-900">{new Intl.NumberFormat("fr-FR").format(stockImpact.valeurEntree)} FCFA</span>
+                <span className="font-bold text-slate-900">{new Intl.NumberFormat("fr-FR").format(stockImpact.valeurEntree)} {devise}</span>
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-slate-100">
                 <span className="text-slate-700 font-bold">Stock après achat ({selectedDepot}):</span>
                 <span className="font-black text-indigo-600">{stockImpact.stockApresAchat} unités</span>
+              </div>
+
+              {/* Checkbox Toggle to control decoupling */}
+              <div className="pt-3 border-t border-slate-100 space-y-1">
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={autoStockEntry}
+                    onChange={e => setAutoStockEntry(e.target.checked)}
+                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                  />
+                  <span>Incrémenter le stock directement</span>
+                </label>
+                <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
+                  {autoStockEntry 
+                    ? "Le stock du dépôt sera augmenté immédiatement lors de la sauvegarde." 
+                    : "🔒 La création d'achat est séparée du stock. Le stock restera inchangé jusqu'à la validation de réception."}
+                </p>
               </div>
             </div>
           </div>

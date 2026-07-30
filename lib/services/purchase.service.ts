@@ -93,9 +93,12 @@ export class PurchaseService {
 
       if (itemsError) throw new Error(itemsError.message);
 
-      // Apply Stock and PMP for each item
-      for (const item of items) {
-        await this.applyStockAndPMP(item, newPurchase.id, newPurchase.numero_facture, newPurchase.fournisseur_nom, newPurchase.depot_nom, newPurchase.date_achat);
+      // Apply Stock and PMP for each item ONLY if auto_stock is explicitly enabled
+      // By default, purchase creation is decoupled from direct stock entry
+      if (purchaseData.auto_stock === true) {
+        for (const item of items) {
+          await this.applyStockAndPMP(item, newPurchase.id, newPurchase.numero_facture, newPurchase.fournisseur_nom, newPurchase.depot_nom, newPurchase.date_achat);
+        }
       }
     }
 
@@ -110,6 +113,38 @@ export class PurchaseService {
     });
 
     return newPurchase;
+  }
+
+  async receivePurchaseStock(id: number, userId?: number, username?: string) {
+    const { data: purchase, error } = await this.supabase
+      .from('achats')
+      .select('*, achat_items(*)')
+      .eq('id', id)
+      .single();
+
+    if (error || !purchase) throw new Error("Achat introuvable");
+
+    if (purchase.achat_items && purchase.achat_items.length > 0) {
+      for (const item of purchase.achat_items) {
+        await this.applyStockAndPMP(item, purchase.id, purchase.numero_facture, purchase.fournisseur_nom, purchase.depot_nom, purchase.date_achat);
+      }
+    }
+
+    await this.supabase
+      .from('achats')
+      .update({ statut: 'Payée/Reçue' })
+      .eq('id', id);
+
+    await this.supabase.from('activity_log').insert({
+      user_id: userId,
+      username: username,
+      action: 'RECEIVE_STOCK',
+      entity_type: 'Achat',
+      entity_id: id,
+      details: `Réception de stock effectuée pour l'achat N°${purchase.numero_facture}`
+    });
+
+    return true;
   }
 
   private async applyStockAndPMP(item: PurchaseItem, purchaseId: number, ref: string, supplier: string, depot: string, date: string) {
