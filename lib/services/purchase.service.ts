@@ -213,6 +213,71 @@ export class PurchaseService {
     });
   }
 
+  async updatePurchase(id: number, purchaseData: Purchase, userId?: number, username?: string) {
+    // 1. Get existing purchase info
+    const { data: existingPurchase, error: getError } = await this.supabase
+      .from('achats')
+      .select('*, achat_items(*)')
+      .eq('id', id)
+      .single();
+
+    if (getError || !existingPurchase) throw new Error("Achat introuvable");
+
+    // 2. Revert previous Stock and PMP if previous purchase had stock applied
+    if (existingPurchase.achat_items && existingPurchase.achat_items.length > 0) {
+      await this.revertStockAndPMP(existingPurchase);
+    }
+
+    const { items, auto_stock, ...purchaseRow } = purchaseData;
+
+    // 3. Update Purchase record
+    const { data: updatedPurchase, error: updateError } = await this.supabase
+      .from('achats')
+      .update({
+        ...purchaseRow
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) throw new Error(updateError.message);
+
+    // 4. Delete existing items and insert new items
+    await this.supabase.from('achat_items').delete().eq('achat_id', id);
+
+    if (items && items.length > 0) {
+      const itemsToInsert = items.map(item => ({
+        ...item,
+        achat_id: id
+      }));
+
+      const { error: itemsError } = await this.supabase
+        .from('achat_items')
+        .insert(itemsToInsert);
+
+      if (itemsError) throw new Error(itemsError.message);
+
+      // Apply new Stock and PMP if auto_stock is true
+      if (purchaseData.auto_stock === true) {
+        for (const item of items) {
+          await this.applyStockAndPMP(item, id, updatedPurchase.numero_facture, updatedPurchase.fournisseur_nom, updatedPurchase.depot_nom, updatedPurchase.date_achat);
+        }
+      }
+    }
+
+    // 5. Log Activity
+    await this.supabase.from('activity_log').insert({
+      user_id: userId,
+      username: username,
+      action: 'UPDATE',
+      entity_type: 'Achat',
+      entity_id: id,
+      details: `L'achat N°${updatedPurchase.numero_facture} a été modifié. Fournisseur: ${updatedPurchase.fournisseur_nom}, Montant: ${updatedPurchase.montant_total}`
+    });
+
+    return updatedPurchase;
+  }
+
   async deletePurchase(id: number, userId?: number, username?: string) {
     // 1. Get purchase info
     const { data: purchase, error: getError } = await this.supabase

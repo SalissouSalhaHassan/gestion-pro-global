@@ -2,7 +2,25 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ShoppingCart, Search, Plus, Eye, Trash2, Printer, Filter, Calendar, User, FileText, Loader2, CheckCircle2, Clock, AlertCircle, Wallet } from "lucide-react";
+import { 
+  ShoppingCart, 
+  Search, 
+  Plus, 
+  Eye, 
+  Trash2, 
+  Printer, 
+  Filter, 
+  Calendar, 
+  User, 
+  FileText, 
+  Loader2, 
+  CheckCircle2, 
+  Clock, 
+  AlertCircle, 
+  Wallet,
+  Edit2,
+  Bell
+} from "lucide-react";
 
 type Purchase = {
   id: number;
@@ -29,7 +47,7 @@ export default function PurchasesPage() {
       const params = new URLSearchParams(filters).toString();
       const res = await fetch(`/api/purchases?${params}`);
       const data = await res.json();
-      setPurchases(data);
+      setPurchases(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Failed to fetch purchases", error);
     } finally {
@@ -38,12 +56,12 @@ export default function PurchasesPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Supprimer cet achat ?")) return;
+    if (!confirm("Voulez-vous vraiment supprimer cet achat ? Cette action est irréversible.")) return;
     try {
       const res = await fetch(`/api/purchases/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete");
       setPurchases(prev => prev.filter(p => p.id !== id));
-      setToast({ message: "Achat supprimé.", type: "success" });
+      setToast({ message: "Achat supprimé avec succès.", type: "success" });
     } catch (error) {
       setToast({ message: "Erreur lors de la suppression.", type: "error" });
     } finally {
@@ -53,150 +71,230 @@ export default function PurchasesPage() {
 
   const getStatusStyle = (status: string) => {
     switch (status) {
-      case "Payée": return "bg-emerald-50 text-emerald-600 border-emerald-100";
-      case "Partiellement Payée": return "bg-amber-50 text-amber-600 border-amber-100";
-      default: return "bg-rose-50 text-rose-600 border-rose-100";
+      case "Payée": return "bg-emerald-50 text-emerald-600 border-emerald-200";
+      case "Partiellement Payée": return "bg-amber-50 text-amber-600 border-amber-200";
+      case "Brouillon": return "bg-slate-100 text-slate-600 border-slate-200";
+      default: return "bg-rose-50 text-rose-600 border-rose-200";
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "Payée": return <CheckCircle2 size={14} />;
-      case "Partiellement Payée": return <Clock size={14} />;
-      default: return <AlertCircle size={14} />;
+      case "Payée": return <CheckCircle2 size={13} />;
+      case "Partiellement Payée": return <Clock size={13} />;
+      default: return <AlertCircle size={13} />;
     }
   };
 
   return (
-    <div className="space-y-8 max-w-[1600px] mx-auto pb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="space-y-6 max-w-[1700px] mx-auto pb-12 animate-in fade-in slide-in-from-bottom-4 duration-500 font-sans">
       
+      {/* Toast notification */}
       {toast && (
-        <div className={`fixed top-6 right-6 z-50 p-4 rounded-xl shadow-lg font-bold text-white flex items-center gap-3 transition-all ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'}`}>
+        <div className={`fixed top-6 right-6 z-50 p-4 rounded-2xl shadow-xl font-bold text-white flex items-center gap-3 transition-all animate-in zoom-in-95 ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'}`}>
           {toast.message}
         </div>
       )}
 
+      {/* Global Top Bar */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1 max-w-xl mx-auto">
+          <div className="relative">
+            <Search className="absolute left-4 top-3 text-slate-400" size={16} />
+            <input 
+              type="text" 
+              placeholder="Recherche globale (Article, Client, Facture...)" 
+              className="w-full bg-white/80 border border-slate-200/80 rounded-full pl-10 pr-12 py-2.5 text-xs font-bold text-slate-700 shadow-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+            />
+            <span className="absolute right-4 top-3 text-[10px] font-black text-slate-400 uppercase tracking-widest border border-slate-200 px-1.5 py-0.5 rounded-md">⌘ K</span>
+          </div>
+        </div>
+
+        <button className="p-2.5 bg-white rounded-full border border-slate-200/80 text-slate-500 hover:text-indigo-600 shadow-sm transition-all">
+          <Bell size={18} />
+        </button>
+      </div>
+
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900 flex items-center gap-4">
-            <div className="p-3 bg-white/50 backdrop-blur-md rounded-2xl border border-white/50 shadow-sm">
-              <ShoppingCart className="text-indigo-600" size={32} />
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-50 rounded-2xl border border-indigo-100 text-indigo-600 shadow-sm">
+              <ShoppingCart size={28} />
             </div>
             Historique des Achats
           </h1>
-          <p className="mt-2 text-slate-500 font-medium ml-1">
-            Consultez et gérez vos factures d'achat et règlements.
+          <p className="mt-1 text-slate-500 font-medium text-xs ml-1">
+            Consultez, modifiez et gérez vos factures d'achat et règlements.
           </p>
         </div>
+        
         <Link 
           href="/dashboard/purchases/new"
-          className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95 w-fit"
+          className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black text-xs shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95 w-fit"
         >
-          <Plus size={20} /> Nouvel Achat
+          <Plus size={18} /> Nouvel Achat
         </Link>
       </div>
 
-      <div className="bg-white/60 backdrop-blur-xl rounded-[40px] border border-white p-8 shadow-sm space-y-6">
-        <div className="flex items-center gap-2 text-slate-400 font-black text-xs uppercase tracking-widest mb-2">
+      {/* Filters Card */}
+      <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-slate-200/80 p-6 shadow-sm space-y-4">
+        <div className="flex items-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-wider">
           <Filter size={14} /> Filtres de recherche
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Ref Facture Filter */}
           <div className="relative">
-            <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <FileText className="absolute left-4 top-3 text-slate-400" size={16} />
             <input 
-              type="text" placeholder="Réf. Facture"
-              value={filters.ref} onChange={e => setFilters({...filters, ref: e.target.value})}
-              className="w-full bg-white border-slate-100 rounded-2xl pl-12 pr-4 py-3 font-bold focus:ring-4 focus:ring-indigo-50 transition-all"
+              type="text" 
+              placeholder="Réf. Facture"
+              value={filters.ref} 
+              onChange={e => setFilters({...filters, ref: e.target.value})}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
             />
           </div>
+
+          {/* Supplier Filter */}
           <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <User className="absolute left-4 top-3 text-slate-400" size={16} />
             <input 
-              type="text" placeholder="Fournisseur"
-              value={filters.supplier} onChange={e => setFilters({...filters, supplier: e.target.value})}
-              className="w-full bg-white border-slate-100 rounded-2xl pl-12 pr-4 py-3 font-bold focus:ring-4 focus:ring-indigo-50 transition-all"
+              type="text" 
+              placeholder="Fournisseur"
+              value={filters.supplier} 
+              onChange={e => setFilters({...filters, supplier: e.target.value})}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
             />
           </div>
+
+          {/* Start Date */}
           <div className="relative">
-            <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <Calendar className="absolute left-4 top-3 text-slate-400" size={16} />
             <input 
               type="date" 
-              value={filters.start_date} onChange={e => setFilters({...filters, start_date: e.target.value})}
-              className="w-full bg-white border-slate-100 rounded-2xl pl-12 pr-4 py-3 font-bold focus:ring-4 focus:ring-indigo-50 transition-all"
+              value={filters.start_date} 
+              onChange={e => setFilters({...filters, start_date: e.target.value})}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
             />
           </div>
+
+          {/* End Date */}
           <div className="relative">
-            <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <Calendar className="absolute left-4 top-3 text-slate-400" size={16} />
             <input 
               type="date" 
-              value={filters.end_date} onChange={e => setFilters({...filters, end_date: e.target.value})}
-              className="w-full bg-white border-slate-100 rounded-2xl pl-12 pr-4 py-3 font-bold focus:ring-4 focus:ring-indigo-50 transition-all"
+              value={filters.end_date} 
+              onChange={e => setFilters({...filters, end_date: e.target.value})}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
             />
           </div>
         </div>
       </div>
 
-      <div className="bg-white/80 backdrop-blur-2xl rounded-[48px] border border-white shadow-xl overflow-hidden">
-        <div className="overflow-x-auto custom-scrollbar">
+      {/* Table Section */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/50">
-                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-50">Réf. Facture</th>
-                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-50">Date</th>
-                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-50">Fournisseur</th>
-                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-50 text-right">Montant Total</th>
-                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-50 text-right">Payé</th>
-                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-50 text-center">Statut</th>
-                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-50 text-right">Actions</th>
+              <tr className="bg-slate-50/70 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                <th className="px-6 py-4">Réf. Facture</th>
+                <th className="px-6 py-4">Date</th>
+                <th className="px-6 py-4">Fournisseur</th>
+                <th className="px-6 py-4 text-right">Montant Total</th>
+                <th className="px-6 py-4 text-right">Payé</th>
+                <th className="px-6 py-4 text-center">Statut</th>
+                <th className="px-6 py-4 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-slate-100 text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center">
+                  <td colSpan={7} className="py-16 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-400">
-                      <Loader2 className="animate-spin mb-4" size={40} />
-                      <p className="font-bold">Chargement des achats...</p>
+                      <Loader2 className="animate-spin mb-3 text-indigo-600" size={36} />
+                      <p className="font-bold text-slate-600">Chargement des achats...</p>
                     </div>
                   </td>
                 </tr>
               ) : purchases.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center">
+                  <td colSpan={7} className="py-16 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-400">
-                      <ShoppingCart className="opacity-10 mb-4" size={60} />
-                      <p className="font-bold text-xl">Aucun achat enregistré.</p>
+                      <ShoppingCart className="opacity-20 mb-3 text-indigo-600" size={48} />
+                      <p className="font-bold text-slate-700 text-base">Aucun achat enregistré.</p>
+                      <p className="text-xs text-slate-400 mt-1">Créez votre premier achat en cliquant sur Nouvel Achat.</p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 purchases.map(purchase => (
-                  <tr key={purchase.id} className="group hover:bg-slate-50/50 transition-colors">
-                    <td className="px-8 py-6 font-black text-slate-900">{purchase.numero_facture}</td>
-                    <td className="px-8 py-6 text-slate-500 font-bold">{new Date(purchase.date_achat).toLocaleDateString("fr-FR")}</td>
-                    <td className="px-8 py-6 text-slate-700 font-black">{purchase.fournisseur_nom}</td>
-                    <td className="px-8 py-6 text-right font-black text-slate-900">
+                  <tr key={purchase.id} className="hover:bg-indigo-50/20 transition-colors group">
+                    {/* Ref Facture */}
+                    <td className="px-6 py-4 font-black text-slate-900">{purchase.numero_facture}</td>
+                    
+                    {/* Date */}
+                    <td className="px-6 py-4 text-slate-500 font-semibold">
+                      {purchase.date_achat ? new Date(purchase.date_achat).toLocaleDateString("fr-FR") : "-"}
+                    </td>
+                    
+                    {/* Fournisseur */}
+                    <td className="px-6 py-4 text-slate-900 font-bold">{purchase.fournisseur_nom}</td>
+                    
+                    {/* Montant Total */}
+                    <td className="px-6 py-4 text-right font-black text-slate-900">
                       {new Intl.NumberFormat("fr-FR").format(purchase.montant_total)} F
                     </td>
-                    <td className="px-8 py-6 text-right font-bold text-emerald-600">
+                    
+                    {/* Montant Payé */}
+                    <td className="px-6 py-4 text-right font-black text-emerald-600">
                       {new Intl.NumberFormat("fr-FR").format(purchase.montant_paye)} F
                     </td>
-                    <td className="px-8 py-6">
-                      <div className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-black border ${getStatusStyle(purchase.statut)}`}>
+                    
+                    {/* Statut */}
+                    <td className="px-6 py-4 text-center">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black border ${getStatusStyle(purchase.statut)}`}>
                         {getStatusIcon(purchase.statut)}
                         {purchase.statut}
-                      </div>
+                      </span>
                     </td>
-                    <td className="px-8 py-6">
-                      <div className="flex items-center justify-end gap-2">
-                        <Link href={`/dashboard/purchases/${purchase.id}/payments`} title="Règlements" className="p-3 text-indigo-500 hover:bg-indigo-50 rounded-2xl transition-all">
-                          <Wallet size={18} />
+                    
+                    {/* Actions */}
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        {/* Payments Link */}
+                        <Link 
+                          href={`/dashboard/purchases/${purchase.id}/payments`} 
+                          title="Règlements" 
+                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                        >
+                          <Wallet size={16} />
                         </Link>
-                        <button title="Détails" className="p-3 text-slate-400 hover:bg-slate-100 rounded-2xl transition-all">
-                          <Eye size={18} />
+
+                        {/* Edit Link */}
+                        <Link 
+                          href={`/dashboard/purchases/new?id=${purchase.id}`} 
+                          title="Modifier l'achat" 
+                          className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
+                        >
+                          <Edit2 size={16} />
+                        </Link>
+
+                        {/* Details PDF View */}
+                        <button 
+                          onClick={() => window.open(`/api/purchases/${purchase.id}/pdf`, '_blank')} 
+                          title="Aperçu / Imprimer PDF" 
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                        >
+                          <Eye size={16} />
                         </button>
-                        <button onClick={() => handleDelete(purchase.id)} title="Supprimer" className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
-                          <Trash2 size={18} />
+
+                        {/* Delete Button */}
+                        <button 
+                          onClick={() => handleDelete(purchase.id)} 
+                          title="Supprimer" 
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                        >
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </td>

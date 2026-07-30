@@ -23,6 +23,26 @@ export async function GET(
   }
 }
 
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabase = await createClient();
+    const session = await getServerSession();
+    if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+
+    const body = await request.json();
+    const purchaseService = new PurchaseService(supabase);
+    const updatedPurchase = await purchaseService.updatePurchase(Number(id), body, Number(session.id), session.username);
+    
+    return NextResponse.json(updatedPurchase);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { 
   ShoppingCart, 
   ArrowLeft, 
@@ -151,10 +151,14 @@ export default function NewPurchasePage() {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [lastSavedPurchase, setLastSavedPurchase] = useState<any>(null);
 
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("id");
+  const isEditMode = Boolean(editId);
+
   // Fetch initial data
   useEffect(() => {
     fetchInitialData();
-  }, []);
+  }, [editId]);
 
   // Fetch supplier dynamic history when active supplier changes
   useEffect(() => {
@@ -177,23 +181,58 @@ export default function NewPurchasePage() {
       const suppData = await suppRes.json();
       const suppList = Array.isArray(suppData) ? suppData : [];
       setSuppliers(suppList);
-      if (suppList.length > 0) {
-        setSelectedSupplier(suppList[0].id);
-      }
 
       const depData = await depRes.json();
       const depList = Array.isArray(depData) ? depData : [];
       setDepots(depList);
-      if (depList.length > 0) {
-        setSelectedDepot(depList[0].nom);
-      }
-      
+
       const artData = await artRes.json();
       const artList: Article[] = Array.isArray(artData) ? artData : (artData.items || []);
       setArticles(artList);
 
-      const refData = await refRes.json();
-      if (refData.ref) setRefFacture(refData.ref);
+      if (isEditMode && editId) {
+        // Fetch purchase for editing
+        const editRes = await fetch(`/api/purchases/${editId}`);
+        if (editRes.ok) {
+          const p = await editRes.json();
+          setSelectedSupplier(p.fournisseur_id);
+          setSelectedDepot(p.depot_nom || (depList[0]?.nom || "BOUTIQUE"));
+          setRefFacture(p.numero_facture);
+          setDateAchat(p.date_achat ? p.date_achat.split('T')[0] : new Date().toISOString().split('T')[0]);
+          setNotes(p.notes || "");
+          setRemiseGlobale(p.remise || 0);
+          setTransport(p.transport || 0);
+          setAcompte(p.montant_paye || 0);
+          setIsDraft(p.statut === "Brouillon");
+
+          if (p.achat_items && Array.isArray(p.achat_items)) {
+            const loadedItems: PurchaseItem[] = p.achat_items.map((item: any) => {
+              const matchedArt = artList.find(a => a.id === item.article_id);
+              const pu = item.prix_unitaire_ht || 0;
+              const qty = item.quantite || 1;
+              return {
+                article_id: item.article_id,
+                reference: matchedArt?.reference || `REF-${String(item.article_id).padStart(4, '0')}`,
+                designation: item.designation || matchedArt?.designation || "Article",
+                categorie: matchedArt?.categorie || "Général",
+                unite: item.unite || matchedArt?.unite || "unité",
+                quantite: qty,
+                prix_unitaire_ht: pu,
+                remise_percent: 0,
+                tva_percent: 19,
+                montant_ligne: item.montant_ligne || (qty * pu),
+                depot_nom: p.depot_nom || "BOUTIQUE"
+              };
+            });
+            setItems(loadedItems);
+          }
+        }
+      } else {
+        if (suppList.length > 0) setSelectedSupplier(suppList[0].id);
+        if (depList.length > 0) setSelectedDepot(depList[0].nom);
+        const refData = await refRes.json();
+        if (refData.ref) setRefFacture(refData.ref);
+      }
     } catch (error) {
       console.error("Failed to fetch initial data", error);
     } finally {
@@ -424,8 +463,11 @@ export default function NewPurchasePage() {
         }))
       };
 
-      const res = await fetch("/api/purchases", {
-        method: "POST",
+      const endpoint = isEditMode && editId ? `/api/purchases/${editId}` : "/api/purchases";
+      const httpMethod = isEditMode && editId ? "PUT" : "POST";
+
+      const res = await fetch(endpoint, {
+        method: httpMethod,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(purchaseData)
       });
