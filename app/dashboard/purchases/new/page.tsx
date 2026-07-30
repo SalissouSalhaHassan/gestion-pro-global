@@ -127,6 +127,13 @@ export default function NewPurchasePage() {
   const [tvaGlobalePercent, setTvaGlobalePercent] = useState(0);
   const [transport, setTransport] = useState(0);
   const [isEditingTransport, setIsEditingTransport] = useState(false);
+  const [commission, setCommission] = useState(0);
+  const [chargementDechargement, setChargementDechargement] = useState(0);
+  const [fraisDeRoute, setFraisDeRoute] = useState(0);
+  const [fraisDeDouane, setFraisDeDouane] = useState(0);
+  const [controleDouanier, setControleDouanier] = useState(0);
+  const [bicPercent, setBicPercent] = useState(2);
+  const [autresFrais, setAutresFrais] = useState(0);
 
   // Payment Inputs
   const [acompte, setAcompte] = useState(0);
@@ -309,8 +316,14 @@ export default function NewPurchasePage() {
     const sousTotalHT = totalLinesHT;
     const totalRemise = totalLinesRemise + remiseGlobale;
     const netHT = Math.max(0, sousTotalHT - totalRemise);
+    
     const tvaTotal = totalLinesTVA + ((netHT * tvaGlobalePercent) / 100);
-    const totalTTC = netHT + tvaTotal + transport;
+    const bicAmount = (netHT * bicPercent) / 100;
+    const totalTaxes = tvaTotal + bicAmount;
+
+    const totalFraisAncillary = transport + commission + chargementDechargement + fraisDeRoute + fraisDeDouane + controleDouanier + autresFrais;
+
+    const totalTTC = netHT + totalTaxes + totalFraisAncillary;
     const resteDuaPayer = Math.max(0, totalTTC - acompte);
     const totalQuantite = items.reduce((acc, item) => acc + item.quantite, 0);
 
@@ -320,14 +333,37 @@ export default function NewPurchasePage() {
       totalRemise,
       netHT,
       tvaTotal,
+      bicPercent,
+      bicAmount,
+      totalTaxes,
       transport,
+      commission,
+      chargementDechargement,
+      fraisDeRoute,
+      fraisDeDouane,
+      controleDouanier,
+      autresFrais,
+      totalFraisAncillary,
       totalTTC,
       acompte,
       resteDuaPayer,
       totalQuantite,
       linesCount: items.length
     };
-  }, [items, remiseGlobale, tvaGlobalePercent, transport, acompte]);
+  }, [
+    items, 
+    remiseGlobale, 
+    tvaGlobalePercent, 
+    transport, 
+    commission, 
+    chargementDechargement, 
+    fraisDeRoute, 
+    fraisDeDouane, 
+    controleDouanier, 
+    bicPercent, 
+    autresFrais, 
+    acompte
+  ]);
 
   // Stock impact calculations
   const stockImpact = useMemo(() => {
@@ -1164,30 +1200,116 @@ export default function NewPurchasePage() {
                 <span className="text-rose-600 font-bold">-{new Intl.NumberFormat("fr-FR").format(totals.totalRemise)} {devise}</span>
               </div>
 
-              {/* TVA */}
-              <div className="flex justify-between items-center text-slate-600 font-bold">
-                <span>TVA ({tvaGlobalePercent}%)</span>
-                <span className="text-slate-900 font-black">{new Intl.NumberFormat("fr-FR").format(totals.tvaTotal)} {devise}</span>
+              {/* Net HT */}
+              <div className="flex justify-between items-center text-slate-700 font-black pt-1 border-t border-slate-100">
+                <span>Net HT</span>
+                <span className="text-indigo-600">{new Intl.NumberFormat("fr-FR").format(totals.netHT)} {devise}</span>
               </div>
 
-              {/* Transport */}
-              <div className="flex justify-between items-center text-slate-600 font-bold">
-                <span className="flex items-center gap-1.5">
-                  Frais de transport
-                  <button onClick={() => setIsEditingTransport(!isEditingTransport)} className="text-indigo-600 hover:text-indigo-800">
-                    <Edit2 size={12} />
-                  </button>
-                </span>
-                {isEditingTransport ? (
+              {/* SECTION FRAIS LOGISTIQUE & DOUANE */}
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Frais d'approvisionnement & Logistique</div>
+
+                {/* Frais de transport */}
+                <div className="flex justify-between items-center text-slate-600 font-semibold">
+                  <span>Frais de Transport</span>
                   <input 
                     type="number" 
                     value={transport}
                     onChange={e => setTransport(Number(e.target.value))}
-                    className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
                   />
-                ) : (
-                  <span className="text-slate-900 font-black">{new Intl.NumberFormat("fr-FR").format(transport)} {devise}</span>
-                )}
+                </div>
+
+                {/* Commission */}
+                <div className="flex justify-between items-center text-slate-600 font-semibold">
+                  <span>Commission</span>
+                  <input 
+                    type="number" 
+                    value={commission}
+                    onChange={e => setCommission(Number(e.target.value))}
+                    className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+
+                {/* Chargement & Déchargement */}
+                <div className="flex justify-between items-center text-slate-600 font-semibold">
+                  <span>Chargement & Déchargement</span>
+                  <input 
+                    type="number" 
+                    value={chargementDechargement}
+                    onChange={e => setChargementDechargement(Number(e.target.value))}
+                    className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+
+                {/* Frais de Route */}
+                <div className="flex justify-between items-center text-slate-600 font-semibold">
+                  <span>Frais de Route</span>
+                  <input 
+                    type="number" 
+                    value={fraisDeRoute}
+                    onChange={e => setFraisDeRoute(Number(e.target.value))}
+                    className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+
+                {/* Frais de Douane */}
+                <div className="flex justify-between items-center text-slate-600 font-semibold">
+                  <span>Frais de Douane</span>
+                  <input 
+                    type="number" 
+                    value={fraisDeDouane}
+                    onChange={e => setFraisDeDouane(Number(e.target.value))}
+                    className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+
+                {/* Contrôle Douanier */}
+                <div className="flex justify-between items-center text-slate-600 font-semibold">
+                  <span>Contrôle Douanier</span>
+                  <input 
+                    type="number" 
+                    value={controleDouanier}
+                    onChange={e => setControleDouanier(Number(e.target.value))}
+                    className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+
+                {/* Autres Frais */}
+                <div className="flex justify-between items-center text-slate-600 font-semibold">
+                  <span>Autres Frais</span>
+                  <input 
+                    type="number" 
+                    value={autresFrais}
+                    onChange={e => setAutresFrais(Number(e.target.value))}
+                    className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* SECTION TAXES & IMPÔTS */}
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Taxes & Impôts</div>
+
+                {/* TVA */}
+                <div className="flex justify-between items-center text-slate-600 font-bold">
+                  <span>TVA ({tvaGlobalePercent}%)</span>
+                  <span className="text-slate-900 font-black">{new Intl.NumberFormat("fr-FR").format(totals.tvaTotal)} {devise}</span>
+                </div>
+
+                {/* BIC (2%) */}
+                <div className="flex justify-between items-center text-slate-600 font-bold">
+                  <span className="flex items-center gap-1">
+                    BIC (<input 
+                      type="number" 
+                      value={bicPercent}
+                      onChange={e => setBicPercent(Number(e.target.value))}
+                      className="w-10 bg-slate-50 border border-slate-200 rounded px-1 text-center font-bold text-slate-800"
+                    />%)
+                  </span>
+                  <span className="text-slate-900 font-black">{new Intl.NumberFormat("fr-FR").format(totals.bicAmount)} {devise}</span>
+                </div>
               </div>
 
               {/* BIG TOTAL TTC BOX */}
