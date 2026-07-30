@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { 
   ShoppingCart, 
@@ -91,7 +91,7 @@ type RecentPurchase = {
   statut: string;
 };
 
-export default function NewPurchasePage() {
+function PurchaseWorkspaceContent() {
   const router = useRouter();
   
   // Data lists
@@ -1591,5 +1591,18 @@ export default function NewPurchasePage() {
       )}
 
     </div>
+  );
+}
+
+export default function NewPurchasePage() {
+  return (
+    <Suspense fallback={
+      <div className="h-[85vh] flex flex-col items-center justify-center text-slate-400 font-sans">
+        <Loader2 className="animate-spin mb-4 text-indigo-600" size={48} />
+        <p className="font-bold text-lg text-slate-600">Chargement du Workspace Achat...</p>
+      </div>
+    }>
+      <PurchaseWorkspaceContent />
+    </Suspense>
   );
 }
