@@ -409,4 +409,54 @@ export class PurchaseService {
 
     return payment;
   }
+
+  async deletePayment(paymentId: number, purchaseId: number, userId?: number, username?: string) {
+    // 1. Get payment info
+    const { data: payment, error: fetchError } = await this.supabase
+      .from('paiements')
+      .select('montant_regle')
+      .eq('id', paymentId)
+      .single();
+
+    if (fetchError || !payment) throw new Error("Paiement introuvable");
+
+    // 2. Delete payment
+    const { error: deleteError } = await this.supabase
+      .from('paiements')
+      .delete()
+      .eq('id', paymentId);
+
+    if (deleteError) throw new Error(deleteError.message);
+
+    // 3. Recalculate total paid
+    const { data: allPayments } = await this.supabase
+      .from('paiements')
+      .select('montant_regle')
+      .eq('achat_id', purchaseId);
+
+    const newTotalPaid = (allPayments || []).reduce((acc, p) => acc + (p.montant_regle || 0), 0);
+
+    const { data: purchase } = await this.supabase
+      .from('achats')
+      .select('montant_total')
+      .eq('id', purchaseId)
+      .single();
+
+    const total = purchase?.montant_total || 0;
+
+    let statut = "Non Payée";
+    if (newTotalPaid > 0.001) {
+      statut = Math.abs(total - newTotalPaid) < 0.01 ? "Payée" : "Partiellement Payée";
+    }
+
+    await this.supabase
+      .from('achats')
+      .update({
+        montant_paye: newTotalPaid,
+        statut: statut
+      })
+      .eq('id', purchaseId);
+
+    return true;
+  }
 }

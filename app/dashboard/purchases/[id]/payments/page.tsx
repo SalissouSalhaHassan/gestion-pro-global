@@ -57,8 +57,10 @@ export default function PurchasePaymentsPage({ params: paramsPromise }: { params
     try {
       const res = await fetch(`/api/purchases/${params.id}`);
       const data = await res.json();
-      setPurchase(data);
-      setAmount(data.montant_total - data.montant_paye);
+      const paiementsList = Array.isArray(data.paiements) ? data.paiements : [];
+      setPurchase({ ...data, paiements: paiementsList });
+      const remaining = Math.max(0, (data.montant_total || 0) - (data.montant_paye || 0));
+      setAmount(remaining);
     } catch (error) {
       console.error("Failed to fetch purchase", error);
     } finally {
@@ -80,14 +82,27 @@ export default function PurchasePaymentsPage({ params: paramsPromise }: { params
 
       if (!res.ok) throw new Error("Failed to add payment");
 
-      setAmount(0);
       setReference("");
-      fetchPurchase();
+      await fetchPurchase();
     } catch (error) {
       console.error(error);
       alert("Erreur lors de l'enregistrement du paiement.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeletePayment = async (paymentId: number) => {
+    if (!confirm("Voulez-vous vraiment supprimer ce règlement ? Cette action réajustera le solde de la facture.")) return;
+    try {
+      const res = await fetch(`/api/purchases/${params.id}/payments?paymentId=${paymentId}`, {
+        method: "DELETE"
+      });
+      if (!res.ok) throw new Error("Failed to delete payment");
+      await fetchPurchase();
+    } catch (error) {
+      console.error(error);
+      alert("Erreur lors de la suppression du règlement.");
     }
   };
 
@@ -100,10 +115,11 @@ export default function PurchasePaymentsPage({ params: paramsPromise }: { params
 
   if (!purchase) return <div className="text-center py-20 font-black text-slate-400 text-2xl">Achat introuvable.</div>;
 
-  const due = purchase.montant_total - purchase.montant_paye;
+  const due = Math.max(0, purchase.montant_total - purchase.montant_paye);
+  const paymentsList = Array.isArray(purchase.paiements) ? purchase.paiements : [];
 
   return (
-    <div className="space-y-8 max-w-[1400px] mx-auto pb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="space-y-8 max-w-[1400px] mx-auto pb-10 animate-in fade-in slide-in-from-bottom-4 duration-700 font-sans">
       
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -161,7 +177,7 @@ export default function PurchasePaymentsPage({ params: paramsPromise }: { params
                 <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Calendar size={18} /></div>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none mb-1">Date Facture</p>
-                  <p className="font-black text-slate-900">{new Date(purchase.date_achat).toLocaleDateString("fr-FR")}</p>
+                  <p className="font-black text-slate-900">{purchase.date_achat ? new Date(purchase.date_achat).toLocaleDateString("fr-FR") : "-"}</p>
                 </div>
               </div>
             </div>
@@ -209,7 +225,7 @@ export default function PurchasePaymentsPage({ params: paramsPromise }: { params
 
             <button 
               type="submit" disabled={saving || amount <= 0}
-              className="w-full bg-white text-indigo-600 px-8 py-5 rounded-[24px] font-black shadow-xl hover:bg-indigo-50 transition-all active:scale-95 flex items-center justify-center gap-3"
+              className="w-full bg-white text-indigo-600 px-8 py-5 rounded-[24px] font-black shadow-xl hover:bg-indigo-50 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
             >
               {saving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />} 
               Valider le Paiement
@@ -239,18 +255,20 @@ export default function PurchasePaymentsPage({ params: paramsPromise }: { params
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {purchase.paiements.length === 0 ? (
+                  {paymentsList.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-20 text-center text-slate-300 font-bold">Aucun règlement enregistré</td>
+                      <td colSpan={5} className="py-20 text-center text-slate-400 font-bold">Aucun règlement enregistré</td>
                     </tr>
                   ) : (
-                    purchase.paiements.map(payment => (
+                    paymentsList.map(payment => (
                       <tr key={payment.id} className="group hover:bg-slate-50/50 transition-colors">
-                        <td className="px-10 py-6 text-slate-500 font-bold">{new Date(payment.date_operation).toLocaleDateString("fr-FR")}</td>
+                        <td className="px-10 py-6 text-slate-500 font-bold">
+                          {payment.date_operation ? new Date(payment.date_operation).toLocaleDateString("fr-FR") : "-"}
+                        </td>
                         <td className="px-10 py-6">
                           <div className="flex items-center gap-3">
                             <div className="p-2 bg-slate-50 text-slate-400 rounded-lg group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors"><CreditCard size={14} /></div>
-                            <span className="font-black text-slate-700">{payment.moyen_reglement}</span>
+                            <span className="font-black text-slate-700">{payment.moyen_reglement || "Espèces"}</span>
                           </div>
                         </td>
                         <td className="px-10 py-6 text-slate-500 font-black">{payment.reference_paiement || "-"}</td>
@@ -258,7 +276,11 @@ export default function PurchasePaymentsPage({ params: paramsPromise }: { params
                           {new Intl.NumberFormat("fr-FR").format(payment.montant_regle)} F
                         </td>
                         <td className="px-10 py-6 text-right">
-                          <button className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
+                          <button 
+                            onClick={() => handleDeletePayment(payment.id)}
+                            title="Supprimer le règlement"
+                            className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-2xl transition-all"
+                          >
                             <Trash2 size={18} />
                           </button>
                         </td>
