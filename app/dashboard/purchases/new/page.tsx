@@ -1053,6 +1053,7 @@ function PurchaseWorkspaceContent() {
                     <th className="px-4 py-3 text-center">Qté</th>
                     <th className="px-4 py-3 text-right">Prix Uni. ({devise})</th>
                     <th className="px-4 py-3 text-center">Remise (%)</th>
+                    <th className="px-4 py-3 text-right text-amber-700">Prix d'Arrivée ({devise})</th>
                     <th className="px-4 py-3 text-right">Total ({devise})</th>
                     <th className="px-4 py-3 text-center">Actions</th>
                   </tr>
@@ -1060,83 +1061,95 @@ function PurchaseWorkspaceContent() {
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
+                      <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
                         <Package size={36} className="mx-auto mb-2 opacity-30 text-indigo-600" />
                         Aucun article sélectionné. Utilisez la recherche ou cliquez sur les cartes pour en ajouter.
                       </td>
                     </tr>
                   ) : (
-                    items.map((item, index) => (
-                      <tr key={index} className="hover:bg-indigo-50/30 transition-colors group">
-                        {/* Ref */}
-                        <td className="px-4 py-3 font-bold text-indigo-600">{item.reference}</td>
+                    items.map((item, index) => {
+                      const landedRatio = totals.netHT > 0 ? totals.totalTTC / totals.netHT : 1;
+                      const lineLandedUnitPrice = Number((item.prix_unitaire_ht * (1 - (item.remise_percent || 0)/100) * landedRatio).toFixed(2));
+                      
+                      return (
+                        <tr key={index} className="hover:bg-indigo-50/30 transition-colors group">
+                          {/* Ref */}
+                          <td className="px-4 py-3 font-bold text-indigo-600">{item.reference}</td>
 
-                        {/* Designation */}
-                        <td className="px-4 py-3">
-                          <div className="font-black text-slate-900">{item.designation}</div>
-                          {item.categorie && <div className="text-[10px] text-slate-400 font-semibold">{item.categorie}</div>}
-                        </td>
+                          {/* Designation */}
+                          <td className="px-4 py-3">
+                            <div className="font-black text-slate-900">{item.designation}</div>
+                            {item.categorie && <div className="text-[10px] text-slate-400 font-semibold">{item.categorie}</div>}
+                          </td>
 
-                        {/* Depot */}
-                        <td className="px-4 py-3">
-                          <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-200">
-                            {item.depot_nom}
-                          </span>
-                        </td>
+                          {/* Depot */}
+                          <td className="px-4 py-3">
+                            <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-200">
+                              {item.depot_nom}
+                            </span>
+                          </td>
 
-                        {/* Qty Input */}
-                        <td className="px-4 py-3 text-center">
-                          <input 
-                            type="number" 
-                            min="1"
-                            value={item.quantite}
-                            onChange={e => handleUpdateItem(index, 'quantite', Number(e.target.value))}
-                            className="w-16 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-center font-black text-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
-                          />
-                        </td>
+                          {/* Qty Input */}
+                          <td className="px-4 py-3 text-center">
+                            <input 
+                              type="number" 
+                              min="1"
+                              value={item.quantite}
+                              onChange={e => handleUpdateItem(index, 'quantite', Number(e.target.value))}
+                              className="w-16 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-center font-black text-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                            />
+                          </td>
 
-                        {/* Unit Price Input */}
-                        <td className="px-4 py-3 text-right">
-                          <input 
-                            type="number" 
-                            min="0"
-                            value={item.prix_unitaire_ht}
-                            onChange={e => handleUpdateItem(index, 'prix_unitaire_ht', Number(e.target.value))}
-                            className="w-24 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-right font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
-                          />
-                        </td>
+                          {/* Unit Price Input */}
+                          <td className="px-4 py-3 text-right">
+                            <input 
+                              type="number" 
+                              min="0"
+                              value={item.prix_unitaire_ht}
+                              onChange={e => handleUpdateItem(index, 'prix_unitaire_ht', Number(e.target.value))}
+                              className="w-24 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-right font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                            />
+                          </td>
 
-                        {/* Remise % */}
-                        <td className="px-4 py-3 text-center">
-                          <input 
-                            type="number" 
-                            min="0"
-                            max="100"
-                            value={item.remise_percent}
-                            onChange={e => handleUpdateItem(index, 'remise_percent', Number(e.target.value))}
-                            className="w-14 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-center font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
-                          />
-                        </td>
+                          {/* Remise % */}
+                          <td className="px-4 py-3 text-center">
+                            <input 
+                              type="number" 
+                              min="0"
+                              max="100"
+                              value={item.remise_percent}
+                              onChange={e => handleUpdateItem(index, 'remise_percent', Number(e.target.value))}
+                              className="w-14 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-center font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                            />
+                          </td>
 
-                        {/* Line Total */}
-                        <td className="px-4 py-3 text-right font-black text-indigo-600 text-sm">
-                          {new Intl.NumberFormat("fr-FR").format(item.montant_ligne)}
-                        </td>
+                          {/* Prix d'Arrivée (Landed Unit Cost) */}
+                          <td className="px-4 py-3 text-right">
+                            <span className="inline-block px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-700 font-black rounded-lg text-xs shadow-xs" title="Prix de revient unitaire (Toutes charges & ترانزيت incluses)">
+                              {new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(lineLandedUnitPrice)}
+                            </span>
+                          </td>
 
-                        {/* Actions */}
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button 
-                              onClick={() => handleRemoveLine(index)} 
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                              title="Supprimer l'article"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                          {/* Line Total */}
+                          <td className="px-4 py-3 text-right font-black text-indigo-600 text-sm">
+                            {new Intl.NumberFormat("fr-FR").format(item.montant_ligne)}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button 
+                                onClick={() => handleRemoveLine(index)} 
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                title="Supprimer l'article"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
