@@ -145,6 +145,10 @@ function PurchaseWorkspaceContent() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [newPaymentAmount, setNewPaymentAmount] = useState(0);
 
+  // Print Modal State
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [lastSavedPurchase, setLastSavedPurchase] = useState<any>(null);
+
   // Attachments Drag & Drop
   const [attachments, setAttachments] = useState<{ name: string; size: string }[]>([]);
   const [isDragging, setIsDragging] = useState(false);
