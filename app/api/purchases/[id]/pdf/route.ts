@@ -37,6 +37,22 @@ export async function GET(
     // Fetch Company Info
     const { data: company } = await supabase.from('informations_entreprise').select('*').limit(1).single();
 
+    // Extract financial details metadata JSON if present in notes or purchase object
+    let meta: any = {};
+    let cleanNotes = purchase.notes || '';
+    if (cleanNotes.includes('[FINANCIAL_DETAILS]')) {
+      const parts = cleanNotes.split('[FINANCIAL_DETAILS]');
+      cleanNotes = parts[0].trim();
+      const jsonStr = parts[1]?.split('[/FINANCIAL_DETAILS]')[0];
+      try { meta = JSON.parse(jsonStr || '{}'); } catch (e) {}
+    } else if (purchase.frais_details) {
+      meta = purchase.frais_details;
+    }
+
+    const deviseSymbol = meta.devise || purchase.devise || 'FCFA';
+    const netHT = Math.max(0, (purchase.sous_total || 0) - (purchase.remise || 0));
+    const landedRatio = netHT > 0 ? (purchase.montant_total || 0) / netHT : 1;
+
     const formatDate = (value: string | null | undefined) => {
       if (!value) return '—';
       try {
@@ -145,21 +161,32 @@ export async function GET(
         }
         .totals {
             margin-left: auto;
-            width: ${isA5 ? '100%' : '50%'};
-            font-size: ${isA5 ? '11px' : '13px'};
+            width: ${isA5 ? '100%' : '60%'};
+            font-size: ${isA5 ? '11px' : '12px'};
+        }
+        .total-section-title {
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-top: 8px;
+            margin-bottom: 2px;
+            border-bottom: 1px dashed #cbd5e1;
+            padding-bottom: 2px;
         }
         .total-row {
             display: flex;
             justify-content: space-between;
-            padding: 6px 0;
-            border-bottom: 1px solid #e2e8f0;
+            padding: 4px 0;
+            border-bottom: 1px border-slate-100;
         }
         .total-row.final {
             border-bottom: none;
             font-weight: 900;
-            font-size: ${isA5 ? '14px' : '18px'};
+            font-size: ${isA5 ? '14px' : '17px'};
             color: #4f46e5;
             padding-top: 10px;
+            border-top: 2px solid #0f172a;
         }
         .footer {
             margin-top: 50px;
@@ -246,6 +273,10 @@ export async function GET(
                     <span class="info-value">${purchase.depot_nom}</span>
                 </div>
                 <div class="info-row">
+                    <span class="info-label">Devise:</span>
+                    <span class="info-value">${deviseSymbol}</span>
+                </div>
+                <div class="info-row">
                     <span class="info-label">Statut:</span>
                     <span class="info-value" style="color: ${purchase.statut === 'Payée' ? '#10b981' : '#f59e0b'};">${purchase.statut}</span>
                 </div>
@@ -258,69 +289,139 @@ export async function GET(
                     <th>Désignation</th>
                     <th style="text-align: center;">Qté</th>
                     <th style="text-align: center;">Unité</th>
-                    <th style="text-align: right;">P.U HT</th>
-                    <th style="text-align: right;">Total HT</th>
+                    <th style="text-align: right;">P.U HT (${deviseSymbol})</th>
+                    <th style="text-align: right; color: #b45309; background: #fffbeb;">Prix d'Arrivée (${deviseSymbol})</th>
+                    <th style="text-align: right;">Total HT (${deviseSymbol})</th>
                 </tr>
             </thead>
             <tbody>
-                ${purchase.achat_items.map((item: any) => `
+                ${purchase.achat_items.map((item: any) => {
+                    const pu = item.prix_unitaire_ht || 0;
+                    const remPct = item.remise_percent || 0;
+                    const puNet = pu * (1 - remPct / 100);
+                    const landedUnitPrice = Number((puNet * landedRatio).toFixed(2));
+                    return `
                     <tr>
                         <td style="font-weight: 700;">${item.designation}</td>
                         <td style="text-align: center;">${item.quantite}</td>
                         <td style="text-align: center;">${item.unite || ''}</td>
                         <td style="text-align: right;">${Number(item.prix_unitaire_ht).toLocaleString('fr-FR')}</td>
+                        <td style="text-align: right; font-weight: 900; color: #b45309; background: #fffbeb;">${Number(landedUnitPrice).toLocaleString('fr-FR')}</td>
                         <td style="text-align: right; font-weight: 700;">${Number(item.montant_ligne).toLocaleString('fr-FR')}</td>
                     </tr>
-                `).join('')}
+                    `;
+                }).join('')}
             </tbody>
         </table>
 
         <div class="totals">
-            <div class="total-row">
+            <div class="total-row" style="font-weight: 700;">
                 <span>Sous-Total HT</span>
-                <span>${Number(purchase.sous_total).toLocaleString('fr-FR')} F</span>
+                <span>${Number(purchase.sous_total || 0).toLocaleString('fr-FR')} ${deviseSymbol}</span>
             </div>
             ${purchase.remise > 0 ? `
                 <div class="total-row">
-                    <span>Remise</span>
-                    <span>- ${Number(purchase.remise).toLocaleString('fr-FR')} F</span>
+                    <span>Remise globale</span>
+                    <span style="color: #dc2626;">- ${Number(purchase.remise).toLocaleString('fr-FR')} ${deviseSymbol}</span>
                 </div>
             ` : ''}
-            ${purchase.taxe > 0 ? `
-                <div class="total-row">
-                    <span>Taxes</span>
-                    <span>+ ${Number(purchase.taxe).toLocaleString('fr-FR')} F</span>
-                </div>
-            ` : ''}
-            ${purchase.transport > 0 ? `
+            <div class="total-row" style="font-weight: 700; color: #4f46e5;">
+                <span>Net HT</span>
+                <span>${Number(netHT).toLocaleString('fr-FR')} ${deviseSymbol}</span>
+            </div>
+
+            <!-- Frais Logistique & Approvisionnement Breakdown -->
+            <div class="total-section-title">Frais d'approvisionnement & Logistique</div>
+            ${(meta.transport || purchase.transport) > 0 ? `
                 <div class="total-row">
                     <span>Frais de Transport</span>
-                    <span>+ ${Number(purchase.transport).toLocaleString('fr-FR')} F</span>
+                    <span>+ ${Number(meta.transport || purchase.transport).toLocaleString('fr-FR')} ${deviseSymbol}</span>
                 </div>
             ` : ''}
+            ${meta.commission > 0 ? `
+                <div class="total-row">
+                    <span>Commission</span>
+                    <span>+ ${Number(meta.commission).toLocaleString('fr-FR')} ${deviseSymbol}</span>
+                </div>
+            ` : ''}
+            ${meta.chargementDechargement > 0 ? `
+                <div class="total-row">
+                    <span>Chargement & Déchargement</span>
+                    <span>+ ${Number(meta.chargementDechargement).toLocaleString('fr-FR')} ${deviseSymbol}</span>
+                </div>
+            ` : ''}
+            ${meta.fraisDeRoute > 0 ? `
+                <div class="total-row">
+                    <span>Frais de Route</span>
+                    <span>+ ${Number(meta.fraisDeRoute).toLocaleString('fr-FR')} ${deviseSymbol}</span>
+                </div>
+            ` : ''}
+            ${meta.fraisDeDouane > 0 ? `
+                <div class="total-row">
+                    <span>Frais de Douane</span>
+                    <span>+ ${Number(meta.fraisDeDouane).toLocaleString('fr-FR')} ${deviseSymbol}</span>
+                </div>
+            ` : ''}
+            ${meta.controleDouanier > 0 ? `
+                <div class="total-row">
+                    <span>Contrôle Douanier</span>
+                    <span>+ ${Number(meta.controleDouanier).toLocaleString('fr-FR')} ${deviseSymbol}</span>
+                </div>
+            ` : ''}
+            ${meta.transite1 > 0 ? `
+                <div class="total-row">
+                    <span>Transite 1er</span>
+                    <span>+ ${Number(meta.transite1).toLocaleString('fr-FR')} ${deviseSymbol}</span>
+                </div>
+            ` : ''}
+            ${meta.transite2 > 0 ? `
+                <div class="total-row">
+                    <span>Transite 2ème</span>
+                    <span>+ ${Number(meta.transite2).toLocaleString('fr-FR')} ${deviseSymbol}</span>
+                </div>
+            ` : ''}
+            ${meta.transite3 > 0 ? `
+                <div class="total-row">
+                    <span>Transite 3ème</span>
+                    <span>+ ${Number(meta.transite3).toLocaleString('fr-FR')} ${deviseSymbol}</span>
+                </div>
+            ` : ''}
+            ${meta.autresFrais > 0 ? `
+                <div class="total-row">
+                    <span>Autres Frais</span>
+                    <span>+ ${Number(meta.autresFrais).toLocaleString('fr-FR')} ${deviseSymbol}</span>
+                </div>
+            ` : ''}
+
+            <!-- Taxes & Impôts Breakdown -->
+            ${purchase.taxe > 0 ? `
+                <div class="total-section-title">Taxes & Impôts</div>
+                <div class="total-row">
+                    <span>BIC (${meta.bicPercent || 2}%)</span>
+                    <span>+ ${Number(purchase.taxe).toLocaleString('fr-FR')} ${deviseSymbol}</span>
+                </div>
+            ` : ''}
+
             <div class="total-row final">
-                <span>NET À PAYER</span>
-                <span>${Number(purchase.montant_total).toLocaleString('fr-FR')} F</span>
+                <span>TOTAL TTC (NET À PAYER)</span>
+                <span>${Number(purchase.montant_total).toLocaleString('fr-FR')} ${deviseSymbol}</span>
             </div>
             <div class="total-row" style="margin-top: 10px; border-top: 2px solid #0f172a; padding-top: 10px;">
                 <span style="font-weight: 700;">Acompte versé</span>
-                <span style="font-weight: 900; color: #10b981;">${Number(purchase.montant_paye).toLocaleString('fr-FR')} F</span>
+                <span style="font-weight: 900; color: #10b981;">${Number(purchase.montant_paye).toLocaleString('fr-FR')} ${deviseSymbol}</span>
             </div>
             <div class="total-row">
                 <span style="font-weight: 700;">Reste à payer</span>
-                <span style="font-weight: 900; color: #ef4444;">${Number(purchase.montant_total - purchase.montant_paye).toLocaleString('fr-FR')} F</span>
+                <span style="font-weight: 900; color: #ef4444;">${Number(purchase.montant_total - purchase.montant_paye).toLocaleString('fr-FR')} ${deviseSymbol}</span>
             </div>
         </div>
 
-        ${purchase.notes ? (() => {
-            const cleanNotes = String(purchase.notes).split('[FINANCIAL_DETAILS]')[0].trim();
-            return cleanNotes ? `
+        ${cleanNotes ? `
             <div style="margin-top: 30px; font-size: 11px; border: 1px dashed #cbd5e1; padding: 10px;">
                 <p style="font-weight: 900; margin-bottom: 4px; text-transform: uppercase;">Notes:</p>
                 <p>${cleanNotes}</p>
             </div>
-            ` : '';
-        })() : ''}
+        ` : ''}
 
         <div class="signature-grid">
             <div>
