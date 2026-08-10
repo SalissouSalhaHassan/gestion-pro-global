@@ -312,12 +312,15 @@ export async function GET(
             </div>
         </div>
 
-        ${purchase.notes ? `
+        ${purchase.notes ? (() => {
+            const cleanNotes = String(purchase.notes).split('[FINANCIAL_DETAILS]')[0].trim();
+            return cleanNotes ? `
             <div style="margin-top: 30px; font-size: 11px; border: 1px dashed #cbd5e1; padding: 10px;">
                 <p style="font-weight: 900; margin-bottom: 4px; text-transform: uppercase;">Notes:</p>
-                <p>${purchase.notes}</p>
+                <p>${cleanNotes}</p>
             </div>
-        ` : ''}
+            ` : '';
+        })() : ''}
 
         <div class="signature-grid">
             <div>

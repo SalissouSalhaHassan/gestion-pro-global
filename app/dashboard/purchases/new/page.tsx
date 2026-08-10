@@ -127,7 +127,6 @@ function PurchaseWorkspaceContent() {
 
   // Financial Summary Inputs
   const [remiseGlobale, setRemiseGlobale] = useState(0);
-  const [tvaGlobalePercent, setTvaGlobalePercent] = useState(0);
   const [transport, setTransport] = useState(0);
   const [isEditingTransport, setIsEditingTransport] = useState(false);
   const [commission, setCommission] = useState(0);
@@ -135,6 +134,9 @@ function PurchaseWorkspaceContent() {
   const [fraisDeRoute, setFraisDeRoute] = useState(0);
   const [fraisDeDouane, setFraisDeDouane] = useState(0);
   const [controleDouanier, setControleDouanier] = useState(0);
+  const [transite1, setTransite1] = useState(0);
+  const [transite2, setTransite2] = useState(0);
+  const [transite3, setTransite3] = useState(0);
   const [bicPercent, setBicPercent] = useState(2);
   const [autresFrais, setAutresFrais] = useState(0);
 
@@ -162,6 +164,7 @@ function PurchaseWorkspaceContent() {
       FCFA: 1,
       EUR: 655.957,
       USD: 600,
+      CNY: 85.0,
       NGN: 0.40
     };
 
@@ -189,11 +192,10 @@ function PurchaseWorkspaceContent() {
         const newPu = Number((item.prix_unitaire_ht * customExchangeRate).toFixed(2));
         const sub = item.quantite * newPu;
         const rem = (sub * item.remise_percent) / 100;
-        const tax = ((sub - rem) * item.tva_percent) / 100;
         return {
           ...item,
           prix_unitaire_ht: newPu,
-          montant_ligne: Number((sub - rem + tax).toFixed(2))
+          montant_ligne: Number((sub - rem).toFixed(2))
         };
       });
       setItems(convertedItems);
@@ -249,9 +251,34 @@ function PurchaseWorkspaceContent() {
           setSelectedDepot(p.depot_nom || (depList[0]?.nom || "BOUTIQUE"));
           setRefFacture(p.numero_facture);
           setDateAchat(p.date_achat ? p.date_achat.split('T')[0] : new Date().toISOString().split('T')[0]);
-          setNotes(p.notes || "");
-          setRemiseGlobale(p.remise || 0);
-          setTransport(p.transport || 0);
+
+          // Extract financial metadata JSON if present in notes or purchase object
+          let cleanNotes = p.notes || "";
+          let meta: any = {};
+          if (cleanNotes.includes("[FINANCIAL_DETAILS]")) {
+            const parts = cleanNotes.split("[FINANCIAL_DETAILS]");
+            cleanNotes = parts[0].trim();
+            const jsonStr = parts[1]?.split("[/FINANCIAL_DETAILS]")[0];
+            try { meta = JSON.parse(jsonStr || "{}"); } catch (e) {}
+          } else if (p.frais_details) {
+            meta = p.frais_details;
+          }
+
+          setNotes(cleanNotes);
+          if (meta.devise || p.devise) setDevise(meta.devise || p.devise);
+          setRemiseGlobale(meta.remiseGlobale ?? p.remise ?? 0);
+          setTransport(meta.transport ?? p.transport ?? 0);
+          setCommission(meta.commission ?? 0);
+          setChargementDechargement(meta.chargementDechargement ?? 0);
+          setFraisDeRoute(meta.fraisDeRoute ?? 0);
+          setFraisDeDouane(meta.fraisDeDouane ?? 0);
+          setControleDouanier(meta.controleDouanier ?? 0);
+          setTransite1(meta.transite1 ?? 0);
+          setTransite2(meta.transite2 ?? 0);
+          setTransite3(meta.transite3 ?? 0);
+          setAutresFrais(meta.autresFrais ?? 0);
+          setBicPercent(meta.bicPercent ?? 2);
+
           setAcompte(p.montant_paye || 0);
           setIsDraft(p.statut === "Brouillon");
 
@@ -260,6 +287,9 @@ function PurchaseWorkspaceContent() {
               const matchedArt = artList.find(a => a.id === item.article_id);
               const pu = item.prix_unitaire_ht || 0;
               const qty = item.quantite || 1;
+              const remPct = item.remise_percent || 0;
+              const sub = qty * pu;
+              const rem = (sub * remPct) / 100;
               return {
                 article_id: item.article_id,
                 reference: matchedArt?.reference || `REF-${String(item.article_id).padStart(4, '0')}`,
@@ -268,9 +298,9 @@ function PurchaseWorkspaceContent() {
                 unite: item.unite || matchedArt?.unite || "unité",
                 quantite: qty,
                 prix_unitaire_ht: pu,
-                remise_percent: 0,
-                tva_percent: 19,
-                montant_ligne: item.montant_ligne || (qty * pu),
+                remise_percent: remPct,
+                tva_percent: 0,
+                montant_ligne: item.montant_ligne || (sub - rem),
                 depot_nom: p.depot_nom || "BOUTIQUE"
               };
             });
@@ -325,7 +355,6 @@ function PurchaseWorkspaceContent() {
   const handleQuickAddProduct = (article: Article) => {
     const existingIndex = items.findIndex(i => i.article_id === article.id);
     const pu = article.p_achat_ht || 300;
-    const tva = article.tva || 19;
 
     if (existingIndex > -1) {
       // Increment quantity
@@ -334,9 +363,8 @@ function PurchaseWorkspaceContent() {
       const newQty = target.quantite + 1;
       const sub = newQty * target.prix_unitaire_ht;
       const rem = (sub * target.remise_percent) / 100;
-      const tax = ((sub - rem) * target.tva_percent) / 100;
       target.quantite = newQty;
-      target.montant_ligne = sub - rem + tax;
+      target.montant_ligne = sub - rem;
       setItems(newItems);
     } else {
       // Add new line item
@@ -349,8 +377,8 @@ function PurchaseWorkspaceContent() {
         quantite: 1,
         prix_unitaire_ht: pu,
         remise_percent: 0,
-        tva_percent: tva,
-        montant_ligne: pu + (pu * tva / 100),
+        tva_percent: 0,
+        montant_ligne: pu,
         depot_nom: selectedDepot
       };
       setItems([...items, newItem]);
@@ -365,17 +393,15 @@ function PurchaseWorkspaceContent() {
     const qty = item.quantite > 0 ? item.quantite : 1;
     const pu = item.prix_unitaire_ht >= 0 ? item.prix_unitaire_ht : 0;
     const remPct = item.remise_percent >= 0 ? item.remise_percent : 0;
-    const tvaPct = item.tva_percent >= 0 ? item.tva_percent : 0;
 
     const sub = qty * pu;
     const rem = (sub * remPct) / 100;
-    const tax = ((sub - rem) * tvaPct) / 100;
 
     item.quantite = qty;
     item.prix_unitaire_ht = pu;
     item.remise_percent = remPct;
-    item.tva_percent = tvaPct;
-    item.montant_ligne = sub - rem + tax;
+    item.tva_percent = 0;
+    item.montant_ligne = sub - rem;
 
     updated[index] = item;
     setItems(updated);
@@ -399,21 +425,14 @@ function PurchaseWorkspaceContent() {
       return acc + ((sub * item.remise_percent) / 100);
     }, 0);
 
-    const totalLinesTVA = items.reduce((acc, item) => {
-      const sub = item.quantite * item.prix_unitaire_ht;
-      const rem = (sub * item.remise_percent) / 100;
-      return acc + (((sub - rem) * item.tva_percent) / 100);
-    }, 0);
-
     const sousTotalHT = totalLinesHT;
     const totalRemise = totalLinesRemise + remiseGlobale;
     const netHT = Math.max(0, sousTotalHT - totalRemise);
     
-    const tvaTotal = totalLinesTVA + ((netHT * tvaGlobalePercent) / 100);
     const bicAmount = (netHT * bicPercent) / 100;
-    const totalTaxes = tvaTotal + bicAmount;
+    const totalTaxes = bicAmount;
 
-    const totalFraisAncillary = transport + commission + chargementDechargement + fraisDeRoute + fraisDeDouane + controleDouanier + autresFrais;
+    const totalFraisAncillary = transport + commission + chargementDechargement + fraisDeRoute + fraisDeDouane + controleDouanier + transite1 + transite2 + transite3 + autresFrais;
 
     const totalTTC = netHT + totalTaxes + totalFraisAncillary;
     const resteDuaPayer = Math.max(0, totalTTC - acompte);
@@ -424,7 +443,7 @@ function PurchaseWorkspaceContent() {
       remiseGlobale,
       totalRemise,
       netHT,
-      tvaTotal,
+      tvaTotal: 0,
       bicPercent,
       bicAmount,
       totalTaxes,
@@ -434,6 +453,9 @@ function PurchaseWorkspaceContent() {
       fraisDeRoute,
       fraisDeDouane,
       controleDouanier,
+      transite1,
+      transite2,
+      transite3,
       autresFrais,
       totalFraisAncillary,
       totalTTC,
@@ -445,13 +467,15 @@ function PurchaseWorkspaceContent() {
   }, [
     items, 
     remiseGlobale, 
-    tvaGlobalePercent, 
     transport, 
     commission, 
     chargementDechargement, 
     fraisDeRoute, 
     fraisDeDouane, 
     controleDouanier, 
+    transite1,
+    transite2,
+    transite3,
     bicPercent, 
     autresFrais, 
     acompte
@@ -488,6 +512,26 @@ function PurchaseWorkspaceContent() {
     try {
       const finalStatus = statusOverride || (acompte >= totals.totalTTC ? "Payée" : acompte > 0 ? "Partiellement Payée" : "Non Payée");
       
+      const financialMetadata = {
+        remiseGlobale,
+        transport,
+        commission,
+        chargementDechargement,
+        fraisDeRoute,
+        fraisDeDouane,
+        controleDouanier,
+        transite1,
+        transite2,
+        transite3,
+        autresFrais,
+        bicPercent,
+        devise
+      };
+
+      const formattedNotes = notes.trim() 
+        ? `${notes.trim()}\n[FINANCIAL_DETAILS]${JSON.stringify(financialMetadata)}[/FINANCIAL_DETAILS]`
+        : `[FINANCIAL_DETAILS]${JSON.stringify(financialMetadata)}[/FINANCIAL_DETAILS]`;
+
       const purchaseData = {
         fournisseur_id: selectedSupplier,
         fournisseur_nom: activeSupplier?.nom || "Fournisseur",
@@ -500,7 +544,7 @@ function PurchaseWorkspaceContent() {
         montant_total: totals.totalTTC,
         montant_paye: totals.acompte,
         statut: finalStatus,
-        notes: notes,
+        notes: formattedNotes,
         depot_nom: selectedDepot,
         auto_stock: autoStockEntry,
         items: items.map(i => ({
@@ -843,6 +887,7 @@ function PurchaseWorkspaceContent() {
                   <option value="FCFA">FCFA</option>
                   <option value="EUR">EUR (€)</option>
                   <option value="USD">USD ($)</option>
+                  <option value="CNY">CNY (¥ - RMB)</option>
                   <option value="NGN">Naira (₦)</option>
                 </select>
               </div>
@@ -1006,17 +1051,16 @@ function PurchaseWorkspaceContent() {
                     <th className="px-4 py-3">Désignation</th>
                     <th className="px-4 py-3">Dépôt</th>
                     <th className="px-4 py-3 text-center">Qté</th>
-                    <th className="px-4 py-3 text-right">Prix Uni. (FCFA)</th>
+                    <th className="px-4 py-3 text-right">Prix Uni. ({devise})</th>
                     <th className="px-4 py-3 text-center">Remise (%)</th>
-                    <th className="px-4 py-3 text-center">TVA (%)</th>
-                    <th className="px-4 py-3 text-right">Total (FCFA)</th>
+                    <th className="px-4 py-3 text-right">Total ({devise})</th>
                     <th className="px-4 py-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
+                      <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
                         <Package size={36} className="mx-auto mb-2 opacity-30 text-indigo-600" />
                         Aucun article sélectionné. Utilisez la recherche ou cliquez sur les cartes pour en ajouter.
                       </td>
@@ -1070,18 +1114,6 @@ function PurchaseWorkspaceContent() {
                             max="100"
                             value={item.remise_percent}
                             onChange={e => handleUpdateItem(index, 'remise_percent', Number(e.target.value))}
-                            className="w-14 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-center font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
-                          />
-                        </td>
-
-                        {/* TVA % */}
-                        <td className="px-4 py-3 text-center">
-                          <input 
-                            type="number" 
-                            min="0"
-                            max="100"
-                            value={item.tva_percent}
-                            onChange={e => handleUpdateItem(index, 'tva_percent', Number(e.target.value))}
                             className="w-14 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-center font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
                           />
                         </td>
@@ -1377,6 +1409,39 @@ function PurchaseWorkspaceContent() {
                   />
                 </div>
 
+                {/* Transite 1er */}
+                <div className="flex justify-between items-center text-slate-600 font-semibold">
+                  <span>Transite 1er</span>
+                  <input 
+                    type="number" 
+                    value={transite1}
+                    onChange={e => setTransite1(Number(e.target.value))}
+                    className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+
+                {/* Transite 2eme */}
+                <div className="flex justify-between items-center text-slate-600 font-semibold">
+                  <span>Transite 2ème</span>
+                  <input 
+                    type="number" 
+                    value={transite2}
+                    onChange={e => setTransite2(Number(e.target.value))}
+                    className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+
+                {/* Transite 3eme */}
+                <div className="flex justify-between items-center text-slate-600 font-semibold">
+                  <span>Transite 3ème</span>
+                  <input 
+                    type="number" 
+                    value={transite3}
+                    onChange={e => setTransite3(Number(e.target.value))}
+                    className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+
                 {/* Autres Frais */}
                 <div className="flex justify-between items-center text-slate-600 font-semibold">
                   <span>Autres Frais</span>
@@ -1392,12 +1457,6 @@ function PurchaseWorkspaceContent() {
               {/* SECTION TAXES & IMPÔTS */}
               <div className="pt-2 border-t border-slate-100 space-y-2">
                 <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Taxes & Impôts</div>
-
-                {/* TVA */}
-                <div className="flex justify-between items-center text-slate-600 font-bold">
-                  <span>TVA ({tvaGlobalePercent}%)</span>
-                  <span className="text-slate-900 font-black">{new Intl.NumberFormat("fr-FR").format(totals.tvaTotal)} {devise}</span>
-                </div>
 
                 {/* BIC (2%) */}
                 <div className="flex justify-between items-center text-slate-600 font-bold">
@@ -1445,6 +1504,7 @@ function PurchaseWorkspaceContent() {
                   >
                     <option value="EUR">EUR (€)</option>
                     <option value="USD">USD ($)</option>
+                    <option value="CNY">CNY (¥ - RMB)</option>
                     <option value="FCFA">FCFA</option>
                     <option value="NGN">Naira (₦)</option>
                   </select>
