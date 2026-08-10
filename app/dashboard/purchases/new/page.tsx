@@ -149,9 +149,43 @@ function PurchaseWorkspaceContent() {
   const [attachments, setAttachments] = useState<{ name: string; size: string }[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Print Modal
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [lastSavedPurchase, setLastSavedPurchase] = useState<any>(null);
+  // New Supplier Modal State
+  const [isNewSupplierModalOpen, setIsNewSupplierModalOpen] = useState(false);
+  const [savingSupplier, setSavingSupplier] = useState(false);
+  const [newSupplierData, setNewSupplierData] = useState({
+    nom: "",
+    tel: "",
+    adresse: "",
+    contact: "",
+    email: ""
+  });
+
+  const handleCreateSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSupplierData.nom.trim()) {
+      alert("Le nom du fournisseur est obligatoire.");
+      return;
+    }
+    setSavingSupplier(true);
+    try {
+      const res = await fetch("/api/suppliers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newSupplierData)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Échec de la création du fournisseur");
+
+      setSuppliers(prev => [...prev, data]);
+      setSelectedSupplier(data.id);
+      setIsNewSupplierModalOpen(false);
+      setNewSupplierData({ nom: "", tel: "", adresse: "", contact: "", email: "" });
+    } catch (err: any) {
+      alert(`Erreur: ${err.message}`);
+    } finally {
+      setSavingSupplier(false);
+    }
+  };
 
   // Currency Converter State
   const [targetCurrency, setTargetCurrency] = useState<string>("EUR");
@@ -619,6 +653,107 @@ function PurchaseWorkspaceContent() {
     <div className="space-y-6 max-w-[1700px] mx-auto pb-12 animate-in fade-in slide-in-from-bottom-4 duration-500 font-sans">
       
       {/* ------------------------------------------------------------- */}
+      {/* NEW SUPPLIER MODAL */}
+      {/* ------------------------------------------------------------- */}
+      {isNewSupplierModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden p-6 space-y-5 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <Building2 className="text-indigo-600" size={22} />
+                Nouveau Fournisseur
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setIsNewSupplierModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateSupplier} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Nom du Fournisseur <span className="text-rose-500">*</span></label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="ex: China Global Trade Ltd"
+                  value={newSupplierData.nom}
+                  onChange={e => setNewSupplierData({ ...newSupplierData, nom: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Téléphone</label>
+                  <input 
+                    type="text" 
+                    placeholder="ex: +86 138 0000 0000"
+                    value={newSupplierData.tel}
+                    onChange={e => setNewSupplierData({ ...newSupplierData, tel: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Contact / Responsable</label>
+                  <input 
+                    type="text" 
+                    placeholder="ex: Mr. Zhang"
+                    value={newSupplierData.contact}
+                    onChange={e => setNewSupplierData({ ...newSupplierData, contact: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Email</label>
+                <input 
+                  type="email" 
+                  placeholder="ex: supplier@trade.com"
+                  value={newSupplierData.email}
+                  onChange={e => setNewSupplierData({ ...newSupplierData, email: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Adresse / Ville</label>
+                <input 
+                  type="text" 
+                  placeholder="ex: Guangzhou, China"
+                  value={newSupplierData.adresse}
+                  onChange={e => setNewSupplierData({ ...newSupplierData, adresse: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsNewSupplierModalOpen(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingSupplier || !newSupplierData.nom.trim()}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  {savingSupplier ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
+                  Enregistrer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
       {/* PRINT CONFIRMATION MODAL */}
       {/* ------------------------------------------------------------- */}
       {isPrintModalOpen && (
@@ -815,7 +950,16 @@ function PurchaseWorkspaceContent() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Fournisseur */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-600">Fournisseur <span className="text-rose-500">*</span></label>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-slate-600">Fournisseur <span className="text-rose-500">*</span></label>
+                  <button 
+                    type="button"
+                    onClick={() => setIsNewSupplierModalOpen(true)}
+                    className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 flex items-center gap-0.5 hover:underline"
+                  >
+                    <Plus size={12} /> Nouveau
+                  </button>
+                </div>
                 <select 
                   value={selectedSupplier} 
                   onChange={e => setSelectedSupplier(e.target.value === "" ? "" : Number(e.target.value))}
