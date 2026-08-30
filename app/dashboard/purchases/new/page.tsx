@@ -128,6 +128,7 @@ function PurchaseWorkspaceContent() {
   // Financial Summary Inputs
   const [remiseGlobale, setRemiseGlobale] = useState(0);
   const [transport, setTransport] = useState(0);
+  const [bateau, setBateau] = useState(0);
   const [isEditingTransport, setIsEditingTransport] = useState(false);
   const [commission, setCommission] = useState(0);
   const [chargementDechargement, setChargementDechargement] = useState(0);
@@ -306,6 +307,7 @@ function PurchaseWorkspaceContent() {
           if (meta.devise || p.devise) setDevise(meta.devise || p.devise);
           setRemiseGlobale(meta.remiseGlobale ?? p.remise ?? 0);
           setTransport(meta.transport ?? p.transport ?? 0);
+          setBateau(meta.bateau ?? 0);
           setCommission(meta.commission ?? 0);
           setChargementDechargement(meta.chargementDechargement ?? 0);
           setFraisDeRoute(meta.fraisDeRoute ?? 0);
@@ -470,7 +472,7 @@ function PurchaseWorkspaceContent() {
     const bicAmount = (netHT * bicPercent) / 100;
     const totalTaxes = bicAmount;
 
-    const totalFraisAncillary = transport + commission + chargementDechargement + fraisDeRoute + fraisDeDouane + controleDouanier + transite1 + transite2 + transite3 + autresFrais;
+    const totalFraisAncillary = transport + bateau + commission + chargementDechargement + fraisDeRoute + fraisDeDouane + controleDouanier + transite1 + transite2 + transite3 + autresFrais;
 
     const totalTTC = netHT + totalTaxes + totalFraisAncillary;
     const resteDuaPayer = Math.max(0, totalTTC - acompte);
@@ -486,6 +488,7 @@ function PurchaseWorkspaceContent() {
       bicAmount,
       totalTaxes,
       transport,
+      bateau,
       commission,
       chargementDechargement,
       fraisDeRoute,
@@ -506,6 +509,7 @@ function PurchaseWorkspaceContent() {
     items, 
     remiseGlobale, 
     transport, 
+    bateau,
     commission, 
     chargementDechargement, 
     fraisDeRoute, 
@@ -553,6 +557,7 @@ function PurchaseWorkspaceContent() {
       const financialMetadata = {
         remiseGlobale,
         transport,
+        bateau,
         commission,
         chargementDechargement,
         fraisDeRoute,
@@ -1511,6 +1516,17 @@ function PurchaseWorkspaceContent() {
                     type="number" 
                     value={transport}
                     onChange={e => setTransport(Number(e.target.value))}
+                    className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                </div>
+
+                {/* Bateau */}
+                <div className="flex justify-between items-center text-slate-600 font-semibold">
+                  <span>Bateau</span>
+                  <input 
+                    type="number" 
+                    value={bateau}
+                    onChange={e => setBateau(Number(e.target.value))}
                     className="w-24 bg-slate-50 border border-slate-200 rounded-lg p-1 text-right font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
                   />
                 </div>

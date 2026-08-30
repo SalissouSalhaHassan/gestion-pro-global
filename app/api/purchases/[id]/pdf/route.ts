@@ -338,6 +338,12 @@ export async function GET(
                     <span>+ ${Number(meta.transport || purchase.transport).toLocaleString('fr-FR')} ${deviseSymbol}</span>
                 </div>
             ` : ''}
+            ${meta.bateau > 0 ? `
+                <div class="total-row">
+                    <span>Bateau</span>
+                    <span>+ ${Number(meta.bateau).toLocaleString('fr-FR')} ${deviseSymbol}</span>
+                </div>
+            ` : ''}
             ${meta.commission > 0 ? `
                 <div class="total-row">
                     <span>Commission</span>
