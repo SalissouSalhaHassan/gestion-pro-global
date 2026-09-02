@@ -70,8 +70,11 @@ export async function POST(
   if (pError) return NextResponse.json({ error: pError.message }, { status: 500 });
 
   // 3. Update Advance balance
+  const initialAmt = Number(advance.montant_initial || advance.montant_restant);
   const newAdvRemaining = Math.max(0, Number(advance.montant_restant) - Number(amount));
-  const advStatus = newAdvRemaining <= 0 ? "Utilisée" : "Disponible";
+  const advStatus = newAdvRemaining <= 0 
+    ? "Utilisée" 
+    : (newAdvRemaining < initialAmt ? "Partiellement utilisée" : "Disponible");
 
   const { error: uAdvError } = await supabase
     .from("avances_clients")
@@ -95,7 +98,7 @@ export async function POST(
 
   const { data: invoice, error: iError } = await supabase
     .from("factures")
-    .select("total_ttc")
+    .select("id, bl_number, total_ttc")
     .eq("id", invoiceId)
     .single();
 
@@ -116,5 +119,28 @@ export async function POST(
 
   if (uError) return NextResponse.json({ error: uError.message }, { status: 500 });
 
-  return NextResponse.json({ success: true, payment });
+  // 5. Audit Log in avances_history
+  const invoiceRef = invoice.bl_number || `FAC-${invoice.id}`;
+  try {
+    await supabase.from("avances_history").insert({
+      advance_id: advance_id,
+      action: "INVOICE_PAYMENT",
+      amount: amount,
+      utilisateur: session.username || "Vendeur",
+      notes: `Imputation sur Facture ${invoiceRef}`,
+      date_action: new Date().toISOString()
+    });
+  } catch (histErr) {
+    console.warn("Could not insert into avances_history:", histErr);
+  }
+
+  return NextResponse.json({ 
+    success: true, 
+    payment,
+    invoice_id: invoiceId,
+    invoice_ref: invoiceRef,
+    invoice_remaining: remaining,
+    advance_remaining: newAdvRemaining,
+    advance_status: advStatus
+  });
 }

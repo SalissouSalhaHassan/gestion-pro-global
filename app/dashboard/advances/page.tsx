@@ -39,6 +39,7 @@ import AdvanceReceiptModal from "./AdvanceReceiptModal";
 import DepositListModal from "./DepositListModal";
 import HistoryModal from "./HistoryModal";
 import ClientStatementModal from "./ClientStatementModal";
+import ImputeAdvanceModal from "./ImputeAdvanceModal";
 
 export default function AdvancesPage() {
   const { t, locale, dir } = useLanguage();
@@ -55,6 +56,9 @@ export default function AdvancesPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [historyAdvanceId, setHistoryAdvanceId] = useState<number | null>(null);
   const [printAdvanceId, setPrintAdvanceId] = useState<number | null>(null);
+  const [printCustomData, setPrintCustomData] = useState<any | null>(null);
+  const [printMode, setPrintMode] = useState<'single' | 'statement' | 'withdraw' | 'imputation'>('single');
+  const [imputeAdvance, setImputeAdvance] = useState<any | null>(null);
   const [isGlobalPrintOpen, setIsGlobalPrintOpen] = useState(false);
   const [activeView, setActiveView] = useState<"individual" | "client-summary">("individual");
   const [selectedClientIdForStatement, setSelectedClientIdForStatement] = useState<number | null>(null);
@@ -92,6 +96,7 @@ export default function AdvancesPage() {
 
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawNotes, setWithdrawNotes] = useState("");
+  const [withdrawPaymentMethod, setWithdrawPaymentMethod] = useState("Espece");
 
   useEffect(() => {
     fetchAdvances();
@@ -246,18 +251,51 @@ export default function AdvancesPage() {
     try {
       const amt = Number(withdrawAmount);
       if (!amt || amt <= 0 || amt > Number(selectedAdvance.montant_restant)) {
-        alert("Montant invalide.");
+        alert(locale === "ar" ? "المبلغ غير صالح أو يتجاوز الرصيد." : "Montant invalide ou supérieur au solde disponible.");
         setIsSubmitting(false);
         return;
       }
-      await withdraw(selectedAdvance.id, amt, withdrawNotes, userSession?.username);
+
+      const noteText = `${withdrawNotes ? withdrawNotes + " " : ""}(${locale === "ar" ? "طريقة الدفع: " : "Mode: "}${withdrawPaymentMethod})`;
+      await withdraw(selectedAdvance.id, amt, noteText, userSession?.username);
+      
+      const remainingAfter = Math.max(0, Number(selectedAdvance.montant_restant) - amt);
+      const advId = selectedAdvance.id;
+
       setIsWithdrawModalOpen(false);
       setSelectedAdvance(null);
+      fetchAdvances();
+
+      // Open withdrawal receipt immediately for printing
+      setPrintCustomData({
+        type: 'WITHDRAW',
+        amount: amt,
+        notes: noteText,
+        advance_remaining: remainingAfter
+      });
+      setPrintMode('withdraw');
+      setPrintAdvanceId(advId);
     } catch (error) {
-      alert("Erreur lors du retrait.");
+      alert(locale === "ar" ? "حدث خطأ أثناء تنفيذ السحب." : "Erreur lors du retrait.");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleImputeSuccess = (result: any) => {
+    setImputeAdvance(null);
+    fetchAdvances();
+
+    // Trigger printing voucher for invoice imputation
+    setPrintCustomData({
+      type: 'IMPUTATION',
+      amount: result.applied_amount,
+      invoice_ref: result.invoice_ref,
+      invoice_remaining: result.invoice_remaining,
+      advance_remaining: result.advance_remaining
+    });
+    setPrintMode('imputation');
+    setPrintAdvanceId(result.advance_id);
   };
 
   const handleEditSubmit = async (e: React.FormEvent) => {
@@ -635,34 +673,49 @@ export default function AdvancesPage() {
                             </button>
 
                             <button
-                              onClick={() => setPrintAdvanceId(adv.id)}
+                              onClick={() => {
+                                setPrintMode('single');
+                                setPrintCustomData(null);
+                                setPrintAdvanceId(adv.id);
+                              }}
                               className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-                              title="Imprimer Reçu"
+                              title={locale === "ar" ? "طباعة الوصل" : "Imprimer Reçu"}
                             >
                               <Printer size={14} />
                             </button>
 
                             <button
                               onClick={() => setHistoryAdvanceId(adv.id)}
-                              className="p-2 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
-                              title="Historique & Audit"
+                              className="p-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer"
+                              title={locale === "ar" ? "سجل الحركات" : "Historique & Audit"}
                             >
                               <Clock size={14} />
                             </button>
 
                             {(isAvailable || isPartial) && Number(adv.montant_restant) > 0 && (
-                              <button
-                                onClick={() => {
-                                  setSelectedAdvance(adv);
-                                  setWithdrawAmount("");
-                                  setWithdrawNotes("");
-                                  setIsWithdrawModalOpen(true);
-                                }}
-                                className="p-2 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer"
-                                title="Effectuer un retrait"
-                              >
-                                <ArrowDownToLine size={14} />
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => setImputeAdvance(adv)}
+                                  className="p-2 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
+                                  title={locale === "ar" ? "استخدام في فاتورة" : "Imputer sur Facture"}
+                                >
+                                  <Receipt size={14} />
+                                </button>
+
+                                <button
+                                  onClick={() => {
+                                    setSelectedAdvance(adv);
+                                    setWithdrawAmount("");
+                                    setWithdrawNotes("");
+                                    setWithdrawPaymentMethod("Espece");
+                                    setIsWithdrawModalOpen(true);
+                                  }}
+                                  className="p-2 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer"
+                                  title={locale === "ar" ? "سحب / استرداد أموال" : "Effectuer un retrait"}
+                                >
+                                  <ArrowDownToLine size={14} />
+                                </button>
+                              </>
                             )}
 
                             {isAvailable && (
@@ -776,7 +829,24 @@ export default function AdvancesPage() {
       )}
 
       {printAdvanceId && (
-        <AdvanceReceiptModal advanceId={printAdvanceId} onClose={() => setPrintAdvanceId(null)} />
+        <AdvanceReceiptModal 
+          advanceId={printAdvanceId} 
+          initialMode={printMode}
+          customOperationData={printCustomData}
+          onClose={() => {
+            setPrintAdvanceId(null);
+            setPrintCustomData(null);
+            setPrintMode('single');
+          }} 
+        />
+      )}
+
+      {imputeAdvance && (
+        <ImputeAdvanceModal
+          advance={imputeAdvance}
+          onClose={() => setImputeAdvance(null)}
+          onSuccess={handleImputeSuccess}
+        />
       )}
 
       {isGlobalPrintOpen && (
@@ -1047,6 +1117,35 @@ export default function AdvancesPage() {
                   value={withdrawAmount}
                   onChange={(e) => setWithdrawAmount(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-base font-black text-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {locale === "ar" ? "طريقة استرداد / دفع المبلغ" : "Mode de Remboursement"}
+                </label>
+                <select
+                  value={withdrawPaymentMethod}
+                  onChange={(e) => setWithdrawPaymentMethod(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
+                >
+                  <option value="Espece">{locale === "ar" ? "نقداً (Espèce)" : "Espèce"}</option>
+                  <option value="Virement">{locale === "ar" ? "تحويل بنكي" : "Virement Bancaire"}</option>
+                  <option value="Cheque">{locale === "ar" ? "شيك" : "Chèque"}</option>
+                  <option value="Mobile Money">Mobile Money (Wave/Orange/Moov)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {locale === "ar" ? "سبب أو ملاحظات السحب (اختياري)" : "Motif / Notes (Optionnel)"}
+                </label>
+                <input
+                  type="text"
+                  placeholder={locale === "ar" ? "مثال: استرداد بناءً على طلب العميل" : "Ex: Remboursement demandé par le client"}
+                  value={withdrawNotes}
+                  onChange={(e) => setWithdrawNotes(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
                 />
               </div>
 
