@@ -40,22 +40,23 @@ export default function VehiclesPage() {
     setLoading(true);
     try {
       const [statsRes, vehiclesRes, recordsRes] = await Promise.all([
-        fetch("/api/vehicles/stats"),
-        fetch(`/api/vehicles?search=${search}`),
-        fetch("/api/vehicles/records")
+        fetch("/api/vehicles/stats").catch(() => null),
+        fetch(`/api/vehicles?search=${encodeURIComponent(search)}`).catch(() => null),
+        fetch("/api/vehicles/records").catch(() => null)
       ]);
 
-      const [statsData, vehiclesData, recordsData] = await Promise.all([
-        statsRes.json(),
-        vehiclesRes.json(),
-        recordsRes.json()
-      ]);
+      const statsData = statsRes?.ok ? await statsRes.json().catch(() => null) : null;
+      const vehiclesData = vehiclesRes?.ok ? await vehiclesRes.json().catch(() => []) : [];
+      const recordsData = recordsRes?.ok ? await recordsRes.json().catch(() => []) : [];
 
-      setStats(statsData);
-      setVehicles(vehiclesData);
-      setRecords(recordsData);
+      setStats(statsData && !statsData.error ? statsData : { total_vehicles: 0, total_value: 0, alerts: 0, total_expenses: 0 });
+      setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
+      setRecords(Array.isArray(recordsData) ? recordsData : []);
     } catch (error) {
-      toast.error("Erreur de chargement des données");
+      console.error("Error fetching vehicles data", error);
+      setStats({ total_vehicles: 0, total_value: 0, alerts: 0, total_expenses: 0 });
+      setVehicles([]);
+      setRecords([]);
     } finally {
       setLoading(false);
     }
@@ -205,9 +206,9 @@ export default function VehiclesPage() {
                 <TableBody>
                   {loading ? (
                     <TableRow><TableCell colSpan={5} className="h-60 text-center"><Loader2 className="animate-spin mx-auto text-indigo-500" size={40} /></TableCell></TableRow>
-                  ) : vehicles.length === 0 ? (
+                  ) : (Array.isArray(vehicles) ? vehicles : []).length === 0 ? (
                     <TableRow><TableCell colSpan={5} className="h-60 text-center text-slate-400 font-bold">Aucun véhicule trouvé.</TableCell></TableRow>
-                  ) : vehicles.map((v) => {
+                  ) : (Array.isArray(vehicles) ? vehicles : []).map((v) => {
                     const status = getDocStatus(v);
                     return (
                       <TableRow key={v.id} className="hover:bg-slate-50/30 transition-colors border-slate-50">
@@ -258,7 +259,7 @@ export default function VehiclesPage() {
                     </TableRow>
                  </TableHeader>
                  <TableBody>
-                    {records.filter(r => r.record_type === "FRAI").map((r) => (
+                    {(Array.isArray(records) ? records : []).filter(r => r && r.record_type === "FRAI").map((r) => (
                       <TableRow key={r.id} className="hover:bg-slate-50/30 transition-colors border-slate-50">
                         <TableCell className="px-6 py-4 font-bold text-slate-600">{new Date(r.record_date).toLocaleDateString()}</TableCell>
                         <TableCell className="font-black text-slate-900">{r.voitures?.matricule}</TableCell>
@@ -286,7 +287,7 @@ export default function VehiclesPage() {
                     </TableRow>
                  </TableHeader>
                  <TableBody>
-                    {records.filter(r => r.record_type === "DEPENSE").map((r) => (
+                    {(Array.isArray(records) ? records : []).filter(r => r && r.record_type === "DEPENSE").map((r) => (
                       <TableRow key={r.id} className="hover:bg-slate-50/30 transition-colors border-slate-50">
                         <TableCell className="px-6 py-4 font-bold text-slate-600">{new Date(r.record_date).toLocaleDateString()}</TableCell>
                         <TableCell className="font-black text-slate-900">{r.voitures?.matricule}</TableCell>

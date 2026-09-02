@@ -7,6 +7,10 @@ export interface CustomSession {
   admin: string;
   emplacement: string;
   depots?: string;
+  organization_id?: string;
+  organization_name?: string;
+  plan?: string;
+  permissions?: string[];
 }
 
 /**

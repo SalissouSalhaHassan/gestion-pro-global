@@ -20,7 +20,10 @@ import {
   X,
   AlertTriangle,
   Shield,
+  Coins,
+  Palette,
 } from "lucide-react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { createBrowserClient } from "@supabase/ssr";
 
@@ -791,7 +794,35 @@ export default function SettingsPage() {
             Gérez les informations légales et coordonnées de votre entreprise.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/dashboard/settings/branding"
+            className="inline-flex items-center gap-2 font-bold shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 active:translate-y-0 justify-center"
+            style={{
+              background: "linear-gradient(135deg, #059669, #047857)",
+              color: "white",
+              borderRadius: "12px",
+              padding: "12px 20px",
+              textDecoration: "none",
+            }}
+          >
+            <Palette size={18} strokeWidth={2.5} />
+            Branding & Facture
+          </Link>
+          <Link
+            href="/dashboard/settings/currencies"
+            className="inline-flex items-center gap-2 font-bold shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 active:translate-y-0 justify-center"
+            style={{
+              background: "linear-gradient(135deg, #4f46e5, #4338ca)",
+              color: "white",
+              borderRadius: "12px",
+              padding: "12px 20px",
+              textDecoration: "none",
+            }}
+          >
+            <Coins size={18} strokeWidth={2.5} />
+            Devises & Fiscalité
+          </Link>
           <button
             onClick={() => setShowSupabaseConfig(true)}
             className="inline-flex items-center gap-2 font-bold shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 active:translate-y-0 justify-center"

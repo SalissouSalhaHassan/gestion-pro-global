@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { useLanguage } from "@/lib/i18n/context";
 import {
   Shield,
   Search,
@@ -19,8 +20,6 @@ import {
   UserCog,
   Store,
   Banknote,
-  ToggleLeft,
-  ToggleRight,
   Sparkles,
   Lock,
   Unlock,
@@ -29,7 +28,10 @@ import {
   RefreshCw,
   Car,
   Home,
-  Waves
+  Waves,
+  ShieldCheck,
+  Zap,
+  Sliders,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -73,10 +75,8 @@ const CATEGORY_META: Record<string, { icon: any; gradient: string; shadow: strin
 
 const DEFAULT_META = { icon: Shield, gradient: "linear-gradient(135deg, #475569, #64748b)", shadow: "rgba(71,85,105,0.25)", accent: "#475569" };
 
-/* ═══════════════════════════════════════════════════════════════════
-   MAIN PAGE
-   ═══════════════════════════════════════════════════════════════════ */
 export default function PermissionsPage() {
+  const { t, locale, dir } = useLanguage();
   const [roles, setRoles] = useState<Role[]>([]);
   const [grouped, setGrouped] = useState<GroupedPerms>({});
   const [rolePerms, setRolePerms] = useState<RolePermMap>({});
@@ -94,428 +94,415 @@ export default function PermissionsPage() {
 
   useEffect(() => {
     if (toast) {
-      const t = setTimeout(() => setToast(null), 3500);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => setToast(null), 3500);
+      return () => clearTimeout(timer);
     }
   }, [toast]);
 
-  /* ─── Fetch Data ─── */
-  const fetchData = useCallback(async (isRetryAfterSeed = false) => {
-    setLoading(true);
+  const loadData = useCallback(async () => {
     try {
+      setLoading(true);
       const res = await fetch("/api/permissions");
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      if (!res.ok) throw new Error("Erreur de chargement");
+      const json = await res.json();
 
-      // Auto-seed if tables are empty (first time)
-      if (!isRetryAfterSeed && (!data.roles || data.roles.length === 0)) {
-        setToast({ message: "Initialisation des rôles et permissions...", type: "success" });
-        try {
-          const seedRes = await fetch("/api/permissions/seed", { method: "POST" });
-          const seedData = await seedRes.json();
-          if (seedData.seeded) {
-            // Reload data after seeding
-            return fetchData(true);
-          }
-        } catch (seedErr) {
-          console.error("Seed failed:", seedErr);
-        }
+      setRoles(json.roles || []);
+      setGrouped(json.grouped || {});
+      setRolePerms(json.role_permissions || {});
+      setRoleCounts(json.role_counts || {});
+
+      if (json.roles && json.roles.length > 0) {
+        const firstRole = json.roles[0];
+        setSelectedRoleId(firstRole.id);
+        const permsForFirst = json.role_permissions?.[firstRole.id] || [];
+        setActivePerms(new Set(permsForFirst));
       }
-
-      setRoles(data.roles || []);
-      setGrouped(data.groupedPermissions || {});
-      setRolePerms(data.rolePermissions || {});
-      setRoleCounts(data.roleCounts || {});
     } catch (err: any) {
-      setToast({ message: `Erreur: ${err.message}`, type: "error" });
+      setToast({ message: err.message || "Erreur de connexion", type: "error" });
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    loadData();
+  }, [loadData]);
 
-  /* ─── Role Selection ─── */
   const selectRole = (roleId: number) => {
     setSelectedRoleId(roleId);
-    const permsForRole = rolePerms[roleId] || [];
-    setActivePerms(new Set(permsForRole));
+    const perms = rolePerms[roleId] || [];
+    setActivePerms(new Set(perms));
     setHasChanges(false);
-    setSearchQuery("");
   };
 
-  /* ─── Toggle Permission ─── */
-  const togglePerm = (permId: number) => {
+  const togglePermission = (permId: number) => {
     setActivePerms((prev) => {
       const next = new Set(prev);
-      if (next.has(permId)) next.delete(permId);
-      else next.add(permId);
-      return next;
-    });
-    setHasChanges(true);
-  };
-
-  /* ─── Toggle Category ─── */
-  const toggleCategory = (perms: Permission[]) => {
-    const allActive = perms.every((p) => activePerms.has(p.id));
-    setActivePerms((prev) => {
-      const next = new Set(prev);
-      for (const p of perms) {
-        if (allActive) next.delete(p.id);
-        else next.add(p.id);
+      if (next.has(permId)) {
+        next.delete(permId);
+      } else {
+        next.add(permId);
       }
       return next;
     });
     setHasChanges(true);
   };
 
-  /* ─── Save ─── */
+  const toggleAllCategory = (perms: Permission[], enable: boolean) => {
+    setActivePerms((prev) => {
+      const next = new Set(prev);
+      perms.forEach((p) => {
+        if (enable) next.add(p.id);
+        else next.delete(p.id);
+      });
+      return next;
+    });
+    setHasChanges(true);
+  };
+
+  const toggleAll = (enable: boolean) => {
+    if (enable) {
+      const allIds = Object.values(grouped).flatMap((list) => list.map((p) => p.id));
+      setActivePerms(new Set(allIds));
+    } else {
+      setActivePerms(new Set());
+    }
+    setHasChanges(true);
+  };
+
   const handleSave = async () => {
     if (!selectedRoleId) return;
-    setSaving(true);
     try {
+      setSaving(true);
       const res = await fetch("/api/permissions", {
-        method: "PUT",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           role_id: selectedRoleId,
           permission_ids: Array.from(activePerms),
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
 
-      // Update local cache
-      setRolePerms((prev) => ({ ...prev, [selectedRoleId]: Array.from(activePerms) }));
+      if (!res.ok) throw new Error("Échec de l'enregistrement");
+      const result = await res.json();
+
+      setRolePerms((prev) => ({
+        ...prev,
+        [selectedRoleId]: Array.from(activePerms),
+      }));
       setHasChanges(false);
-      setToast({ message: "Permissions sauvegardées avec succès !", type: "success" });
+      setToast({
+        message: locale === "ar" ? "تم تحديث الصلاحيات بنجاح!" : "Permissions enregistrées avec succès !",
+        type: "success",
+      });
     } catch (err: any) {
-      setToast({ message: `Erreur: ${err.message}`, type: "error" });
+      setToast({ message: err.message || "Erreur de sauvegarde", type: "error" });
     } finally {
       setSaving(false);
     }
   };
 
-  /* ─── Stats ─── */
-  const totalPermissions = useMemo(() => Object.values(grouped).flat().length, [grouped]);
-  const activeCount = activePerms.size;
   const selectedRole = roles.find((r) => r.id === selectedRoleId);
+  const totalPermCount = useMemo(() => {
+    return Object.values(grouped).reduce((sum, list) => sum + list.length, 0);
+  }, [grouped]);
 
-  /* ─── Filtered Groups ─── */
-  const filteredGroups = useMemo(() => {
+  const filteredGrouped = useMemo(() => {
     if (!searchQuery.trim()) return grouped;
     const q = searchQuery.toLowerCase();
     const result: GroupedPerms = {};
     for (const [cat, perms] of Object.entries(grouped)) {
-      const filtered = perms.filter(
-        (p) => p.description.toLowerCase().includes(q) || p.permission_key.toLowerCase().includes(q) || cat.toLowerCase().includes(q)
+      const matches = perms.filter(
+        (p) =>
+          p.permission_key.toLowerCase().includes(q) ||
+          p.description.toLowerCase().includes(q) ||
+          cat.toLowerCase().includes(q)
       );
-      if (filtered.length > 0) result[cat] = filtered;
+      if (matches.length > 0) {
+        result[cat] = matches;
+      }
     }
     return result;
   }, [grouped, searchQuery]);
 
-  /* ═══════════════════════════════════════════════════════════════
-     RENDER
-     ═══════════════════════════════════════════════════════════════ */
-  return (
-    <div className="flex h-[calc(100vh-5rem)] gap-0 max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[450px] space-y-4">
+        <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+        <p className="text-xs font-bold text-slate-500">
+          {locale === "ar" ? "جاري تحميل مصفوفة الصلاحيات..." : "Chargement de la matrice de sécurité..."}
+        </p>
+      </div>
+    );
+  }
 
-      {/* ── Toast ── */}
+  return (
+    <div className="space-y-8 animate-in fade-in duration-300">
+      {/* Toast Notification */}
       {toast && (
-        <div className={`fixed top-6 right-6 z-[9999] px-6 py-4 rounded-2xl text-white font-bold shadow-2xl flex items-center gap-3 animate-in slide-in-from-right duration-300 ${toast.type === "success" ? "bg-emerald-500" : "bg-rose-500"}`}>
-          {toast.type === "success" ? <Check size={20} /> : <X size={20} />}
-          {toast.message}
+        <div
+          className={`fixed top-6 right-6 z-50 px-5 py-3.5 rounded-2xl shadow-2xl border text-white flex items-center gap-3 animate-in slide-in-from-top-3 ${
+            toast.type === "success"
+              ? "bg-slate-900 border-emerald-500/30"
+              : "bg-rose-950 border-rose-500/30"
+          }`}
+        >
+          {toast.type === "success" ? (
+            <CheckCheck size={20} className="text-emerald-400" />
+          ) : (
+            <X size={20} className="text-rose-400" />
+          )}
+          <span className="text-xs font-black">{toast.message}</span>
         </div>
       )}
 
-      {/* ════════════ LEFT PANEL: ROLES ════════════ */}
-      <div className="w-80 flex-shrink-0 bg-white/70 backdrop-blur-2xl border-r border-slate-100 flex flex-col rounded-l-[32px] overflow-hidden shadow-xl shadow-slate-200/30">
-        
-        {/* Header */}
-        <div className="p-6 pb-4 border-b border-slate-100/80">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="p-2.5 rounded-2xl" style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}>
-              <Shield size={22} className="text-white" />
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-slate-900 tracking-tight">Rôles</h2>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{roles.length} rôles configurés</p>
-            </div>
-          </div>
-        </div>
+      {/* Hero Header */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-950 text-white rounded-[32px] p-6 lg:p-8 shadow-2xl border border-white/10 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Roles List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-          {loading ? (
-            [...Array(4)].map((_, i) => (
-              <div key={i} className="h-20 bg-slate-100 rounded-2xl animate-pulse" />
-            ))
-          ) : (
-            roles.map((role) => {
-              const isSelected = selectedRoleId === role.id;
-              const count = roleCounts[role.id] || 0;
-              const permCount = (rolePerms[role.id] || []).length;
-              return (
-                <button
-                  key={role.id}
-                  onClick={() => selectRole(role.id)}
-                  className={`w-full text-left p-4 rounded-2xl transition-all duration-300 group relative overflow-hidden ${
-                    isSelected
-                      ? "text-white shadow-xl shadow-indigo-500/30 scale-[1.02]"
-                      : "bg-white hover:bg-slate-50 border border-slate-100 hover:border-indigo-200 hover:shadow-md"
-                  }`}
-                  style={isSelected ? { background: "linear-gradient(135deg, #4f46e5, #7c3aed)" } : undefined}
-                >
-                  {isSelected && (
-                    <div className="absolute -right-4 -bottom-4 w-24 h-24 rounded-full bg-white/10 blur-xl" />
-                  )}
-                  <div className="relative flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-xl ${isSelected ? "bg-white/20" : "bg-indigo-50"}`}>
-                        <Crown size={18} className={isSelected ? "text-white" : "text-indigo-500"} />
-                      </div>
-                      <div>
-                        <div className={`font-black text-sm tracking-tight ${isSelected ? "text-white" : "text-slate-800"}`}>
-                          {role.role_name}
-                        </div>
-                        <div className={`text-[10px] font-bold ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
-                          {count} utilisateur{count !== 1 ? "s" : ""} · {permCount} accès
-                        </div>
-                      </div>
-                    </div>
-                    <ChevronRight size={16} className={`transition-transform ${isSelected ? "text-white translate-x-1" : "text-slate-300 group-hover:translate-x-1"}`} />
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        {/* Sync & Save Buttons */}
-        <div className="p-4 border-t border-slate-100 space-y-3">
-          <button
-            onClick={async () => {
-              setLoading(true);
-              try {
-                const res = await fetch("/api/permissions/seed", { method: "POST" });
-                const data = await res.json();
-                if (data.success) {
-                  setToast({ message: "Synchronisation réussie !", type: "success" });
-                  fetchData();
-                }
-              } catch (e) {
-                setToast({ message: "Échec de synchronisation", type: "error" });
-              } finally {
-                setLoading(false);
-              }
-            }}
-            className="w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
-          >
-            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-            Synchroniser les Permissions
-          </button>
-
-          <button
-            onClick={handleSave}
-            disabled={!hasChanges || saving || !selectedRoleId}
-            className="w-full py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2.5 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white shadow-xl"
-            style={{
-              background: hasChanges ? "linear-gradient(135deg, #10b981, #059669)" : "linear-gradient(135deg, #94a3b8, #cbd5e1)",
-              boxShadow: hasChanges ? "0 12px 30px rgba(16,185,129,0.3)" : "none",
-            }}
-          >
-            {saving ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <Save size={18} />
-            )}
-            {saving ? "Sauvegarde..." : hasChanges ? "Sauvegarder" : "Aucun changement"}
-          </button>
-        </div>
-      </div>
-
-      {/* ════════════ RIGHT PANEL: PERMISSIONS ════════════ */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-
-        {/* Top Bar */}
-        <div className="px-8 py-5 border-b border-slate-100 bg-white/50 backdrop-blur-xl flex items-center justify-between gap-4">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-              <Lock size={24} className="text-indigo-500" />
-              {selectedRole ? `Accès : ${selectedRole.role_name}` : "Centre de Contrôle des Accès"}
-            </h1>
-            <p className="text-sm text-slate-400 font-medium mt-0.5">
-              {selectedRole
-                ? `${activeCount} / ${totalPermissions} permissions activées`
-                : "Sélectionnez un rôle pour configurer ses permissions"}
-            </p>
-          </div>
-          
-          {/* Search */}
-          <div className="relative w-80">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input
-              type="text"
-              placeholder="Filtrer les permissions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all placeholder:text-slate-400"
-            />
-          </div>
-        </div>
-
-        {/* Progress Bar */}
-        {selectedRoleId && (
-          <div className="px-8 py-3 bg-slate-50/50 border-b border-slate-100">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Niveau d'accès</span>
-              <span className="text-[10px] font-black text-indigo-600 uppercase">
-                {totalPermissions > 0 ? Math.round((activeCount / totalPermissions) * 100) : 0}%
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-3 py-1 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-black tracking-wider flex items-center gap-1.5 shadow-md">
+                <ShieldCheck size={14} />
+                ENTERPRISE RBAC MATRIX
+              </span>
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 bg-emerald-950/60 px-3 py-1 rounded-xl border border-emerald-500/30">
+                <Sparkles size={12} className="text-amber-400" />
+                {totalPermCount} {locale === "ar" ? "صلاحية دقيقة" : "Points de Contrôle"}
               </span>
             </div>
-            <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500 ease-out"
-                style={{
-                  width: `${totalPermissions > 0 ? (activeCount / totalPermissions) * 100 : 0}%`,
-                  background: "linear-gradient(90deg, #4f46e5, #7c3aed, #a855f7)",
-                }}
-              />
-            </div>
+
+            <h1 className="text-2xl lg:text-3xl font-black text-white">
+              {locale === "ar" ? "مركز التحكم في الصلاحيات والأمان (RBAC)" : "Centre de Contrôle des Accès"}
+            </h1>
+            <p className="text-xs lg:text-sm text-slate-300 font-medium mt-1">
+              {locale === "ar"
+                ? "تخصيص الصلاحيات والأدوار للموظفين والكاشيرية بدقة متناهية لحماية بيانات الشركة"
+                : "Gouvernance granulaire des privilèges et matrice d'accès par rôle utilisateur"}
+            </p>
           </div>
-        )}
 
-        {/* Permissions Grid */}
-        <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center h-full">
-              <Loader2 className="animate-spin text-indigo-500 mb-4" size={40} />
-              <p className="font-black text-slate-400 uppercase tracking-widest text-sm">Chargement des permissions...</p>
-            </div>
-          ) : !selectedRoleId ? (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="p-6 rounded-[32px] bg-indigo-50 mb-6">
-                <Unlock size={48} className="text-indigo-300" />
-              </div>
-              <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-2">Contrôle d'Accès</h3>
-              <p className="text-slate-400 font-medium max-w-md">
-                Sélectionnez un rôle dans le panneau de gauche pour consulter et modifier ses permissions d'accès au système.
-              </p>
-            </div>
-          ) : (
-            Object.entries(filteredGroups).map(([category, perms]) => {
-              const meta = CATEGORY_META[category] || DEFAULT_META;
-              const Icon = meta.icon;
-              const allActive = perms.every((p) => activePerms.has(p.id));
-              const someActive = perms.some((p) => activePerms.has(p.id));
-              const activeInCat = perms.filter((p) => activePerms.has(p.id)).length;
+          <div className="flex items-center gap-3">
+            <button
+              onClick={loadData}
+              className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <RefreshCw size={15} />
+              <span>{locale === "ar" ? "تحديث" : "Actualiser"}</span>
+            </button>
 
-              return (
-                <div
-                  key={category}
-                  className="rounded-[28px] border border-slate-100 bg-white/80 backdrop-blur-sm shadow-lg shadow-slate-100/50 overflow-hidden transition-all hover:shadow-xl hover:shadow-slate-200/50 group/card"
-                >
-                  {/* Category Header */}
-                  <div className="flex items-center justify-between px-6 py-5 border-b border-slate-50">
-                    <div className="flex items-center gap-4">
-                      <div
-                        className="p-3 rounded-2xl text-white shadow-lg"
-                        style={{ background: meta.gradient, boxShadow: `0 8px 20px ${meta.shadow}` }}
-                      >
-                        <Icon size={20} />
-                      </div>
-                      <div>
-                        <h3 className="font-black text-slate-900 tracking-tight">{category}</h3>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                          {activeInCat} / {perms.length} activées
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => toggleCategory(perms)}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                        allActive
-                          ? "bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100"
-                          : "bg-slate-50 text-slate-500 border border-slate-100 hover:bg-slate-100"
-                      }`}
-                    >
-                      <CheckCheck size={14} />
-                      {allActive ? "Tout désélect." : "Tout sélect."}
-                    </button>
-                  </div>
-
-                  {/* Permissions Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
-                    {perms.map((p, idx) => {
-                      const isActive = activePerms.has(p.id);
-                      return (
-                        <button
-                          key={p.id}
-                          onClick={() => togglePerm(p.id)}
-                          className={`flex items-center justify-between px-6 py-4 text-left transition-all duration-200 border-b border-r border-slate-50 last:border-b-0 group/item ${
-                            isActive
-                              ? "bg-gradient-to-r from-emerald-50/50 to-transparent hover:from-emerald-50"
-                              : "hover:bg-slate-50/80"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <div
-                              className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
-                                isActive
-                                  ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200"
-                                  : "bg-slate-100 text-slate-300 group-hover/item:bg-slate-200 group-hover/item:text-slate-400"
-                              }`}
-                            >
-                              {isActive ? <Check size={18} strokeWidth={3} /> : <Lock size={14} />}
-                            </div>
-                            <div className="min-w-0">
-                              <span className={`text-sm font-bold block truncate ${isActive ? "text-slate-800" : "text-slate-500"}`}>
-                                {p.description}
-                              </span>
-                              <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest truncate block">
-                                {p.permission_key}
-                              </span>
-                            </div>
-                          </div>
-                          <div className={`flex-shrink-0 transition-all duration-300 ${isActive ? "text-emerald-500" : "text-slate-200"}`}>
-                            {isActive ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })
-          )}
-
-          {selectedRoleId && Object.keys(filteredGroups).length === 0 && searchQuery && (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <Search size={40} className="text-slate-200 mb-4" />
-              <p className="font-black text-slate-400">Aucune permission ne correspond à "{searchQuery}"</p>
-            </div>
-          )}
+            <button
+              onClick={handleSave}
+              disabled={saving || !hasChanges}
+              className={`px-6 py-3 rounded-2xl text-white font-black text-xs shadow-xl transition-all flex items-center gap-2.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                hasChanges
+                  ? "bg-gradient-to-r from-emerald-500 to-teal-600 shadow-emerald-500/25 animate-pulse"
+                  : "bg-indigo-600"
+              }`}
+            >
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              <span>{locale === "ar" ? "حفظ التغييرات" : "Enregistrer la Matrice"}</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(0, 0, 0, 0.08);
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(0, 0, 0, 0.15);
-        }
-      `}</style>
+      {/* Main Grid: Roles List (Left) + Permissions Matrix (Right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Left Column: Roles (4 cols) */}
+        <div className="lg:col-span-4 space-y-4">
+          <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Users size={16} className="text-indigo-600" />
+                {locale === "ar" ? "الأدوار المتاحة" : "Rôles Système"}
+              </h2>
+              <span className="text-xs font-extrabold text-slate-400">
+                {roles.length} {locale === "ar" ? "أدوار" : "profils"}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {roles.map((r) => {
+                const isSelected = r.id === selectedRoleId;
+                const assignedCount = isSelected ? activePerms.size : (rolePerms[r.id] || []).length;
+                const percent = totalPermCount > 0 ? Math.round((assignedCount / totalPermCount) * 100) : 0;
+
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => selectRole(r.id)}
+                    className={`w-full p-4 rounded-2xl text-left transition-all cursor-pointer border flex items-center justify-between ${
+                      isSelected
+                        ? "bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-300 shadow-sm"
+                        : "bg-slate-50/60 border-slate-200/70 hover:bg-slate-100/70"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        {r.role_name.toLowerCase().includes("admin") ? (
+                          <Crown size={15} className="text-amber-500" />
+                        ) : (
+                          <Shield size={15} className="text-indigo-600" />
+                        )}
+                        <span className="text-xs font-black text-slate-900">{r.role_name}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 max-w-[200px] truncate">
+                        {r.description || (locale === "ar" ? "صلاحيات مخصصة" : "Rôle d'exploitation")}
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-xs font-black text-indigo-600">{percent}%</span>
+                      <div className="w-12 h-1.5 bg-slate-200 rounded-full mt-1 overflow-hidden">
+                        <div
+                          className="h-full bg-indigo-600 rounded-full transition-all"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Permission Cards Matrix (8 cols) */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* Quick Actions & Search Toolbar */}
+          <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder={
+                  locale === "ar" ? "بحث عن صلاحية أو ميزة..." : "Filtrer les permissions (POS, Vente, Stock...)"
+                }
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => toggleAll(true)}
+                className="px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <CheckCheck size={14} />
+                <span>{locale === "ar" ? "تفعيل الكل" : "Tout Cocher"}</span>
+              </button>
+
+              <button
+                onClick={() => toggleAll(false)}
+                className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <X size={14} />
+                <span>{locale === "ar" ? "إلغاء الكل" : "Tout Décocher"}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Grouped Permission Accordions */}
+          <div className="space-y-4">
+            {Object.keys(filteredGrouped).length === 0 ? (
+              <div className="bg-white rounded-3xl p-12 text-center text-slate-400 border border-slate-200">
+                <Search size={32} className="mx-auto text-slate-300 mb-2" />
+                <p className="text-xs font-bold">
+                  {locale === "ar" ? "لا توجد صلاحيات مطابقة للبحث." : "Aucune permission trouvée."}
+                </p>
+              </div>
+            ) : (
+              Object.entries(filteredGrouped).map(([category, perms]) => {
+                const meta = CATEGORY_META[category] || DEFAULT_META;
+                const Icon = meta.icon;
+                const activeCount = perms.filter((p) => activePerms.has(p.id)).length;
+                const isAllActive = activeCount === perms.length;
+
+                return (
+                  <div
+                    key={category}
+                    className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 space-y-4"
+                  >
+                    {/* Category Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-md"
+                          style={{ background: meta.gradient }}
+                        >
+                          <Icon size={18} />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-black text-slate-900">{category}</h3>
+                          <span className="text-[11px] font-bold text-slate-400">
+                            {activeCount} / {perms.length} {locale === "ar" ? "مفعلة" : "autorisées"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => toggleAllCategory(perms, !isAllActive)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isAllActive
+                            ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                        }`}
+                      >
+                        {isAllActive
+                          ? locale === "ar"
+                            ? "إلغاء تفعيل الفئة"
+                            : "Désactiver le groupe"
+                          : locale === "ar"
+                          ? "تفعيل الفئة كاملة"
+                          : "Activer le groupe"}
+                      </button>
+                    </div>
+
+                    {/* Permissions Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                      {perms.map((p) => {
+                        const active = activePerms.has(p.id);
+
+                        return (
+                          <div
+                            key={p.id}
+                            onClick={() => togglePermission(p.id)}
+                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                              active
+                                ? "bg-indigo-50/60 border-indigo-200 shadow-xs"
+                                : "bg-slate-50/40 border-slate-200/60 hover:bg-slate-100/60"
+                            }`}
+                          >
+                            <div className="pr-3">
+                              <div className="text-xs font-black text-slate-900">{p.description}</div>
+                              <div className="font-mono text-[10px] text-slate-400 mt-0.5">
+                                {p.permission_key}
+                              </div>
+                            </div>
+
+                            <div
+                              className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all shrink-0 ${
+                                active
+                                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
+                                  : "bg-slate-200 text-slate-400"
+                              }`}
+                            >
+                              {active && <Check size={14} strokeWidth={3} />}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

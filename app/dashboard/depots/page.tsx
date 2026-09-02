@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { 
-  Warehouse, 
-  MapPin, 
-  User, 
-  Search, 
+import { useLanguage } from "@/lib/i18n/context";
+import { formatCurrencyAmount } from "@/lib/utils/currency";
+import {
+  Warehouse,
+  MapPin,
+  User,
+  Search,
   RefreshCw,
-  LayoutGrid,
-  ChevronRight,
-  MoreHorizontal,
   Plus,
   Loader2,
   AlertCircle,
@@ -18,15 +17,17 @@ import {
   X,
   Save,
   Check,
-  Power
+  Building2,
+  Package,
+  Layers,
+  ShieldCheck,
+  Power,
+  Sparkles,
+  CheckCircle2,
+  TrendingUp,
+  Store,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
 
 type Depot = {
   id: number;
@@ -35,19 +36,20 @@ type Depot = {
   responsable: string;
   is_active: boolean;
   created_at: string;
+  articles_count?: number;
+  total_value?: number;
 };
 
 const supabase = createClient();
 
-const statsCardClass = "bg-white p-6 rounded-[28px] border border-slate-100/50 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex items-center gap-5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-all duration-300";
-
 export default function DepotManagementPage() {
+  const { t, locale, dir } = useLanguage();
   const [depots, setDepots] = useState<Depot[]>([]);
   const [users, setUsers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  
+
   // Modal & Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,40 +59,36 @@ export default function DepotManagementPage() {
     nom: "",
     emplacement: "",
     responsable: "",
-    is_active: true
+    is_active: true,
   });
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [allowedDepots, setAllowedDepots] = useState<string[]>([]);
+
+  const [isAdmin, setIsAdmin] = useState(true);
+
+  // Toast
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const loadData = async () => {
     setRefreshing(true);
     try {
-      // 1. Fetch Users for the dropdown
-      const { data: userData, error: userErr } = await supabase
+      // 1. Fetch Users for the responsible dropdown
+      const { data: userData } = await supabase
         .from("users")
         .select("utilisateur, nom_prenom")
         .order("utilisateur");
-      
-      if (!userErr && userData) {
-        setUsers(userData.map(u => u.nom_prenom || u.utilisateur));
-      }
 
-      // Read session to set initial default depot & admin flag
-      const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
-      let isUserAdmin = false;
-      let allowed: string[] = [];
-      if (cookie) {
-        try {
-          const session = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
-          isUserAdmin = session?.admin === "Oui" || session?.role === 1 || session?.role === "1";
-          setIsAdmin(isUserAdmin);
-          allowed = session?.depots ? session.depots.split(",").map((d: any) => d.trim()) : [];
-          setAllowedDepots(allowed);
-        } catch (e) { console.error(e); }
+      if (userData) {
+        setUsers(userData.map((u) => u.nom_prenom || u.utilisateur));
       }
 
       // 2. Fetch Depots
-      const { data, error } = await supabase
+      const { data: depotsData, error } = await supabase
         .from("depots")
         .select("*")
         .eq("is_deleted", false)
@@ -98,361 +96,460 @@ export default function DepotManagementPage() {
 
       if (error) throw error;
 
-      if (data) {
-        if (isUserAdmin) {
-          setDepots(data);
-        } else {
-          // Non-admin can only see their allowed depots
-          setDepots(data.filter(d => allowed.some(ad => ad.toLowerCase() === d.nom.toLowerCase())));
-        }
+      // 3. Fetch Stock counts per depot
+      const { data: stockData } = await supabase
+        .from("stocks")
+        .select("depot_nom, quantite, articles(prix_achat)");
+
+      const stockMap: Record<string, { count: number; value: number }> = {};
+      if (stockData) {
+        stockData.forEach((st: any) => {
+          const dNom = st.depot_nom || "BOUTIQUE";
+          if (!stockMap[dNom]) stockMap[dNom] = { count: 0, value: 0 };
+          const qty = Number(st.quantite) || 0;
+          const cost = Number(st.articles?.prix_achat) || 0;
+          stockMap[dNom].count += qty > 0 ? 1 : 0;
+          stockMap[dNom].value += qty * cost;
+        });
       }
-    } catch (err) {
+
+      if (depotsData) {
+        const enriched = depotsData.map((d: any) => ({
+          ...d,
+          articles_count: stockMap[d.nom]?.count || 0,
+          total_value: stockMap[d.nom]?.value || 0,
+        }));
+        setDepots(enriched);
+      }
+    } catch (err: any) {
       console.error("Failed to load depots:", err);
+      setToast({ message: "Erreur de chargement des dépôts", type: "error" });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleOpenAddModal = () => {
+    setIsEditing(false);
+    setFormData({
+      id: null,
+      nom: "",
+      emplacement: "",
+      responsable: users.length > 0 ? users[0] : "",
+      is_active: true,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (depot: Depot) => {
+    setIsEditing(true);
+    setFormData({
+      id: depot.id,
+      nom: depot.nom,
+      emplacement: depot.emplacement,
+      responsable: depot.responsable,
+      is_active: depot.is_active,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmedNom = formData.nom.trim();
-    if (!trimmedNom) return;
+    if (!formData.nom.trim()) {
+      setToast({ message: "Le nom du dépôt est obligatoire", type: "error" });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      // Check for duplicates before submitting (excluding current record)
-      const duplicate = depots.find(d => 
-        d.nom.toLowerCase() === trimmedNom.toLowerCase() && 
-        d.id !== formData.id
-      );
-
-      if (duplicate) {
-        throw new Error(`Le nom "${trimmedNom}" est déjà utilisé par un autre dépôt.`);
-      }
-
-      const payload = {
-        nom: trimmedNom,
-        emplacement: formData.emplacement.trim(),
-        responsable: formData.responsable,
+      const payload: any = {
+        nom: formData.nom.toUpperCase().trim(),
+        emplacement: formData.emplacement.trim() || formData.nom.trim(),
+        responsable: formData.responsable || "Non assigné",
         is_active: formData.is_active,
-        updated_at: new Date().toISOString()
       };
 
       if (isEditing && formData.id) {
-        const { error } = await supabase
-          .from("depots")
-          .update(payload)
-          .eq("id", formData.id);
+        const { error } = await supabase.from("depots").update(payload).eq("id", formData.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from("depots")
-          .insert([payload]);
+        const { error } = await supabase.from("depots").insert([payload]);
         if (error) throw error;
       }
 
-      handleCloseModal();
+      setToast({
+        message: isEditing ? "Dépôt mis à jour avec succès" : "Nouveau dépôt créé avec succès",
+        type: "success",
+      });
+      setIsModalOpen(false);
       loadData();
     } catch (err: any) {
-      if (err.message?.includes("unique_constraint") || err.message?.includes("duplicate key")) {
-        alert("Erreur: Ce nom de dépôt existe déjà.");
-      } else {
-        alert("Erreur: " + err.message);
-      }
+      setToast({ message: err.message || "Erreur de sauvegarde", type: "error" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleEdit = (depot: Depot) => {
-    setFormData({
-      id: depot.id,
-      nom: depot.nom,
-      emplacement: depot.emplacement || "",
-      responsable: depot.responsable || "",
-      is_active: depot.is_active
-    });
-    setIsEditing(true);
-    setIsModalOpen(true);
-  };
+  const handleDelete = async (depot: Depot) => {
+    if (depot.articles_count && depot.articles_count > 0) {
+      alert("Impossible de supprimer un dépôt contenant des articles en stock. Veuillez d'abord transférer le stock.");
+      return;
+    }
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Voulez-vous supprimer ce dépôt ?")) return;
+    if (!confirm(`Voulez-vous vraiment supprimer le dépôt "${depot.nom}" ?`)) return;
+
     try {
       const { error } = await supabase
         .from("depots")
-        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-        .eq("id", id);
+        .update({ is_deleted: true })
+        .eq("id", depot.id);
+
       if (error) throw error;
+
+      setToast({ message: "Dépôt supprimé", type: "success" });
       loadData();
     } catch (err: any) {
-      alert("Erreur lors de la suppression: " + err.message);
+      setToast({ message: err.message || "Erreur de suppression", type: "error" });
     }
   };
 
-  const handleOpenAdd = () => {
-    setFormData({ id: null, nom: "", emplacement: "", responsable: "", is_active: true });
-    setIsEditing(false);
-    setIsModalOpen(true);
-  };
+  const filteredDepots = useMemo(() => {
+    if (!searchQuery.trim()) return depots;
+    const q = searchQuery.toLowerCase();
+    return depots.filter(
+      (d) =>
+        d.nom.toLowerCase().includes(q) ||
+        d.emplacement.toLowerCase().includes(q) ||
+        d.responsable?.toLowerCase().includes(q)
+    );
+  }, [depots, searchQuery]);
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const filteredDepots = (list: Depot[]) => list.filter((d: Depot) => 
-    d.nom.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    d.emplacement?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    d.responsable?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const stats = useMemo(() => {
-    const total = depots.length;
-    const active = depots.filter(d => d.is_active).length;
-    const inactive = total - active;
-    return { total, active, inactive };
-  }, [depots]);
+  const totalStockValue = depots.reduce((sum, d) => sum + (d.total_value || 0), 0);
+  const activeDepotsCount = depots.filter((d) => d.is_active).length;
 
   return (
-    <div className="min-h-screen text-slate-900 p-6 lg:p-10 -m-6 lg:-m-10">
-      
+    <div className="space-y-8 animate-in fade-in duration-300">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed top-6 right-6 z-50 px-5 py-3.5 rounded-2xl shadow-2xl border text-white flex items-center gap-3 animate-in slide-in-from-top-3 ${
+            toast.type === "success"
+              ? "bg-slate-900 border-emerald-500/30"
+              : "bg-rose-950 border-rose-500/30"
+          }`}
+        >
+          {toast.type === "success" ? (
+            <CheckCircle2 size={20} className="text-emerald-400" />
+          ) : (
+            <AlertCircle size={20} className="text-rose-400" />
+          )}
+          <span className="text-xs font-black">{toast.message}</span>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="p-2 rounded-lg bg-slate-100">
-               <Warehouse className="text-slate-600" size={24} />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">Gestion des Dépôts</h1>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider">
+              GESTION MULTI-AGENCES
+            </span>
+            <span className="text-xs font-bold text-slate-500">
+              {locale === "ar" ? "إدارة المستودعات، المحلات، والفروع اللوجستية" : "Dépôts, Magasins & Entrepôts Centraux"}
+            </span>
           </div>
-          <p className="text-slate-500 text-sm font-medium ml-11">Configurez vos points de stockage et responsables</p>
+          <h1 className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+            <Warehouse className="text-emerald-600" size={32} />
+            {locale === "ar" ? "إدارة المستودعات والفروع" : "Gestion des Dépôts"}
+          </h1>
         </div>
 
-        {isAdmin && (
-          <button 
-            onClick={handleOpenAdd}
-            className="flex items-center gap-2 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all active:scale-95 group bg-[#6366f1] shadow-indigo-200">
-            <Plus size={18} className="group-hover:rotate-90 transition-transform" />
-            Nouveau Dépôt
+        <div className="flex items-center gap-3">
+          <button
+            onClick={loadData}
+            className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+          >
+            <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+            <span>{locale === "ar" ? "تحديث" : "Actualiser"}</span>
           </button>
+
+          <button
+            onClick={handleOpenAddModal}
+            className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Plus size={16} />
+            <span>{locale === "ar" ? "إضافة مستودع جديد" : "Nouveau Dépôt"}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Top 3 KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+              {locale === "ar" ? "إجمالي المستودعات" : "Total Dépôts & Boutiques"}
+            </span>
+            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+              <Store size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-slate-900">{depots.length}</div>
+          <div className="text-xs text-emerald-600 font-bold mt-1.5 flex items-center gap-1">
+            <CheckCircle2 size={13} />
+            <span>{activeDepotsCount} {locale === "ar" ? "مستودعات نشطة" : "actifs et opérationnels"}</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+              {locale === "ar" ? "قيمة المخزون الإجمالية" : "Valeur Totale en Stock"}
+            </span>
+            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+              <TrendingUp size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-indigo-600">{formatCurrencyAmount(totalStockValue)}</div>
+          <div className="text-xs text-slate-500 font-bold mt-1.5">
+            {locale === "ar" ? "موزعة على كافة الفروع" : "Répartie sur l'ensemble du réseau"}
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-slate-900 to-emerald-950 text-white rounded-3xl p-5 shadow-xl border border-white/10">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-extrabold uppercase text-emerald-300 tracking-wider">
+              {locale === "ar" ? "تأمين ونطاق البائعين" : "Scoping & Isolation"}
+            </span>
+            <div className="p-2 rounded-xl bg-white/10 text-emerald-400">
+              <ShieldCheck size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-emerald-400">100% SÉCURISÉ</div>
+          <div className="text-xs text-slate-300 font-bold mt-1.5 flex items-center gap-1">
+            <Sparkles size={13} className="text-amber-400" />
+            <span>{locale === "ar" ? "تخصيص صارم لكل بائع" : "Filtrage automatique par agence"}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder={locale === "ar" ? "بحث باسم المستودع، الموقع، أو المسؤول..." : "Rechercher un dépôt, emplacement, responsable..."}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+
+        <div className="text-xs font-extrabold text-slate-500">
+          Total : <span className="text-emerald-600">{filteredDepots.length}</span> {locale === "ar" ? "مستودع" : "dépôts"}
+        </div>
+      </div>
+
+      {/* Depots Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {loading ? (
+          <div className="col-span-full py-16 text-center text-slate-400 bg-white rounded-3xl border border-slate-200">
+            <Loader2 size={32} className="animate-spin mx-auto text-emerald-600 mb-2" />
+            <span>{locale === "ar" ? "جاري تحميل المستودعات..." : "Chargement des dépôts..."}</span>
+          </div>
+        ) : filteredDepots.length === 0 ? (
+          <div className="col-span-full py-16 text-center text-slate-400 bg-white rounded-3xl border border-slate-200">
+            <Warehouse size={36} className="mx-auto text-slate-300 mb-2" />
+            <span>{locale === "ar" ? "لا يوجد مستودع مطابق للبحث." : "Aucun dépôt trouvé."}</span>
+          </div>
+        ) : (
+          filteredDepots.map((depot) => (
+            <div
+              key={depot.id}
+              className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 hover:shadow-lg transition-all space-y-4 relative overflow-hidden group"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
+                    <Warehouse size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900 group-hover:text-emerald-600 transition-colors">
+                      {depot.nom}
+                    </h3>
+                    <div className="text-xs font-bold text-slate-400 flex items-center gap-1 mt-0.5">
+                      <MapPin size={12} />
+                      <span>{depot.emplacement}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <span
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                    depot.is_active ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+                  }`}
+                >
+                  {depot.is_active ? "ACTIF" : "INACTIF"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 py-3 border-y border-slate-100 text-xs font-bold">
+                <div>
+                  <span className="text-slate-400 text-[11px] block">{locale === "ar" ? "المسؤول" : "Responsable"}</span>
+                  <span className="text-slate-800 flex items-center gap-1 mt-0.5">
+                    <User size={12} className="text-emerald-600" />
+                    {depot.responsable || "Non assigné"}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 text-[11px] block">{locale === "ar" ? "أصناف متوفرة" : "Articles Stock"}</span>
+                  <span className="text-indigo-600 font-black mt-0.5 block">
+                    {depot.articles_count || 0} références
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-extrabold uppercase block">
+                    {locale === "ar" ? "قيمة المخزون" : "Valeur Stock"}
+                  </span>
+                  <span className="text-sm font-black text-emerald-600">
+                    {formatCurrencyAmount(depot.total_value || 0)}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleOpenEditModal(depot)}
+                    className="p-2 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 transition-colors cursor-pointer"
+                    title="Modifier"
+                  >
+                    <Edit3 size={14} />
+                  </button>
+
+                  <button
+                    onClick={() => handleDelete(depot)}
+                    className="p-2 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 transition-colors cursor-pointer"
+                    title="Supprimer"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
         )}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        {[
-          { label: "Total Dépôts", value: stats.total, color: "text-[#6366f1]", bg: "bg-[#6366f1]/5", icon: Warehouse },
-          { label: "Dépôts Actifs", value: stats.active, color: "text-emerald-500", bg: "bg-emerald-50", icon: Power },
-          { label: "Inactive / Maintenance", value: stats.inactive, color: "text-rose-500", bg: "bg-rose-50", icon: AlertCircle }
-        ].map((stat, i) => (
-          <div key={i} className={statsCardClass}>
-            <div className={cn("p-4 rounded-2xl", stat.bg)}>
-               <stat.icon className={stat.color} size={24} />
-            </div>
-            <div>
-              <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.15em] mb-1">{stat.label}</p>
-              <p className="text-2xl font-black text-slate-800 tracking-tight">{stat.value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* List Container */}
-      <div className="bg-white rounded-[40px] border border-slate-100 shadow-[0_15px_50px_-15px_rgba(0,0,0,0.05)] overflow-hidden">
-        <div className="p-8 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-            <input 
-              type="text" 
-              placeholder="Rechercher un dépôt..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50/50 border border-slate-100 rounded-2xl pl-13 pr-4 py-4 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-[#6366f1]/5 transition-all text-slate-700"
-            />
-          </div>
-          <button onClick={loadData} className="p-3 text-slate-300 hover:text-[#6366f1] transition-colors">
-            <RefreshCw size={20} className={refreshing ? "animate-spin" : ""} />
-          </button>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center w-20">ID</th>
-                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Dépôt</th>
-                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Emplacement</th>
-                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">Responsable</th>
-                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Statut</th>
-                {isAdmin && <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Actions</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="py-20 text-center">
-                    <Loader2 size={32} className="animate-spin text-indigo-500 mx-auto mb-4" />
-                    <p className="text-slate-400 font-bold">Chargement...</p>
-                  </td>
-                </tr>
-              ) : filteredDepots(depots).length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-20 text-center">
-                    <Warehouse size={48} className="text-slate-200 mx-auto mb-4" />
-                    <p className="text-slate-400 font-bold text-lg">Aucun dépôt trouvé</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredDepots(depots).map((depot: Depot) => (
-                  <tr key={depot.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-8 py-5 text-center font-mono text-xs text-slate-400">#{depot.id.toString().padStart(3, '0')}</td>
-                    <td className="px-8 py-5">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-slate-100 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors">
-                          <Warehouse size={16} />
-                        </div>
-                        <span className="font-bold text-slate-800">{depot.nom}</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-5">
-                      <div className="flex items-center gap-2 text-slate-500 font-medium">
-                        <MapPin size={14} className="opacity-50" />
-                        {depot.emplacement || "-"}
-                      </div>
-                    </td>
-                    <td className="px-8 py-5">
-                      <div className="flex items-center gap-2 text-slate-500 font-medium">
-                        <User size={14} className="opacity-50" />
-                        {depot.responsable || "Non assigné"}
-                      </div>
-                    </td>
-                    <td className="px-8 py-5 text-center">
-                      <span className={cn(
-                        "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter",
-                        depot.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                      )}>
-                        {depot.is_active ? "Actif" : "Inactif"}
-                      </span>
-                    </td>
-                    {isAdmin && (
-                      <td className="px-8 py-5 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => handleEdit(depot)} className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg transition-all">
-                            <Edit3 size={18} />
-                          </button>
-                          <button onClick={() => handleDelete(depot.id)} className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg transition-all">
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal */}
+      {/* Modal Form */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={handleCloseModal}></div>
-          <div className="relative bg-white w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden border border-white/20 animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
-              <div>
-                <h2 className="text-xl font-black text-slate-900">{isEditing ? "Modifier le Dépôt" : "Nouveau Dépôt"}</h2>
-                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">Configuration du point de stockage</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold">
+                  <Warehouse size={16} />
+                </div>
+                <h3 className="text-base font-black text-slate-900">
+                  {isEditing
+                    ? locale === "ar"
+                      ? "تعديل بيانات المستودع"
+                      : "Modifier le Dépôt"
+                    : locale === "ar"
+                    ? "إضافة مستودع / فرع جديد"
+                    : "Créer un Nouveau Dépôt"}
+                </h3>
               </div>
-              <button onClick={handleCloseModal} className="p-2 hover:bg-white rounded-xl transition-all shadow-sm border border-transparent hover:border-slate-100">
-                <X size={20} className="text-slate-400" />
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer"
+              >
+                <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-8 space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Nom du Dépôt <span className="text-rose-500">*</span></label>
-                <div className="relative">
-                  <Warehouse className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                  <input 
-                    required type="text" value={formData.nom}
-                    onChange={(e) => setFormData({...formData, nom: e.target.value})}
-                    placeholder="Ex: Dépôt Principal"
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all text-slate-800"
+            <form onSubmit={handleSave} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {locale === "ar" ? "اسم المستودع / الفرع" : "Nom du Dépôt"} *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: DEPOT PRINCIPAL NIGER"
+                  value={formData.nom}
+                  onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {locale === "ar" ? "الموقع الجغرافي / العنوان" : "Emplacement / Adresse"}
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Zone Industrielle, Niamey"
+                  value={formData.emplacement}
+                  onChange={(e) => setFormData({ ...formData, emplacement: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {locale === "ar" ? "المسؤول عن المستودع" : "Responsable du Dépôt"}
+                </label>
+                <select
+                  value={formData.responsable}
+                  onChange={(e) => setFormData({ ...formData, responsable: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
+                >
+                  <option value="">Sélectionner un responsable...</option>
+                  {users.map((u, i) => (
+                    <option key={i} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-2">
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                    className="w-4 h-4 rounded text-emerald-600"
                   />
-                </div>
+                  <span>{locale === "ar" ? "المستودع نشط وجاهز للعمليات" : "Dépôt actif pour les ventes et mouvements"}</span>
+                </label>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Emplacement</label>
-                <div className="relative">
-                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                  <input 
-                    type="text" value={formData.emplacement}
-                    onChange={(e) => setFormData({...formData, emplacement: e.target.value})}
-                    placeholder="Ex: Zone Industrielle, Lot 42"
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all text-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Responsable</label>
-                <div className="relative">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                  <select 
-                    value={formData.responsable}
-                    onChange={(e) => setFormData({...formData, responsable: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all text-slate-800 appearance-none"
-                  >
-                    <option value="">Non assigné</option>
-                    {users.map(user => (
-                      <option key={user} value={user}>{user}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
-                <div>
-                  <p className="text-sm font-black text-slate-700">Statut du dépôt</p>
-                  <p className="text-[10px] font-bold text-slate-400">Désactiver pour suspendre les mouvements</p>
-                </div>
-                <button 
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
                   type="button"
-                  onClick={() => setFormData({...formData, is_active: !formData.is_active})}
-                  className={cn(
-                    "relative w-14 h-8 rounded-full transition-colors duration-300",
-                    formData.is_active ? "bg-emerald-500" : "bg-slate-300"
-                  )}
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
                 >
-                  <div className={cn(
-                    "absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 flex items-center justify-center",
-                    formData.is_active ? "translate-x-6" : "translate-x-0"
-                  )}>
-                    <Check size={12} className={cn(formData.is_active ? "text-emerald-500" : "hidden")} strokeWidth={4} />
-                  </div>
+                  {locale === "ar" ? "إلغاء" : "Annuler"}
                 </button>
-              </div>
 
-              <div className="pt-4 flex gap-4">
-                <button 
-                  type="button" onClick={handleCloseModal}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 px-6 py-4 rounded-2xl font-black transition-all active:scale-95"
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  Annuler
-                </button>
-                <button 
-                  type="submit" disabled={isSubmitting}
-                  className="flex-1 text-white px-6 py-4 rounded-2xl font-black shadow-lg shadow-indigo-100 transition-all active:scale-95 flex items-center justify-center gap-2 bg-[#6366f1] disabled:opacity-70"
-                >
-                  {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-                  {isEditing ? "Enregistrer" : "Créer le Dépôt"}
+                  {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  <span>{locale === "ar" ? "حفظ المستودع" : "Enregistrer"}</span>
                 </button>
               </div>
             </form>

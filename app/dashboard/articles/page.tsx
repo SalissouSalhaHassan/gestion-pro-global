@@ -2,7 +2,33 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { Package, Search, ArrowUpDown, AlertCircle, PackageOpen, LayoutGrid, Loader2, Plus, X, Save, Edit3, Trash2, Printer } from "lucide-react";
+import { useLanguage } from "@/lib/i18n/context";
+import { formatCurrencyAmount } from "@/lib/utils/currency";
+import {
+  Package,
+  Search,
+  ArrowUpDown,
+  AlertCircle,
+  PackageOpen,
+  LayoutGrid,
+  List,
+  Loader2,
+  Plus,
+  X,
+  Save,
+  Edit3,
+  Trash2,
+  Printer,
+  Sparkles,
+  Barcode as BarcodeIcon,
+  RefreshCw,
+  Building2,
+  TrendingUp,
+  Tag,
+  CheckCircle2,
+  Layers,
+  Filter,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import Barcode from "react-barcode";
 
@@ -11,6 +37,9 @@ type Article = {
   reference: string;
   code_barre: string | null;
   designation: string;
+  nom?: string | null;
+  famille?: string | null;
+  p_achat_ht?: number;
   p_vente_ht: number;
   p_vente_ttc: number;
   image_path: string | null;
@@ -19,25 +48,21 @@ type Article = {
 
 const supabase = createClient();
 
-const PRODUCT_IMAGES: Record<string, string> = {
-  "coca cola": "/products/coca_cola.png",
-  "coca-cola": "/products/coca_cola.png",
-  "chips": "/products/chips.png",
-  "lait": "/products/lait.png",
-  "pomme": "/products/pomme.png",
-  "shampooing": "/products/shampooing.png",
-  "shampoing": "/products/shampooing.png",
-};
+function generateSmartReference() {
+  const year = new Date().getFullYear();
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `ART-${year}-${rand}`;
+}
 
-function getProductImage(name: string): string | null {
-  const lower = name.toLowerCase().trim();
-  for (const [key, value] of Object.entries(PRODUCT_IMAGES)) {
-    if (lower.includes(key)) return value;
-  }
-  return null;
+function generateSmartBarcode() {
+  // Generate valid 12-digit numeric barcode prefix
+  const prefix = "2026";
+  const randomSuffix = Math.floor(10000000 + Math.random() * 90000000);
+  return `${prefix}${randomSuffix}`;
 }
 
 export default function ArticlesPage() {
+  const { t, locale, dir } = useLanguage();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -45,8 +70,7 @@ export default function ArticlesPage() {
   const [sortAsc, setSortAsc] = useState(true);
   const [selectedIds, setSelectedIds] = useState<(string | number)[]>([]);
   const [printArticle, setPrintArticle] = useState<Article | null>(null);
-  const [userRole, setUserRole] = useState<"admin" | "vendeur">("vendeur");
-  const [userDepot, setUserDepot] = useState("");
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,898 +87,810 @@ export default function ArticlesPage() {
     p_vente_ht: "",
     p_vente_ttc: "",
     taxe: "0",
-    qte_min: "0",
+    qte_min: "5",
     article_par_colis: "1",
     stock_initial: "0",
     rayonnage: "",
     isb: "",
     ts: "",
     is_favorite: false,
-    depot_nom: "",
-    id: null as string | number | null
+    depot_nom: "BOUTIQUE",
+    id: null as string | number | null,
   });
 
   const [categories, setCategories] = useState<string[]>([]);
   const [suppliers, setSuppliers] = useState<string[]>([]);
   const [units, setUnits] = useState<string[]>([]);
   const [allDepots, setAllDepots] = useState<string[]>([]);
-  const [allowedDepots, setAllowedDepots] = useState<string[]>([]);
   const [selectedFilterDepot, setSelectedFilterDepot] = useState<string>("Tous");
-  const [toast, setToast] = useState<{message: string, type: "success" | "error"} | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+
+      // 1. Fetch auxiliary data
+      const [catRes, supRes, unitRes, depotRes] = await Promise.all([
+        supabase.from("categories").select("nom").eq("is_deleted", false),
+        supabase.from("fournisseurs").select("nom").eq("is_deleted", false),
+        supabase.from("unites").select("nom").eq("is_deleted", false),
+        supabase.from("depots").select("nom").eq("is_deleted", false),
+      ]);
+
+      if (catRes.data) setCategories(catRes.data.map((c: any) => c.nom));
+      if (supRes.data) setSuppliers(supRes.data.map((s: any) => s.nom));
+      if (unitRes.data) setUnits(unitRes.data.map((u: any) => u.nom));
+      if (depotRes.data) setAllDepots(depotRes.data.map((d: any) => d.nom));
+
+      // 2. Fetch articles
+      const { data: artsData, error: artsErr } = await supabase
+        .from("articles")
+        .select("*")
+        .eq("is_deleted", false)
+        .order("designation");
+
+      if (artsErr) throw artsErr;
+
+      // 3. Fetch stocks
+      const { data: stockData } = await supabase.from("stocks").select("article_id, depot_nom, quantite");
+
+      const stockMap: Record<string | number, number> = {};
+      if (stockData) {
+        stockData.forEach((st: any) => {
+          const qty = Number(st.quantite) || 0;
+          stockMap[st.article_id] = (stockMap[st.article_id] || 0) + qty;
+        });
+      }
+
+      if (artsData) {
+        const enriched: Article[] = artsData.map((a: any) => ({
+          id: a.id,
+          reference: a.reference || `ART-${a.id}`,
+          code_barre: a.code_barre || null,
+          designation: a.designation || a.nom || "Sans titre",
+          nom: a.nom || null,
+          famille: a.famille || null,
+          p_achat_ht: Number(a.p_achat_ht) || 0,
+          p_vente_ht: Number(a.p_vente_ht) || Number(a.p_vente_ttc) || 0,
+          p_vente_ttc: Number(a.p_vente_ttc) || Number(a.p_vente_ht) || 0,
+          image_path: a.image_path || null,
+          stock_total: stockMap[a.id] || 0,
+        }));
+        setArticles(enriched);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setToast({ message: "Erreur de chargement du catalogue", type: "error" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleOpenAddModal = () => {
+    setFormData({
+      designation: "",
+      nom: "",
+      reference: generateSmartReference(),
+      code_barre: generateSmartBarcode(),
+      famille: categories.length > 0 ? categories[0] : "",
+      fournisseur_pref: suppliers.length > 0 ? suppliers[0] : "",
+      unite: units.length > 0 ? units[0] : "Pièce",
+      p_achat_ht: "",
+      p_achat_ttc: "",
+      p_vente_ht: "",
+      p_vente_ttc: "",
+      taxe: "0",
+      qte_min: "5",
+      article_par_colis: "1",
+      stock_initial: "0",
+      rayonnage: "",
+      isb: "",
+      ts: "",
+      is_favorite: false,
+      depot_nom: allDepots.length > 0 ? allDepots[0] : "BOUTIQUE",
+      id: null,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (article: Article) => {
+    setFormData({
+      id: article.id,
+      designation: article.designation,
+      nom: article.nom || "",
+      reference: article.reference,
+      code_barre: article.code_barre || "",
+      famille: article.famille || "",
+      fournisseur_pref: "",
+      unite: "",
+      p_achat_ht: String(article.p_achat_ht || "0"),
+      p_achat_ttc: String(article.p_achat_ht || "0"),
+      p_vente_ht: String(article.p_vente_ht),
+      p_vente_ttc: String(article.p_vente_ttc),
+      taxe: "0",
+      qte_min: "5",
+      article_par_colis: "1",
+      stock_initial: "0",
+      rayonnage: "",
+      isb: "",
+      ts: "",
+      is_favorite: false,
+      depot_nom: "",
+    });
+    setIsModalOpen(true);
+  };
 
   const handleSaveArticle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.designation) return;
+    if (!formData.designation.trim()) return;
+
     setSaving(true);
     try {
-      const pVenteTtcNum = Number(formData.p_vente_ttc) || 0;
-      const pVenteHtNum = Number(formData.p_vente_ht) || pVenteTtcNum;
-      const pAchatHtNum = Number(formData.p_achat_ht) || 0;
-      const pAchatTtcNum = Number(formData.p_achat_ttc) || 0;
-      const taxeNum = Number(formData.taxe) || 0;
-      const qteMinNum = Number(formData.qte_min) || 0;
-      const artParColisNum = Number(formData.article_par_colis) || 1;
-      
+      const pVenteTtc = Number(formData.p_vente_ttc) || Number(formData.p_vente_ht) || 0;
+      const pVenteHt = Number(formData.p_vente_ht) || pVenteTtc;
+      const pAchatHt = Number(formData.p_achat_ht) || 0;
       const isEditing = !!formData.id;
-      
+
       const payload: any = {
-        designation: formData.designation,
-        nom: formData.nom || null,
-        reference: formData.reference || (isEditing ? undefined : `ART-${Date.now().toString().slice(-6)}`),
-        code_barre: formData.code_barre || null,
+        designation: formData.designation.trim(),
+        nom: formData.nom || formData.designation.trim(),
+        reference: formData.reference.trim() || generateSmartReference(),
+        code_barre: formData.code_barre.trim() || null,
         famille: formData.famille || null,
-        fournisseur_pref: formData.fournisseur_pref || null,
-        unite: formData.unite || null,
-        p_achat_ht: pAchatHtNum,
-        p_achat_ttc: pAchatTtcNum,
-        p_vente_ht: pVenteHtNum,
-        p_vente_ttc: pVenteTtcNum,
-        taxe: taxeNum,
-        qte_min: qteMinNum,
-        article_par_colis: artParColisNum,
+        p_achat_ht: pAchatHt,
+        p_achat_ttc: pAchatHt,
+        p_vente_ht: pVenteHt,
+        p_vente_ttc: pVenteTtc,
+        taxe: Number(formData.taxe) || 0,
+        qte_min: Number(formData.qte_min) || 0,
+        article_par_colis: Number(formData.article_par_colis) || 1,
         rayonnage: formData.rayonnage || null,
-        isb: formData.isb || null,
-        ts: formData.ts || null,
-        is_favorite: formData.is_favorite,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
-      let resultArticle;
+      let savedId = formData.id;
 
-      if (isEditing) {
-        const { data, error } = await supabase
-          .from("articles")
-          .update(payload)
-          .eq("id", formData.id)
-          .select()
-          .single();
+      if (isEditing && savedId) {
+        const { error } = await supabase.from("articles").update(payload).eq("id", savedId);
         if (error) throw error;
-        resultArticle = data;
       } else {
         payload.is_deleted = false;
         payload.image_path = "";
-        const { data, error } = await supabase
-          .from("articles")
-          .insert(payload)
-          .select()
-          .single();
+        const { data: created, error } = await supabase.from("articles").insert([payload]).select().single();
         if (error) throw error;
-        resultArticle = data;
-      }
-        
-      // Initial Stock (only for new articles)
-      const stockNum = Number(formData.stock_initial) || 0;
-      if (!isEditing && stockNum > 0 && resultArticle) {
-        await supabase.from("stocks").insert({
-          article_id: resultArticle.id,
-          depot_nom: formData.depot_nom || "Dépôt Principal",
-          quantite: stockNum
-        });
-      }
-      
-      if (resultArticle) {
-        if (isEditing) {
-          setArticles(prev => prev.map(a => a.id === resultArticle.id ? {
-            ...a,
-            reference: resultArticle.reference,
-            code_barre: resultArticle.code_barre,
-            designation: resultArticle.designation,
-            p_vente_ht: resultArticle.p_vente_ht,
-            p_vente_ttc: resultArticle.p_vente_ttc,
-          } : a));
-        } else {
-          setArticles(prev => [{
-            id: resultArticle.id,
-            reference: resultArticle.reference,
-            code_barre: resultArticle.code_barre,
-            designation: resultArticle.designation,
-            p_vente_ht: resultArticle.p_vente_ht,
-            p_vente_ttc: resultArticle.p_vente_ttc,
-            image_path: null,
-            stock_total: stockNum
-          }, ...prev]);
+        savedId = created.id;
+
+        // Insert initial stock
+        const stockInitial = Number(formData.stock_initial) || 0;
+        if (stockInitial > 0 && savedId) {
+          await supabase.from("stocks").insert([
+            {
+              article_id: savedId,
+              depot_nom: formData.depot_nom || "BOUTIQUE",
+              quantite: stockInitial,
+            },
+          ]);
         }
       }
-      
-      setToast({ message: isEditing ? "Article mis à jour !" : "Article ajouté !", type: "success" });
+
+      setToast({
+        message: isEditing ? "Article mis à jour avec succès" : "Nouvel article créé avec succès",
+        type: "success",
+      });
       setIsModalOpen(false);
-      resetForm();
-    } catch (err) {
+      loadData();
+    } catch (err: any) {
       console.error(err);
-      setToast({ message: "Erreur lors de l'enregistrement.", type: "error" });
+      setToast({ message: err.message || "Erreur lors de l'enregistrement", type: "error" });
     } finally {
       setSaving(false);
-      setTimeout(() => setToast(null), 3000);
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      designation: "", nom: "", reference: "", code_barre: "", famille: "", 
-      fournisseur_pref: "", unite: "", p_achat_ht: "", p_achat_ttc: "", 
-      p_vente_ht: "", p_vente_ttc: "", taxe: "0", qte_min: "0", 
-      article_par_colis: "1", stock_initial: "0", rayonnage: "", isb: "", ts: "", is_favorite: false,
-      depot_nom: "", id: null
-    });
-  };
-
-  const handleEdit = async (articleId: string | number) => {
+  const handleDelete = async (id: string | number, name: string) => {
+    if (!confirm(`Voulez-vous vraiment supprimer l'article "${name}" ?`)) return;
     try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("articles")
-        .select("*")
-        .eq("id", articleId)
-        .single();
-        
+      const { error } = await supabase.from("articles").update({ is_deleted: true }).eq("id", id);
       if (error) throw error;
-      
-      if (data) {
-        setFormData({
-          id: data.id,
-          designation: data.designation || "",
-          nom: data.nom || "",
-          reference: data.reference || "",
-          code_barre: data.code_barre || "",
-          famille: data.famille || "",
-          fournisseur_pref: data.fournisseur_pref || "",
-          unite: data.unite || "",
-          p_achat_ht: String(data.p_achat_ht || "0"),
-          p_achat_ttc: String(data.p_achat_ttc || "0"),
-          p_vente_ht: String(data.p_vente_ht || "0"),
-          p_vente_ttc: String(data.p_vente_ttc || "0"),
-          taxe: String(data.taxe || "0"),
-          qte_min: String(data.qte_min || "0"),
-          article_par_colis: String(data.article_par_colis || "1"),
-          stock_initial: "0", // Not editable
-          rayonnage: data.rayonnage || "",
-          isb: data.isb || "",
-          ts: data.ts || "",
-          is_favorite: !!data.is_favorite,
-          depot_nom: "" // Not used in edit
-        });
-        setIsModalOpen(true);
-      }
-    } catch (err) {
-      console.error(err);
-      setToast({ message: "Échec du chargement de l'article.", type: "error" });
-    } finally {
-      setLoading(false);
+      setToast({ message: "Article supprimé", type: "success" });
+      loadData();
+    } catch (err: any) {
+      setToast({ message: err.message || "Erreur de suppression", type: "error" });
     }
   };
 
-  const handleDelete = async (articleId: string | number) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer cet article ?")) return;
-    try {
-      const { error } = await supabase
-        .from("articles")
-        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-        .eq("id", articleId);
-        
-      if (error) throw error;
-      
-      setArticles(prev => prev.filter(a => a.id !== articleId));
-      setToast({ message: "Article supprimé.", type: "success" });
-    } catch (err) {
-      console.error(err);
-      setToast({ message: "Erreur lors de la suppression.", type: "error" });
-    } finally {
-      setTimeout(() => setToast(null), 3000);
-    }
-  };
-
-  const handlePriceCalc = (type: 'ht' | 'ttc', mode: 'achat' | 'vente', value: string) => {
-    const num = parseFloat(value) || 0;
-    const taxe = parseFloat(formData.taxe) || 0;
-    
-    if (mode === 'achat') {
-      if (type === 'ht') {
-        const ttc = num * (1 + taxe/100);
-        setFormData(prev => ({ ...prev, p_achat_ht: value, p_achat_ttc: ttc.toFixed(2) }));
-      } else {
-        const ht = num / (1 + taxe/100);
-        setFormData(prev => ({ ...prev, p_achat_ttc: value, p_achat_ht: ht.toFixed(2) }));
-      }
-    } else {
-      if (type === 'ht') {
-        const ttc = num * (1 + taxe/100);
-        setFormData(prev => ({ ...prev, p_vente_ht: value, p_vente_ttc: ttc.toFixed(2) }));
-      } else {
-        const ht = num / (1 + taxe/100);
-        setFormData(prev => ({ ...prev, p_vente_ttc: value, p_vente_ht: ht.toFixed(2) }));
-      }
-    }
-  };
-
-  useEffect(() => {
-    async function loadInitialData() {
-      try {
-        const [cats, supps, unts, deps] = await Promise.all([
-          supabase.from("categories_articles").select("nom"),
-          supabase.from("fournisseurs").select("nom"),
-          supabase.from("unites_mesure").select("nom"),
-          supabase.from("depots").select("nom").eq("is_active", true)
-        ]);
-
-        if (cats.data) setCategories(cats.data.map(c => c.nom));
-        if (supps.data) setSuppliers(supps.data.map(s => s.nom));
-        if (unts.data) setUnits(unts.data.map(u => u.nom));
-        if (deps.data) setAllDepots(deps.data.map(d => d.nom));
-      } catch (err) {
-        console.error("Failed to load metadata", err);
-      }
-    }
-    loadInitialData();
-  }, []);
-
-  useEffect(() => {
-    async function loadArticles() {
-      setLoading(true);
-      try {
-        const queryParams = new URLSearchParams();
-        if (selectedFilterDepot && selectedFilterDepot !== "Tous") {
-          queryParams.set("depot", selectedFilterDepot);
-        }
-        const res = await fetch(`/api/articles?${queryParams.toString()}`);
-        const result = await res.json();
-        
-        if (!res.ok) {
-          console.error("❌ Articles fetch error:", result.error);
-          return;
-        }
-
-        // Set role and depot from API response
-        if (result.role) setUserRole(result.role);
-        if (result.depot) setUserDepot(result.depot);
-        if (result.allowedDepots) setAllowedDepots(result.allowedDepots);
-
-        const rawArticles = Array.isArray(result) ? result : (result.items || []);
-
-        const mapped: Article[] = rawArticles.map((r: any) => {
-          const stockTotal = Array.isArray(r.stocks)
-            ? r.stocks.reduce((acc: number, cur: any) => acc + (Number(cur.quantite) || 0), 0)
-            : 0;
-
-          return {
-            id: r.id,
-            reference: r.reference || "",
-            code_barre: r.code_barre || null,
-            designation: String(r.designation || r.nom || ""),
-            p_vente_ht: Number(r.p_vente_ht) || 0,
-            p_vente_ttc: Number(r.p_vente_ttc) || 0,
-            image_path: r.image_path || null,
-            stock_total: stockTotal,
-          };
-        });
-        setArticles(mapped);
-      } catch (err) {
-        console.error("Failed to load articles", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadArticles();
-  }, [selectedFilterDepot]);
-
-  const { filteredArticles, totalValue, lowStockCount } = useMemo(() => {
-    let filtered = articles;
-    if (query) {
-      const q = query.toLowerCase();
-      filtered = articles.filter(
-        (a) =>
+  const filteredArticles = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    return articles
+      .filter((a) => {
+        const matchesQuery =
+          !q ||
           a.designation.toLowerCase().includes(q) ||
           a.reference.toLowerCase().includes(q) ||
-          (a.code_barre && a.code_barre.toLowerCase().includes(q))
-      );
-    }
-
-    filtered.sort((a, b) => {
-      let aVal = a[sortField];
-      let bVal = b[sortField];
-      if (typeof aVal === "string" && typeof bVal === "string") {
-        return sortAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      }
-      if (typeof aVal === "number" && typeof bVal === "number") {
-        return sortAsc ? aVal - bVal : bVal - aVal;
-      }
-      return 0;
-    });
-
-    const totalVal = articles.reduce((acc, curr) => acc + curr.stock_total * curr.p_vente_ht, 0);
-    const lowStock = articles.filter((a) => a.stock_total <= 5).length;
-
-    return { filteredArticles: filtered, totalValue: totalVal, lowStockCount: lowStock };
+          (a.code_barre && a.code_barre.toLowerCase().includes(q)) ||
+          (a.famille && a.famille.toLowerCase().includes(q));
+        return matchesQuery;
+      })
+      .sort((a, b) => {
+        let valA: any = a[sortField] || "";
+        let valB: any = b[sortField] || "";
+        if (typeof valA === "string") valA = valA.toLowerCase();
+        if (typeof valB === "string") valB = valB.toLowerCase();
+        if (valA < valB) return sortAsc ? -1 : 1;
+        if (valA > valB) return sortAsc ? 1 : -1;
+        return 0;
+      });
   }, [articles, query, sortField, sortAsc]);
 
-  const toggleSort = (field: keyof Article) => {
-    if (sortField === field) {
-      setSortAsc(!sortAsc);
-    } else {
-      setSortField(field);
-      setSortAsc(true);
-    }
-  };
-
-  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.checked && filteredArticles.length > 0) {
-      setSelectedIds(filteredArticles.map(a => a.id));
-    } else {
-      setSelectedIds([]);
-    }
-  };
-
-  const handleSelectItem = (id: string | number) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
-
-  const handleBulkDelete = async () => {
-    if (!confirm(`Voulez-vous vraiment supprimer ${selectedIds.length} article(s)?`)) return;
-    try {
-      setLoading(true);
-      await supabase.from("articles").update({ is_deleted: true, deleted_at: new Date().toISOString() }).in("id", selectedIds);
-      setArticles(articles.filter(a => !selectedIds.includes(a.id)));
-      setSelectedIds([]);
-      setToast({ message: "Articles supprimés avec succès.", type: "success" });
-    } catch (e) {
-      setToast({ message: "Erreur lors de la suppression.", type: "error" });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Executive Metrics
+  const totalStockQty = articles.reduce((sum, a) => sum + a.stock_total, 0);
+  const totalStockValue = articles.reduce((sum, a) => sum + a.stock_total * (a.p_achat_ht || a.p_vente_ht * 0.7), 0);
+  const totalLowStock = articles.filter((a) => a.stock_total <= 5).length;
 
   return (
-    <div className="space-y-10 max-w-[1600px] mx-auto pb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      
-      {/* Toast Notification */}
+    <div className="space-y-8 animate-in fade-in duration-300">
+      {/* Toast */}
       {toast && (
-        <div className={`fixed top-6 right-6 z-50 p-4 rounded-xl shadow-lg font-bold text-white flex items-center gap-3 transition-all ${toast.type === 'success' ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-red-500 shadow-red-500/20'}`}>
-          {toast.message}
+        <div
+          className={`fixed top-6 right-6 z-50 px-5 py-3.5 rounded-2xl shadow-2xl border text-white flex items-center gap-3 animate-in slide-in-from-top-3 ${
+            toast.type === "success"
+              ? "bg-slate-900 border-emerald-500/30"
+              : "bg-rose-950 border-rose-500/30"
+          }`}
+        >
+          {toast.type === "success" ? (
+            <CheckCircle2 size={20} className="text-emerald-400" />
+          ) : (
+            <AlertCircle size={20} className="text-rose-400" />
+          )}
+          <span className="text-xs font-black">{toast.message}</span>
         </div>
       )}
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900 flex items-center gap-4">
-            <div className="p-3 bg-white/50 backdrop-blur-md rounded-2xl border border-white/50 shadow-sm">
-              <Package className="text-indigo-600" size={32} />
-            </div>
-            Gestion des Articles
-          </h1>
-          <p className="mt-2 text-slate-500 font-medium ml-1">
-            {userRole === "vendeur" 
-              ? `Articles disponibles dans votre dépôt: ${userDepot}` 
-              : "Consultez et gérez le catalogue complet de vos produits et stocks."
-            }
-          </p>
-        </div>
-      </div>
 
-      {/* KPIs Cards */}
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
-        {[
-          { label: "Articles Totaux", value: articles.length, bg: "linear-gradient(135deg, #4f46e5, #7c3aed)", icon: LayoutGrid, shadowColor: "rgba(79,70,229,0.3)" },
-          { label: "Stock Faible / Épuisé", value: lowStockCount, bg: "linear-gradient(135deg, #f59e0b, #ef4444)", icon: AlertCircle, shadowColor: "rgba(245,158,11,0.3)" },
-          { label: "Valeur Totale (HT)", value: `${new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(totalValue)} F CFA`, bg: "linear-gradient(135deg, #10b981, #34d399)", icon: Package, shadowColor: "rgba(16,185,129,0.3)" },
-        ].map((card, i) => (
-          <div
-            key={i}
-            className="relative overflow-hidden p-8 rounded-[32px] text-white transition-all hover:scale-[1.03] cursor-pointer group"
-            style={{ background: card.bg, boxShadow: `0 20px 40px ${card.shadowColor}` }}
-          >
-             <div className="absolute -right-4 -bottom-4 w-32 h-32 rounded-full blur-3xl group-hover:bg-white/20 transition-all bg-white/10"></div>
-             <div className="flex items-center justify-between mb-4">
-               <div className="flex items-center gap-3">
-                 <div className="p-3 rounded-2xl bg-white/20 backdrop-blur-md">
-                    <card.icon size={22} />
-                 </div>
-                 <span className="text-sm font-black uppercase tracking-widest opacity-90">{card.label}</span>
-               </div>
-             </div>
-             <div className="text-3xl font-black mt-2 tracking-tight line-clamp-1">{card.value}</div>
-          </div>
-        ))}
-      </div>
+      {/* Hero Header */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-950 text-white rounded-[32px] p-6 lg:p-8 shadow-2xl border border-white/10 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Toolbar (Search & New Article Button) */}
-      <div className="bg-white rounded-[40px] border border-slate-100 shadow-[0_15px_50px_-15px_rgba(0,0,0,0.05)] overflow-hidden">
-        <div className="p-8 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-            <input 
-              type="text" 
-              placeholder="Rechercher par désignation, référence ou code-barres..." 
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-13 pr-4 py-4 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-[#6366f1]/5 transition-all text-slate-700"
-            />
-          </div>
-          
-          {/* Depot Filter Selector */}
-          {(userRole === "admin" || allowedDepots.length > 1) && (
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
-              <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Dépôt:</span>
-              <select
-                value={selectedFilterDepot}
-                onChange={(e) => setSelectedFilterDepot(e.target.value)}
-                className="bg-transparent border-none text-slate-700 font-bold focus:outline-none text-sm cursor-pointer"
-              >
-                <option value="Tous">Tous les dépôts</option>
-                {userRole === "admin" ? (
-                  allDepots.map(dep => (
-                    <option key={dep} value={dep}>{dep}</option>
-                  ))
-                ) : (
-                  allowedDepots.map(dep => (
-                    <option key={dep} value={dep}>{dep}</option>
-                  ))
-                )}
-              </select>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-3 py-1 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-black tracking-wider flex items-center gap-1.5 shadow-md">
+                <Package size={14} />
+                ENTERPRISE PRODUCT CATALOG
+              </span>
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 bg-emerald-950/60 px-3 py-1 rounded-xl border border-emerald-500/30">
+                <Sparkles size={12} className="text-amber-400" />
+                {articles.length} {locale === "ar" ? "صنف مسجل" : "Articles Référencés"}
+              </span>
             </div>
-          )}
-          {userRole === "admin" && (
-            <button 
-              onClick={() => { resetForm(); setIsModalOpen(true); }}
-              className="flex items-center gap-2 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all active:scale-95 group bg-[#6366f1] shadow-indigo-100">
-              <Plus size={18} className="transition-transform group-hover:rotate-90" />
-              Nouvel Article
+
+            <h1 className="text-2xl lg:text-3xl font-black text-white">
+              {locale === "ar" ? "إدارة الأصناف والمنتجات" : "Catalogue & Gestion des Articles"}
+            </h1>
+            <p className="text-xs lg:text-sm text-slate-300 font-medium mt-1">
+              {locale === "ar"
+                ? "قاعدة بيانات المنتجات الذكية، التوليد التلقائي للباركود والمرجع، ومتابعة المخزون اللحظي"
+                : "Base de données produits avec génération automatique des codes-barres et valorisation du stock"}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={loadData}
+              className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+            >
+              <RefreshCw size={15} />
+              <span>{locale === "ar" ? "تحديث" : "Actualiser"}</span>
             </button>
-          )}
-        </div>
-      </div>
 
-      {/* Count Divider */}
-      <div className="relative flex items-center py-2">
-        <div className="flex-grow border-t border-slate-200"></div>
-        <span className="flex-shrink-0 mx-4 text-sm font-semibold text-slate-400">
-          {filteredArticles.length} article(s) affiché(s)
-        </span>
-        <div className="flex-grow border-t border-slate-200"></div>
-      </div>
-
-      {/* Main Table Card */}
-      <div className="rounded-[48px] border border-white/80 bg-white/60 backdrop-blur-3xl shadow-2xl shadow-indigo-100/40 flex flex-col overflow-hidden transition-all duration-300">
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] custom-scrollbar">
-          <table className="w-full text-left text-sm text-slate-600 relative">
-            <thead className="bg-slate-50/90 backdrop-blur-md text-slate-500 font-bold border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-              <tr>
-                <th className="px-6 py-4 w-12 text-center">
-                  <input 
-                    type="checkbox" 
-                    onChange={handleSelectAll} 
-                    checked={selectedIds.length === filteredArticles.length && filteredArticles.length > 0} 
-                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
-                  />
-                </th>
-                <th className="px-6 py-4">Image</th>
-                <th 
-                  className="cursor-pointer px-6 py-4 hover:bg-slate-200/50 transition-colors"
-                  onClick={() => toggleSort("reference")}
-                >
-                  <div className="flex items-center gap-2">
-                    Référence <ArrowUpDown size={14} className="text-slate-400" />
-                  </div>
-                </th>
-                <th 
-                  className="cursor-pointer px-6 py-4 hover:bg-slate-200/50 transition-colors"
-                  onClick={() => toggleSort("designation")}
-                >
-                  <div className="flex items-center gap-2">
-                    Désignation <ArrowUpDown size={14} className="text-slate-400" />
-                  </div>
-                </th>
-                <th 
-                  className="cursor-pointer px-6 py-4 text-right hover:bg-slate-200/50 transition-colors"
-                  onClick={() => toggleSort("p_vente_ttc")}
-                >
-                  <div className="flex items-center justify-end gap-2">
-                    Prix TTC <ArrowUpDown size={14} className="text-slate-400" />
-                  </div>
-                </th>
-                <th 
-                  className="cursor-pointer px-6 py-4 text-center hover:bg-slate-200/50 transition-colors"
-                  onClick={() => toggleSort("stock_total")}
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    Stock <ArrowUpDown size={14} className="text-slate-400" />
-                  </div>
-                </th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="py-20 text-center">
-                    <div className="flex flex-col items-center justify-center text-slate-400">
-                      <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
-                      <p className="mt-3 text-sm font-semibold">Chargement des données...</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : filteredArticles.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-20 text-center">
-                    <div className="flex flex-col items-center justify-center text-slate-400">
-                      <PackageOpen className="h-14 w-14 opacity-30 text-slate-400" />
-                      <p className="mt-3 text-base font-semibold">Aucun article trouvé.</p>
-                      <p className="text-sm mt-1">Modifiez votre recherche ou ajoutez un nouvel article.</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                filteredArticles.map((article) => {
-                  const outOfStock = article.stock_total <= 0;
-                  const imgSrc = getProductImage(article.designation);
-
-                  return (
-                    <tr 
-                      key={article.id} 
-                      className={`group transition-colors border-b border-slate-100 last:border-0 hover:bg-[#F3F4F6] ${outOfStock ? "bg-red-50/10" : ""} ${selectedIds.includes(article.id) ? "bg-indigo-50/70" : ""}`}
-                    >
-                      <td className="px-6 py-4 w-12 text-center">
-                        <input 
-                          type="checkbox" 
-                          checked={selectedIds.includes(article.id)} 
-                          onChange={() => handleSelectItem(article.id)} 
-                          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
-                        />
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="h-12 w-12 flex-shrink-0 rounded-xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden shadow-sm">
-                          {imgSrc ? (
-                            <Image src={imgSrc} alt="" width={36} height={36} className="object-contain" />
-                          ) : (
-                            <Package className="h-6 w-6 text-slate-300" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap font-bold text-slate-900">
-                        {article.reference}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-slate-900 text-sm">{article.designation}</div>
-                        {article.code_barre && (
-                          <div className="text-[11px] font-semibold text-slate-400 mt-0.5 tracking-wider">CB: {article.code_barre}</div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right font-black text-slate-900">
-                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(article.p_vente_ttc)} F CFA
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center font-bold">
-                        <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-sm ${
-                          outOfStock 
-                            ? "bg-red-100 text-red-700" 
-                            : article.stock_total < 5 
-                              ? "bg-amber-100 text-amber-700"
-                              : "text-slate-700"
-                        }`}>
-                          {article.stock_total}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => setPrintArticle(article)}
-                            className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-xl transition-all"
-                            title="Imprimer Code-barres"
-                          >
-                            <Printer size={18} />
-                          </button>
-                          {userRole === "admin" && (
-                            <>
-                              <button 
-                                onClick={() => handleEdit(article.id)}
-                                className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl transition-all"
-                                title="Modifier"
-                              >
-                                <Edit3 size={18} />
-                              </button>
-                              <button 
-                                onClick={() => handleDelete(article.id)}
-                                className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl transition-all"
-                                title="Supprimer"
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Floating Action Bar */}
-      {selectedIds.length > 0 && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900 border border-slate-700/50 text-white px-6 py-4 rounded-3xl shadow-2xl z-50 flex items-center gap-6 animate-in slide-in-from-bottom-5">
-          <div className="flex bg-slate-800 px-4 py-2 rounded-xl text-sm font-bold items-center gap-3">
-            <span className="w-7 h-7 bg-indigo-500 text-white rounded-full flex items-center justify-center text-xs shadow-inner shadow-white/20">{selectedIds.length}</span>
-            <span className="tracking-wide">Sélectionnés</span>
+            <button
+              onClick={handleOpenAddModal}
+              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs shadow-xl shadow-indigo-600/25 transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>{locale === "ar" ? "إضافة صنف جديد" : "Nouvel Article"}</span>
+            </button>
           </div>
-          <div className="h-8 w-px bg-slate-700"></div>
-          <button onClick={handleBulkDelete} className="flex items-center gap-2 hover:bg-rose-500/20 text-rose-400 px-5 py-2.5 rounded-xl text-sm font-black transition-all group">
-            <Trash2 size={18} className="group-hover:scale-110 transition-transform" /> Supprimer
-          </button>
         </div>
-      )}
+      </div>
 
-      {/* Add Article Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
-          <div className="relative bg-white rounded-[24px] shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="border-b border-slate-100 bg-[#F8FAFC] px-6 py-5 flex items-center justify-between">
-              <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-3">
-                <span className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                  <PackageOpen size={24} strokeWidth={2.5} />
-                </span>
-                {formData.id ? "Modifier l'Article" : "Nouvel Article"}
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 p-2 rounded-full transition-colors">
-                <X size={20} className="stroke-2" />
-              </button>
+      {/* 3 Executive KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+              {locale === "ar" ? "إجمالي الأصناف والقطع" : "Total Articles & Quantités"}
+            </span>
+            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+              <Package size={18} />
             </div>
-            
-            <form onSubmit={handleSaveArticle} className="p-6 space-y-8 overflow-y-auto max-h-[75vh]">
-              {/* Section 1: Informations Générales */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                  <Package size={14} /> Informations Générales
-                </h3>
-                <div className="grid grid-cols-1 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Désignation du Produit <span className="text-red-500">*</span></label>
-                    <input
-                      type="text" required value={formData.designation}
-                      onChange={(e) => setFormData({...formData, designation: e.target.value})}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-bold text-lg bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
-                      placeholder="Ex: Coca Cola 1L"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Nom Commercial / Marque</label>
-                    <input
-                      type="text" value={formData.nom}
-                      onChange={(e) => setFormData({...formData, nom: e.target.value})}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-semibold bg-slate-50 border border-slate-200 rounded-xl px-4 py-3"
-                      placeholder="Ex: Coca-Cola Company"
-                    />
-                  </div>
-                </div>
+          </div>
+          <div className="text-2xl font-black text-slate-900">{articles.length}</div>
+          <div className="text-xs text-indigo-600 font-bold mt-1.5 flex items-center gap-1">
+            <Layers size={13} />
+            <span>{totalStockQty} {locale === "ar" ? "وحدة متوفرة في المستودعات" : "unités en stock physique"}</span>
+          </div>
+        </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Référence (Auto-générée si vide)</label>
-                    <input
-                      type="text" value={formData.reference}
-                      onChange={(e) => setFormData({...formData, reference: e.target.value})}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-mono"
-                      placeholder="Ex: ART-001"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Code Barre</label>
-                    <input
-                      type="text" value={formData.code_barre}
-                      onChange={(e) => setFormData({...formData, code_barre: e.target.value})}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-mono"
-                      placeholder="Ex: 37188..."
-                    />
-                  </div>
-                </div>
+        <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+              {locale === "ar" ? "حالة وتنبيهات المخزون" : "Alertes Stock Faible"}
+            </span>
+            <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
+              <AlertCircle size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-amber-600">{totalLowStock}</div>
+          <div className="text-xs text-slate-500 font-bold mt-1.5">
+            {locale === "ar" ? "أصناف تتطلب إعادة الطلب فوراً" : "articles en dessous du seuil minimal"}
+          </div>
+        </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Famille / Catégorie</label>
-                    <select 
-                      value={formData.famille}
-                      onChange={(e) => setFormData({...formData, famille: e.target.value})}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold appearance-none cursor-pointer"
-                    >
-                      <option value="">Sélectionner...</option>
-                      {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Fournisseur Préféré</label>
-                    <select 
-                      value={formData.fournisseur_pref}
-                      onChange={(e) => setFormData({...formData, fournisseur_pref: e.target.value})}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold appearance-none cursor-pointer"
-                    >
-                      <option value="">Sélectionner...</option>
-                      {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                </div>
+        <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+              {locale === "ar" ? "القيمة المالية للمخزون" : "Valeur Totale du Stock"}
+            </span>
+            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+              <TrendingUp size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-emerald-600">{formatCurrencyAmount(totalStockValue)}</div>
+          <div className="text-xs text-slate-500 font-bold mt-1.5">
+            {locale === "ar" ? "محسوبة بسعر التكلفة التقديري" : "Valorisation globale d'inventaire"}
+          </div>
+        </div>
+      </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Unité de mesure</label>
-                    <select 
-                      value={formData.unite}
-                      onChange={(e) => setFormData({...formData, unite: e.target.value})}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold"
-                    >
-                      <option value="">Sélectionner...</option>
-                      {units.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Rayonnage / Emplacement</label>
-                    <input
-                      type="text" value={formData.rayonnage}
-                      onChange={(e) => setFormData({...formData, rayonnage: e.target.value})}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-semibold"
-                      placeholder="Ex: Rayon A2"
-                    />
-                  </div>
-                </div>
-              </div>
+      {/* Toolbar: Search, Filters, and View Switcher */}
+      <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder={
+              locale === "ar"
+                ? "بحث بالاسم، الكود المرجعي، الباركود، أو الفئة..."
+                : "Rechercher par désignation, référence, code-barres..."
+            }
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
 
-              {/* Section 2: Prix et Taxes */}
-              <div className="space-y-4 p-5 bg-indigo-50/50 rounded-3xl border border-indigo-100">
-                <h3 className="text-sm font-black uppercase tracking-widest text-indigo-400 flex items-center gap-2">
-                  <ArrowUpDown size={14} /> Prix et Taxes
-                </h3>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="sm:col-span-1">
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Taxe (%)</label>
-                    <input
-                      type="number" value={formData.taxe}
-                      onChange={(e) => setFormData({...formData, taxe: e.target.value})}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white border border-indigo-200 rounded-xl px-4 py-3 font-black"
-                    />
-                  </div>
-                  <div className="sm:col-span-1">
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">P. Achat HT</label>
-                    <input
-                      type="number" step="0.01" value={formData.p_achat_ht}
-                      onChange={(e) => handlePriceCalc('ht', 'achat', e.target.value)}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white border border-indigo-200 rounded-xl px-4 py-3 font-black"
-                    />
-                  </div>
-                  <div className="sm:col-span-1">
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">P. Achat TTC</label>
-                    <input
-                      type="number" step="0.01" value={formData.p_achat_ttc}
-                      onChange={(e) => handlePriceCalc('ttc', 'achat', e.target.value)}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white border border-indigo-200 rounded-xl px-4 py-3 font-black"
-                    />
-                  </div>
-                </div>
+        <div className="flex items-center gap-3">
+          {/* View Mode Switcher */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-2xl gap-1">
+            <button
+              onClick={() => setViewMode("table")}
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                viewMode === "table" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+              title="Vue Tableau"
+            >
+              <List size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                viewMode === "grid" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+              title="Vue Grille 4K"
+            >
+              <LayoutGrid size={16} />
+            </button>
+          </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                   <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Prix de Vente HT</label>
-                    <input
-                      type="number" step="0.01" value={formData.p_vente_ht}
-                      onChange={(e) => handlePriceCalc('ht', 'vente', e.target.value)}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white border border-emerald-200 rounded-xl px-4 py-3 font-black text-emerald-700"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Prix de Vente TTC</label>
-                    <input
-                      type="number" step="0.01" value={formData.p_vente_ttc}
-                      onChange={(e) => handlePriceCalc('ttc', 'vente', e.target.value)}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 font-black text-emerald-700 text-lg"
-                    />
-                  </div>
-                </div>
-              </div>
+          <div className="text-xs font-extrabold text-slate-500">
+            Total : <span className="text-indigo-600">{filteredArticles.length}</span> {locale === "ar" ? "صنف" : "articles"}
+          </div>
+        </div>
+      </div>
 
-              {/* Section 3: Stock et Colisage */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                  <LayoutGrid size={14} /> Stock et Colisage
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {!formData.id && (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Dépôt de Stockage <span className="text-red-500">*</span></label>
-                      <select 
-                        required
-                        value={formData.depot_nom}
-                        onChange={(e) => setFormData({...formData, depot_nom: e.target.value})}
-                        className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold appearance-none cursor-pointer"
-                      >
-                        <option value="">Choisir un dépôt...</option>
-                        {allDepots.map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
-                    </div>
-                  )}
-                  <div className={formData.id ? "sm:col-span-2 opacity-50 pointer-events-none" : ""}>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Stock Initial {formData.id && "(Non modifiable ici)"}</label>
-                    <input
-                      type="number" value={formData.stock_initial}
-                      disabled={!!formData.id}
-                      onChange={(e) => setFormData({...formData, stock_initial: e.target.value})}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-black"
-                    />
-                  </div>
-                </div>
+      {/* Main Content: Table View or Grid View */}
+      {viewMode === "table" ? (
+        <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 overflow-hidden">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200/80">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
+                  <th className="py-3.5 px-4">{locale === "ar" ? "المرجع والباركود" : "Réf & Code-barres"}</th>
+                  <th className="py-3.5 px-4">{locale === "ar" ? "اسم الصنف / المنتج" : "Désignation"}</th>
+                  <th className="py-3.5 px-4">{locale === "ar" ? "الفئة" : "Catégorie"}</th>
+                  <th className="py-3.5 px-4 text-right">{locale === "ar" ? "سعر البيع" : "Prix Vente TTC"}</th>
+                  <th className="py-3.5 px-4 text-center">{locale === "ar" ? "الرصيد الفعلي" : "Stock"}</th>
+                  <th className="py-3.5 px-4 text-right">{locale === "ar" ? "إجراءات" : "Actions"}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="py-16 text-center text-slate-400">
+                      <Loader2 size={32} className="animate-spin mx-auto text-indigo-600 mb-2" />
+                      <span>{locale === "ar" ? "جاري تحميل الأصناف..." : "Chargement du catalogue..."}</span>
+                    </td>
+                  </tr>
+                ) : filteredArticles.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-16 text-center text-slate-400">
+                      <Package size={36} className="mx-auto text-slate-300 mb-2" />
+                      <span>{locale === "ar" ? "لا توجد أصناف مطابقة للبحث." : "Aucun article trouvé."}</span>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredArticles.map((art) => {
+                    const isLowStock = art.stock_total <= 5;
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Stock Min (Alerte)</label>
-                    <input
-                      type="number" value={formData.qte_min}
-                      onChange={(e) => setFormData({...formData, qte_min: e.target.value})}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">Articles par Colis</label>
-                    <input
-                      type="number" value={formData.article_par_colis}
-                      onChange={(e) => setFormData({...formData, article_par_colis: e.target.value})}
-                      className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold"
-                    />
-                  </div>
+                    return (
+                      <tr key={art.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <div className="font-mono font-black text-indigo-600 text-xs">{art.reference}</div>
+                          {art.code_barre ? (
+                            <div className="flex items-center gap-1 font-mono text-[10px] text-slate-400 mt-0.5">
+                              <BarcodeIcon size={12} />
+                              <span>{art.code_barre}</span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-300 italic">Sans code-barres</span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 font-black text-slate-900">
+                          {art.designation}
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">
+                            {art.famille || "Général"}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          <span className="font-black text-slate-900 text-sm">
+                            {formatCurrencyAmount(art.p_vente_ttc)}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-xs font-black inline-flex items-center gap-1 ${
+                              art.stock_total === 0
+                                ? "bg-rose-100 text-rose-700 border border-rose-300"
+                                : isLowStock
+                                ? "bg-amber-100 text-amber-700 border border-amber-300"
+                                : "bg-emerald-100 text-emerald-700"
+                            }`}
+                          >
+                            {art.stock_total} unités
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setPrintArticle(art)}
+                              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                              title="Imprimer Code-barres"
+                            >
+                              <Printer size={14} />
+                            </button>
+
+                            <button
+                              onClick={() => handleOpenEditModal(art)}
+                              className="p-2 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
+                              title="Modifier"
+                            >
+                              <Edit3 size={14} />
+                            </button>
+
+                            <button
+                              onClick={() => handleDelete(art.id, art.designation)}
+                              className="p-2 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        /* View 2: 4K Product Cards Grid */
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {filteredArticles.map((art) => {
+            const isLowStock = art.stock_total <= 5;
+
+            return (
+              <div
+                key={art.id}
+                className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-lg transition-all space-y-4 relative overflow-hidden group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg">
+                    {art.reference}
+                  </span>
+
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                      art.stock_total === 0
+                        ? "bg-rose-100 text-rose-700"
+                        : isLowStock
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-emerald-100 text-emerald-700"
+                    }`}
+                  >
+                    {art.stock_total} en stock
+                  </span>
                 </div>
 
                 <div className="pt-2">
-                   <label className="flex items-center gap-3 cursor-pointer group">
-                      <div className="relative">
-                        <input
-                          type="checkbox"
-                          checked={formData.is_favorite}
-                          onChange={(e) => setFormData({...formData, is_favorite: e.target.checked})}
-                          className="sr-only"
-                        />
-                        <div className={`w-12 h-6 rounded-full transition-colors ${formData.is_favorite ? 'bg-indigo-600' : 'bg-slate-300'}`}></div>
-                        <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${formData.is_favorite ? 'translate-x-6' : ''}`}></div>
-                      </div>
-                      <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-600 transition-colors flex items-center gap-2">
-                        ⭐ Ajouter aux favoris (Afficher en priorité dans le POS)
-                      </span>
-                   </label>
+                  <h3 className="text-base font-black text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-2">
+                    {art.designation}
+                  </h3>
+                  <div className="text-xs text-slate-400 font-bold mt-1">
+                    {art.famille || "Catégorie Générale"}
+                  </div>
+                </div>
+
+                {art.code_barre && (
+                  <div className="p-2 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs font-mono text-slate-500">
+                    <span className="flex items-center gap-1">
+                      <BarcodeIcon size={14} className="text-slate-400" />
+                      {art.code_barre}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Prix Vente</span>
+                    <span className="text-lg font-black text-slate-900">{formatCurrencyAmount(art.p_vente_ttc)}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPrintArticle(art)}
+                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                      title="Imprimer"
+                    >
+                      <Printer size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleOpenEditModal(art)}
+                      className="p-2 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
+                      title="Modifier"
+                    >
+                      <Edit3 size={14} />
+                    </button>
+                  </div>
                 </div>
               </div>
-              
-              <div className="pt-6 flex items-center justify-end gap-4 border-t border-slate-100 mt-8">
+            );
+          })}
+        </div>
+      )}
+
+      {/* Create / Edit Article Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold">
+                  <Package size={16} />
+                </div>
+                <h3 className="text-base font-black text-slate-900">
+                  {formData.id
+                    ? locale === "ar"
+                      ? "تعديل بيانات الصنف"
+                      : "Modifier l'Article"
+                    : locale === "ar"
+                    ? "إضافة صنف جديد (توليد ذكي تلقائي)"
+                    : "Nouvel Article (Auto-génération)"}
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveArticle} className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {locale === "ar" ? "اسم الصنف / المنتج" : "Désignation du Produit"} *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="Ex: Ciment Dangote 50KG, Huile de Palme 5L..."
+                  value={formData.designation}
+                  onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* Smart Reference & Barcode Generator */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-slate-700">
+                      {locale === "ar" ? "الكود المرجعي (تلقائي)" : "Référence (Auto-générée)"}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, reference: generateSmartReference() })}
+                      className="text-[11px] font-black text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw size={11} /> {locale === "ar" ? "توليد جديد" : "Régénérer"}
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={formData.reference}
+                    onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-xs font-black text-indigo-700 bg-indigo-50/50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-slate-700">
+                      {locale === "ar" ? "الباركود (توليد تلقائي)" : "Code-barres (Auto-généré)"}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, code_barre: generateSmartBarcode() })}
+                      className="text-[11px] font-black text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw size={11} /> {locale === "ar" ? "توليد جديد" : "Régénérer"}
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Ex: 202612345678"
+                    value={formData.code_barre}
+                    onChange={(e) => setFormData({ ...formData, code_barre: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-xs font-black text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Category & Unit */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {locale === "ar" ? "الفئة / التصنيف" : "Famille / Catégorie"}
+                  </label>
+                  <select
+                    value={formData.famille}
+                    onChange={(e) => setFormData({ ...formData, famille: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
+                  >
+                    <option value="">Général</option>
+                    {categories.map((c, i) => (
+                      <option key={i} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {locale === "ar" ? "المستودع الأولي" : "Dépôt de Stock Initial"}
+                  </label>
+                  <select
+                    value={formData.depot_nom}
+                    onChange={(e) => setFormData({ ...formData, depot_nom: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
+                  >
+                    {allDepots.map((d, i) => (
+                      <option key={i} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Pricing Grid */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3">
+                <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider block">
+                  {locale === "ar" ? "الأسعار والتكلفة (FCFA)" : "Prix & Tarification"}
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      {locale === "ar" ? "سعر الشراء (التكلفة)" : "Prix d'Achat HT"}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0"
+                      value={formData.p_achat_ht}
+                      onChange={(e) => setFormData({ ...formData, p_achat_ht: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      {locale === "ar" ? "سعر البيع للجمهور" : "Prix de Vente TTC"} *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      placeholder="0"
+                      value={formData.p_vente_ttc}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          p_vente_ttc: e.target.value,
+                          p_vente_ht: e.target.value,
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-black text-indigo-700 bg-white"
+                    />
+                  </div>
+
+                  {!formData.id && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        {locale === "ar" ? "الكمية الأولية بالمخزن" : "Stock Initial"}
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={formData.stock_initial}
+                        onChange={(e) => setFormData({ ...formData, stock_initial: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-black text-emerald-700 bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-8 py-4 rounded-2xl font-black text-slate-500 hover:bg-slate-100 transition-all active:scale-95"
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
                 >
-                  Annuler
+                  {locale === "ar" ? "إلغاء" : "Annuler"}
                 </button>
+
                 <button
                   type="submit"
                   disabled={saving}
-                  className="inline-flex items-center gap-2 px-10 py-4 rounded-2xl font-black text-white shadow-xl shadow-emerald-500/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-70 group"
-                  style={{ background: "linear-gradient(135deg, #10B981, #059669)" }}
+                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  {saving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} strokeWidth={3} className="group-hover:translate-x-0.5 transition-transform" />}
-                  {saving ? "Enregistrement..." : (formData.id ? "Mettre à jour" : "Enregistrer l'Article")}
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  <span>{locale === "ar" ? "حفظ الصنف" : "Enregistrer l'Article"}</span>
                 </button>
               </div>
             </form>
@@ -964,69 +900,42 @@ export default function ArticlesPage() {
 
       {/* Barcode Print Modal */}
       {printArticle && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:bg-white print:p-0">
-          <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col items-center p-8 print:shadow-none print:w-auto print:p-4">
-            
-            <div className="w-full flex justify-end print:hidden mb-4">
-              <button onClick={() => setPrintArticle(null)} className="text-slate-400 hover:text-slate-600 bg-slate-100 p-2 rounded-full">
-                <X size={20} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 text-center space-y-4">
+            <h3 className="text-base font-black text-slate-900">{printArticle.designation}</h3>
+            <p className="text-xs text-slate-500 font-mono font-bold">Réf: {printArticle.reference}</p>
+
+            <div className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center justify-center">
+              <Barcode
+                value={printArticle.code_barre || printArticle.reference}
+                width={1.5}
+                height={50}
+                fontSize={12}
+              />
+            </div>
+
+            <div className="text-sm font-black text-indigo-600">
+              {formatCurrencyAmount(printArticle.p_vente_ttc)}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={() => setPrintArticle(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                {locale === "ar" ? "إغلاق" : "Fermer"}
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Printer size={14} />
+                <span>{locale === "ar" ? "طباعة" : "Imprimer"}</span>
               </button>
             </div>
-
-            <div className="text-center print:text-black">
-              <h3 className="font-black text-lg text-slate-800 uppercase tracking-wider mb-1 print:text-xs print:mb-0">
-                {printArticle.designation.substring(0, 25)}
-              </h3>
-              <p className="text-2xl font-black text-slate-900 mb-6 print:text-sm print:mb-2">
-                {new Intl.NumberFormat("fr-FR").format(printArticle.p_vente_ttc)} F CFA
-              </p>
-              
-              <div className="bg-white px-4 py-2 rounded-xl mb-4">
-                <Barcode 
-                  value={printArticle.code_barre || printArticle.reference || `ART-${printArticle.id}`} 
-                  width={2} 
-                  height={50} 
-                  displayValue={true}
-                  fontSize={14}
-                  font="monospace"
-                  background="transparent"
-                />
-              </div>
-            </div>
-
-            <button 
-              onClick={() => window.print()}
-              className="mt-6 w-full py-4 bg-slate-900 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors print:hidden"
-            >
-              <Printer size={20} /> Lancer l'impression
-            </button>
           </div>
         </div>
       )}
-
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
-        
-        body {
-          font-family: 'Outfit', sans-serif;
-        }
-
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .fixed.inset-0.z-\\[100\\] {
-            position: absolute !important;
-            left: 0;
-            top: 0;
-            margin: 0;
-            padding: 0;
-          }
-          .fixed.inset-0.z-\\[100\\] * {
-            visibility: visible;
-          }
-        }
-      `}</style>
     </div>
   );
 }

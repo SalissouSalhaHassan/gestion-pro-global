@@ -15,218 +15,215 @@ export async function GET(request: Request) {
     const start = searchParams.get("start");
     const end = searchParams.get("end");
     
-    // Use centralized role check (Admin + Manager)
+    // Role check (Admin + Manager)
     const isAdmin = await isAdminOrManager(user);
 
-    // Strict scoping: sellers ALWAYS see only their own data.
-    // Admins/Managers can filter by a specific cashier or see all.
     let cashier: string | null;
     if (isAdmin) {
       cashier = searchParams.get("cashier");
       if (cashier === "Tous") cashier = null;
     } else {
-      // Sellers are locked to their own username — no override possible.
       cashier = user.username || null;
     }
 
-    // We will perform multiple queries and combine them in JS to replicate the UNION ALL logic
-    
-    // 1. Effective Payments (Paiements) - Exclude Credit payments to prevent duplication
+    // 1. Effective Payments (Paiements) - Exclude direct Credit balance entries
     let pQuery = supabase
       .from("paiements")
       .select(`
-        date_operation, montant_regle, moyen_reglement, utilisateur,
-        factures ( date_facture, bl_number, total_ttc, montant_restant, statut, emplacement, vendeur ),
-        avances_clients ( reference_paiement, emplacement, utilisateur )
+        id, date_operation, montant_regle, moyen_reglement, reference_paiement,
+        factures ( id, date_facture, bl_number, total_ttc, montant_paye, montant_restant, statut, vendeur )
       `)
       .neq("moyen_reglement", "Crédit");
+
     if (start) pQuery = pQuery.gte("date_operation", start);
-    if (end) pQuery = pQuery.lte("date_operation", end);
-    if (cashier) pQuery = pQuery.eq("utilisateur", cashier);
+    if (end) pQuery = pQuery.lte("date_operation", `${end}T23:59:59.999Z`);
     
     const { data: pData } = await pQuery;
 
     // 2. Client Advances (Avances Clients)
     let aQuery = supabase
       .from("avances_clients")
-      .select("date_avance, reference_paiement, client_id, montant_initial, utilisateur, moyen_paiement, emplacement, statut")
+      .select("id, date_avance, reference_paiement, client_id, montant_initial, montant_restant, utilisateur, moyen_paiement, statut, clients(nom)")
       .neq("statut", "Annulée");
+
     if (start) aQuery = aQuery.gte("date_avance", start);
-    if (end) aQuery = aQuery.lte("date_avance", end);
+    if (end) aQuery = aQuery.lte("date_avance", `${end}T23:59:59.999Z`);
     if (cashier) aQuery = aQuery.eq("utilisateur", cashier);
     
     const { data: aData } = await aQuery;
 
-    // 4. Expenses (Depenses)
+    // 3. Expenses (Dépenses)
     let eQuery = supabase.from("depenses").select("*");
     if (start) eQuery = eQuery.gte("date_depense", start);
-    if (end) eQuery = eQuery.lte("date_depense", end);
+    if (end) eQuery = eQuery.lte("date_depense", `${end}T23:59:59.999Z`);
     if (cashier) eQuery = eQuery.eq("operateur", cashier);
     
     const { data: eData } = await eQuery;
 
-    // 5. Cement Payments (Ciment) - only admin or the user's own records
+    // 4. Cement Payments (Ciment)
     let cimData: any[] = [];
     try {
-        let cimQuery = supabase.from("ciment_paiements").select("*");
-        if (start) cimQuery = cimQuery.gte("date_paiement", start);
-        if (end) cimQuery = cimQuery.lte("date_paiement", end);
-        if (cashier) cimQuery = cimQuery.eq("utilisateur", cashier);
-        const { data } = await cimQuery;
-        cimData = data || [];
-    } catch(e) {}
+      let cimQuery = supabase.from("ciment_paiements").select("*");
+      if (start) cimQuery = cimQuery.gte("date_paiement", start);
+      if (end) cimQuery = cimQuery.lte("date_paiement", `${end}T23:59:59.999Z`);
+      if (cashier) cimQuery = cimQuery.eq("utilisateur", cashier);
+      const { data } = await cimQuery;
+      cimData = data || [];
+    } catch (e) {}
 
-    // 6. Active Invoices with Unpaid balance (Factures Actives avec Reste à Payer)
-    let fData: any[] = [];
-    try {
-        let fQuery = supabase
-          .from("factures")
-          .select("date_facture, bl_number, total_ttc, montant_paye, montant_restant, vendeur, emplacement, statut, clients ( nom )")
-          .neq("statut", "Annulée");
-        if (start) fQuery = fQuery.gte("date_facture", start);
-        if (end) fQuery = fQuery.lte("date_facture", end);
-        if (cashier) fQuery = fQuery.eq("vendeur", cashier);
-        const { data } = await fQuery;
-        fData = data || [];
-    } catch(e) {}
+    // 5. Active Invoices of the period (Factures du jour / de la période)
+    let fQuery = supabase
+      .from("factures")
+      .select("id, date_facture, bl_number, total_ttc, montant_paye, montant_restant, vendeur, statut, clients(nom)")
+      .neq("statut", "Annulée")
+      .eq("is_deleted", false);
 
-    // MAPPING AND COMBINING
+    if (start) fQuery = fQuery.gte("date_facture", start);
+    if (end) fQuery = fQuery.lte("date_facture", `${end}T23:59:59.999Z`);
+    if (cashier) fQuery = fQuery.eq("vendeur", cashier);
+
+    const { data: fData } = await fQuery;
+
+    // Mapping and combining transactions
     const entries: any[] = [];
 
-    pData?.forEach(p => {
-       const fact = Array.isArray(p.factures) ? p.factures[0] : p.factures;
-       const adv = Array.isArray(p.avances_clients) ? p.avances_clients[0] : p.avances_clients;
-       
-       let displayType = "Paiement";
-       if (p.montant_regle < 0) displayType = "Retrait";
-       else if (fact) displayType = "Vente (Caisse)";
-       else if (adv) displayType = "Avance Client";
+    // Filter payments by cashier if scoped
+    pData?.forEach((p: any) => {
+      const fact = Array.isArray(p.factures) ? p.factures[0] : p.factures;
+      if (cashier && fact?.vendeur && fact.vendeur !== cashier) return;
 
-       entries.push({
-          date: p.date_operation,
-          ref: fact?.bl_number || adv?.reference_paiement || "TRANS",
-          type: displayType,
-          moyen: p.moyen_reglement,
-          entree: p.montant_regle > 0 ? p.montant_regle : 0,
-          sortie: p.montant_regle < 0 ? Math.abs(p.montant_regle) : 0,
-          user: p.utilisateur,
-          emplacement: fact?.emplacement || adv?.emplacement || ""
-       });
+      let displayType = "Paiement Vente";
+      const isAdvanceConsumption = String(p.moyen_reglement || "").toLowerCase().includes("avance");
+
+      if (p.montant_regle < 0) {
+        displayType = "Retrait Caisse";
+      } else if (isAdvanceConsumption) {
+        displayType = "Vente (Par Acompte Client)";
+      } else if (fact) {
+        displayType = `Vente (${p.moyen_reglement || "Caisse"})`;
+      }
+
+      entries.push({
+        date: p.date_operation,
+        ref: fact?.bl_number || p.reference_paiement || `REG-${p.id}`,
+        type: displayType,
+        moyen: p.moyen_reglement || "Espèces",
+        entree: p.montant_regle > 0 ? p.montant_regle : 0,
+        sortie: p.montant_regle < 0 ? Math.abs(p.montant_regle) : 0,
+        user: fact?.vendeur || "Caisse",
+        emplacement: "BOUTIQUE",
+        isAdvanceConsumption,
+      });
     });
 
-    aData?.forEach(a => {
-       entries.push({
-          date: a.date_avance,
-          ref: a.reference_paiement,
-          type: "Dépôt (Avance)",
-          moyen: a.moyen_paiement,
-          entree: a.montant_initial,
+    // Client Advance Deposits
+    aData?.forEach((a: any) => {
+      entries.push({
+        date: a.date_avance,
+        ref: a.reference_paiement || `DEPOT-${a.id}`,
+        type: "Dépôt (Acompte Client)",
+        moyen: a.moyen_paiement || "Espèces",
+        entree: Number(a.montant_initial || 0),
+        sortie: 0,
+        user: a.utilisateur || "Caisse",
+        emplacement: "BOUTIQUE",
+        client: a.clients?.nom || null,
+      });
+    });
+
+    // Expenses
+    eData?.forEach((e: any) => {
+      entries.push({
+        date: e.date_depense,
+        ref: e.no_caisse || `DEP-${e.id}`,
+        type: "Dépense Caisse",
+        moyen: "Espèces",
+        entree: 0,
+        sortie: Number(e.montant || 0),
+        user: e.operateur || "Caisse",
+        emplacement: e.emplacement || "BOUTIQUE",
+      });
+    });
+
+    // Cement
+    cimData?.forEach((cim: any) => {
+      entries.push({
+        date: cim.date_paiement,
+        ref: cim.reference || `CIM-${cim.id}`,
+        type: "Paiement Ciment",
+        moyen: cim.moyen_paiement || "Espèces",
+        entree: Number(cim.montant || 0),
+        sortie: 0,
+        user: cim.utilisateur || "Caisse",
+        emplacement: "BOUTIQUE",
+      });
+    });
+
+    // Credit sales remainder (Unpaid receivables)
+    fData?.forEach((f: any) => {
+      if (Number(f.montant_restant || 0) > 0.01) {
+        entries.push({
+          date: f.date_facture,
+          ref: f.bl_number || `FA-${f.id}`,
+          type: "Vente (À Crédit)",
+          moyen: "Crédit",
+          entree: Number(f.montant_restant || 0),
           sortie: 0,
-          user: a.utilisateur,
-          emplacement: a.emplacement
-       });
-    });
-
-    eData?.forEach(e => {
-        entries.push({
-           date: e.date_depense,
-           ref: e.no_caisse || "DEPENSE",
-           type: "Dépense (Administrative)",
-           moyen: "Espèces",
-           entree: 0,
-           sortie: e.montant,
-           user: e.operateur,
-           emplacement: e.emplacement
+          user: f.vendeur || "Caisse",
+          emplacement: "BOUTIQUE",
+          client: f.clients?.nom || "Client",
         });
+      }
     });
 
-    cimData?.forEach(cim => {
-        entries.push({
-            date: cim.date_paiement,
-            ref: cim.reference || `CIM-${cim.id.slice(0, 8)}`,
-            type: "Paiement Ciment",
-            moyen: cim.moyen_paiement,
-            entree: cim.montant,
-            sortie: 0,
-            user: cim.utilisateur,
-            emplacement: ""
-        });
-    });
-
-    fData?.forEach(f => {
-        if (Number(f.montant_restant || 0) > 0.01) {
-            const clientName = f.clients?.nom || "Client";
-            entries.push({
-                date: f.date_facture,
-                ref: f.bl_number || "INV",
-                type: "Vente (Crédit)",
-                moyen: "Crédit",
-                entree: Number(f.montant_restant || 0),
-                sortie: 0,
-                user: f.vendeur,
-                emplacement: f.emplacement || "",
-                client: clientName
-            });
-        }
-    });
-
-    // Sorting
+    // Sort by date descending
     entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    // Summaries
-    const totalIncome = entries
-      .filter(item => item.moyen !== "Crédit")
+    // Financial Summaries
+    // Cash Income = Actual cash received in cash drawer (excludes pure credit sales and advance internal balance consumes)
+    const totalCashIncome = entries
+      .filter((item) => item.moyen !== "Crédit" && !item.isAdvanceConsumption)
       .reduce((sum, item) => sum + item.entree, 0);
 
-    const totalUnpaid = fData?.reduce((sum, f) => sum + Number(f.montant_restant || 0), 0) || 0;
-
+    const totalInvoiced = (fData || []).reduce((sum, f) => sum + Number(f.total_ttc || 0), 0);
+    const totalUnpaid = (fData || []).reduce((sum, f) => sum + Number(f.montant_restant || 0), 0);
+    const totalPaidInvoicesPeriod = (fData || []).reduce((sum, f) => sum + Number(f.montant_paye || 0), 0);
+    const totalAdvancesPeriod = (aData || []).reduce((sum, a) => sum + Number(a.montant_initial || 0), 0);
+    const totalCementPeriod = cimData.reduce((sum, c) => sum + Number(c.montant || 0), 0);
     const totalExpenses = entries.reduce((sum, item) => sum + item.sortie, 0);
 
-    // Reconciliation calculations
-    const totalInvoiced = fData?.reduce((sum, f) => sum + Number(f.total_ttc || 0), 0) || 0;
-    const totalPaidInvoicesPeriod = fData?.reduce((sum, f) => sum + Number(f.montant_paye || 0), 0) || 0;
-    const totalAdvancesPeriod = aData?.reduce((sum, a) => sum + Number(a.montant_initial || 0), 0) || 0;
-    const totalCementPeriod = cimData?.reduce((sum, c) => sum + Number(c.montant || 0), 0) || 0;
-
-    let totalPaidOlderInvoicesPeriod = 0;
-    pData?.forEach(p => {
-        const fact = Array.isArray(p.factures) ? p.factures[0] : p.factures;
-        if (fact && start) {
-            if (fact.date_facture < start) {
-                totalPaidOlderInvoicesPeriod += Number(p.montant_regle || 0);
-            }
-        }
-    });
-
-    return NextResponse.json({
-      summary: {
-        totalIncome,
-        totalExpenses,
-        totalUnpaid,
-        netBalance: totalIncome - totalExpenses,
-        reconciliation: {
-          totalInvoiced,
-          totalUnpaidPeriod: totalUnpaid,
-          totalPaidInvoicesPeriod,
-          totalPaidOlderInvoicesPeriod,
-          totalAdvancesPeriod,
-          totalCementPeriod
-        }
+    return NextResponse.json(
+      {
+        summary: {
+          totalIncome: totalCashIncome,
+          totalExpenses,
+          totalUnpaid,
+          netBalance: totalCashIncome - totalExpenses,
+          reconciliation: {
+            totalInvoiced,
+            totalUnpaidPeriod: totalUnpaid,
+            totalPaidInvoicesPeriod,
+            totalPaidOlderInvoicesPeriod: 0,
+            totalAdvancesPeriod,
+            totalCementPeriod,
+          },
+        },
+        entries,
+        scoping: {
+          isAdmin,
+          cashier: cashier || "Tous",
+        },
       },
-      entries,
-      scoping: {
-        isAdmin,
-        cashier: cashier || "Tous"
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
       }
-    }, {
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0"
-      }
-    });
-
+    );
   } catch (error: any) {
+    console.error("Cash balance report error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

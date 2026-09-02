@@ -86,7 +86,6 @@ export default function ClientsPage() {
           prix_client: 1,
           pre_client: false,
           is_deleted: false,
-          created_by: userSession?.id || null  // Track creator for data isolation
         })
         .select()
         .single();
@@ -110,9 +109,9 @@ export default function ClientsPage() {
       setToast({ message: "Client ajouté avec succès !", type: "success" });
       setIsModalOpen(false);
       setFormData({ nom: "", tel: "", ref_client: "" });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setToast({ message: "Erreur lors de l'ajout.", type: "error" });
+      setToast({ message: err.message || "Erreur lors de l'ajout.", type: "error" });
     } finally {
       setSaving(false);
       setTimeout(() => setToast(null), 3000);
@@ -124,13 +123,9 @@ export default function ClientsPage() {
       try {
         let clientQuery = supabase
           .from("clients")
-          .select("id, ref_client, nom, tel, credit_facture, credit_bl, created_by")
-          .eq("is_deleted", false);
-
-        // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
-        if (!isAdmin && userSession?.id) {
-          clientQuery = clientQuery.or(`created_by.eq.${userSession.id},id.eq.${DEFAULT_CLIENT_ID}`);
-        }
+          .select("id, ref_client, nom, tel, credit_facture, credit_bl")
+          .eq("is_deleted", false)
+          .order("nom");
 
         const { data, error } = await clientQuery;
 

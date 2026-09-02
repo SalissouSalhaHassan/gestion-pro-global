@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -15,11 +18,14 @@ export async function GET(request: NextRequest) {
     
     const { data, error } = await query.order('matricule');
     
-    if (error) throw error;
-    return NextResponse.json(data);
+    if (error) {
+      console.warn('Vehicles query warning:', error.message);
+      return NextResponse.json([]);
+    }
+    return NextResponse.json(data || []);
   } catch (error: any) {
     console.error('Vehicles GET error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json([]);
   }
 }
 

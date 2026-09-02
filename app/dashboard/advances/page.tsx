@@ -2,11 +2,38 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useAdvanceStore } from "@/lib/stores/advance-store";
+import { useLanguage } from "@/lib/i18n/context";
+import { formatCurrencyAmount } from "@/lib/utils/currency";
 import { format } from "date-fns";
-import { 
-  Plus, Search, Wallet, X, User, ArrowDownToLine, 
-  Pencil, Ban, AlertTriangle, Printer, Clock, Filter, 
-  MapPin, FileSpreadsheet, Download, Loader2
+import {
+  Plus,
+  Search,
+  Wallet,
+  X,
+  User,
+  ArrowDownToLine,
+  Pencil,
+  Ban,
+  AlertTriangle,
+  Printer,
+  Clock,
+  Filter,
+  MapPin,
+  FileSpreadsheet,
+  Download,
+  Loader2,
+  MessageSquare,
+  Sparkles,
+  CheckCircle2,
+  TrendingUp,
+  Building2,
+  CreditCard,
+  Layers,
+  ArrowUpRight,
+  ShieldCheck,
+  RefreshCw,
+  Phone,
+  Calendar,
 } from "lucide-react";
 import AdvanceReceiptModal from "./AdvanceReceiptModal";
 import DepositListModal from "./DepositListModal";
@@ -14,10 +41,13 @@ import HistoryModal from "./HistoryModal";
 import ClientStatementModal from "./ClientStatementModal";
 
 export default function AdvancesPage() {
-  const { advances, fetchAdvances, isLoading, addAdvance, withdraw, updateAdvance, cancelAdvance } = useAdvanceStore();
+  const { t, locale, dir } = useLanguage();
+  const { advances, fetchAdvances, isLoading, addAdvance, withdraw, updateAdvance, cancelAdvance } =
+    useAdvanceStore();
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("Tous");
   const [clients, setClients] = useState<any[]>([]);
-  
+
   // -- MODALS STATE --
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
@@ -26,17 +56,17 @@ export default function AdvancesPage() {
   const [historyAdvanceId, setHistoryAdvanceId] = useState<number | null>(null);
   const [printAdvanceId, setPrintAdvanceId] = useState<number | null>(null);
   const [isGlobalPrintOpen, setIsGlobalPrintOpen] = useState(false);
-  const [activeView, setActiveView] = useState<'individual' | 'client-summary'>('individual');
+  const [activeView, setActiveView] = useState<"individual" | "client-summary">("individual");
   const [selectedClientIdForStatement, setSelectedClientIdForStatement] = useState<number | null>(null);
-  const [selectedClientNomForStatement, setSelectedClientNomForStatement] = useState<string>( "");
-  
+  const [selectedClientNomForStatement, setSelectedClientNomForStatement] = useState<string>("");
+
   const [isCreateClientModalOpen, setIsCreateClientModalOpen] = useState(false);
   const [createClientData, setCreateClientData] = useState({
     nom: "",
     tel: "",
-    ref_client: ""
+    ref_client: "",
   });
-  
+
   // -- SELECTION STATE --
   const [selectedAdvance, setSelectedAdvance] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,14 +80,14 @@ export default function AdvancesPage() {
     moyen_paiement: "Espece",
     reference_paiement: "",
     notes: "",
-    date_avance: new Date().toISOString().split('T')[0]
+    date_avance: new Date().toISOString().split("T")[0],
   });
 
   const [editData, setEditData] = useState({
     moyen_paiement: "Espece",
     reference_paiement: "",
     notes: "",
-    date_avance: new Date().toISOString().split('T')[0]
+    date_avance: new Date().toISOString().split("T")[0],
   });
 
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -65,36 +95,47 @@ export default function AdvancesPage() {
 
   useEffect(() => {
     fetchAdvances();
-    fetch('/api/clients')
-      .then(res => res.json())
-      .then(data => { if(Array.isArray(data)) setClients(data); })
-      .catch(e => console.error("Could not load clients", e));
+    fetch("/api/clients")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setClients(data);
+      })
+      .catch((e) => console.error("Could not load clients", e));
 
-    const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
+    const cookie = document.cookie.split("; ").find((row) => row.startsWith("gp_session="));
     if (cookie) {
       try {
-        const session = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
+        const session = JSON.parse(decodeURIComponent(cookie.split("=")[1]));
         setUserSession(session);
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+      }
     }
   }, [fetchAdvances]);
 
   const isAdmin = userSession?.admin === "Oui" || userSession?.role === 1 || userSession?.role === "1";
 
-  const filteredAdvances = advances.filter(a => {
-    const matchesSearch = (a as any).clients?.nom?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          a.reference_paiement?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          a.statut?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesSeller = filterSeller === "Tous" || a.utilisateur === filterSeller;
-    return matchesSearch && matchesSeller;
-  });
+  const filteredAdvances = useMemo(() => {
+    return advances.filter((a) => {
+      const clientName = (a as any).clients?.nom || "";
+      const matchesSearch =
+        clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        a.reference_paiement?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        a.statut?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSeller = filterSeller === "Tous" || a.utilisateur === filterSeller;
+      const matchesStatus = statusFilter === "Tous" || a.statut === statusFilter;
+      return matchesSearch && matchesSeller && matchesStatus;
+    });
+  }, [advances, searchTerm, filterSeller, statusFilter]);
 
-  const uniqueSellers = Array.from(new Set(advances.map(a => a.utilisateur).filter(Boolean)));
+  const uniqueSellers = Array.from(new Set(advances.map((a) => a.utilisateur).filter(Boolean)));
 
   const clientSummaries = useMemo(() => {
     return clients
-      .map(client => {
-        const clientAdvances = advances.filter(a => Number(a.client_id) === Number(client.id) && a.statut !== "Annulée");
+      .map((client) => {
+        const clientAdvances = advances.filter(
+          (a) => Number(a.client_id) === Number(client.id) && a.statut !== "Annulée"
+        );
         const totalDeposited = clientAdvances.reduce((sum, a) => sum + Number(a.montant_initial), 0);
         const soldeAvances = clientAdvances.reduce((sum, a) => sum + Number(a.montant_restant), 0);
         const creditFacture = Number(client.credit_facture) || 0;
@@ -105,35 +146,54 @@ export default function AdvancesPage() {
           solde_avances: soldeAvances,
           credit_facture: creditFacture,
           position_nette: positionNette,
-          has_activity: totalDeposited > 0 || creditFacture > 0
+          has_activity: totalDeposited > 0 || creditFacture > 0,
         };
       })
-      .filter(c => c.has_activity);
+      .filter((c) => c.has_activity);
   }, [clients, advances]);
 
   const filteredClientSummaries = useMemo(() => {
-    return clientSummaries.filter(c => {
-      return c.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
-             (c.ref_client && c.ref_client.toLowerCase().includes(searchTerm.toLowerCase()));
+    return clientSummaries.filter((c) => {
+      return (
+        c.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.ref_client && c.ref_client.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (c.tel && c.tel.includes(searchTerm))
+      );
     });
   }, [clientSummaries, searchTerm]);
+
+  // -- TOTALS --
+  const totalDepositedSum = advances
+    .filter((a) => a.statut !== "Annulée")
+    .reduce((sum, a) => sum + Number(a.montant_initial), 0);
+  const totalRemainingSum = advances
+    .filter((a) => a.statut !== "Annulée")
+    .reduce((sum, a) => sum + Number(a.montant_restant), 0);
+  const totalConsumedSum = totalDepositedSum - totalRemainingSum;
 
   // -- HANDLERS --
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      if(!createData.client_id || !createData.montant_initial) return;
+      if (!createData.client_id || !createData.montant_initial) return;
       await addAdvance({
         client_id: Number(createData.client_id),
         montant_initial: Number(createData.montant_initial),
         date_avance: createData.date_avance,
         moyen_paiement: createData.moyen_paiement,
         reference_paiement: createData.reference_paiement,
-        notes: createData.notes
+        notes: createData.notes,
       });
       setIsCreateModalOpen(false);
-      setCreateData({...createData, client_id: "", montant_initial: "", reference_paiement: "", notes: ""});
+      setCreateData({
+        client_id: "",
+        montant_initial: "",
+        moyen_paiement: "Espece",
+        reference_paiement: "",
+        notes: "",
+        date_avance: new Date().toISOString().split("T")[0],
+      });
     } catch (error) {
       alert("Erreur lors de la création.");
     } finally {
@@ -155,14 +215,12 @@ export default function AdvancesPage() {
 
       const res = await fetch("/api/clients", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nom: createClientData.nom,
           tel: createClientData.tel || null,
-          ref_client: finalRef
-        })
+          ref_client: finalRef,
+        }),
       });
 
       if (!res.ok) {
@@ -171,12 +229,10 @@ export default function AdvancesPage() {
       }
 
       const newClient = await res.json();
-
-      setClients(prev => [newClient, ...prev]);
-      setCreateData(prev => ({ ...prev, client_id: String(newClient.id) }));
+      setClients((prev) => [newClient, ...prev]);
+      setCreateData((prev) => ({ ...prev, client_id: String(newClient.id) }));
       setIsCreateClientModalOpen(false);
       setCreateClientData({ nom: "", tel: "", ref_client: "" });
-      alert("Client créé avec succès !");
     } catch (error: any) {
       alert(error.message || "Erreur lors de la création du client.");
     } finally {
@@ -189,7 +245,7 @@ export default function AdvancesPage() {
     setIsSubmitting(true);
     try {
       const amt = Number(withdrawAmount);
-      if(!amt || amt <= 0 || amt > Number(selectedAdvance.montant_restant)) {
+      if (!amt || amt <= 0 || amt > Number(selectedAdvance.montant_restant)) {
         alert("Montant invalide.");
         setIsSubmitting(false);
         return;
@@ -225,7 +281,7 @@ export default function AdvancesPage() {
       setIsDeleteModalOpen(false);
       setSelectedAdvance(null);
     } catch (error) {
-       alert("Erreur lors de l'annulation.");
+      alert("Erreur lors de l'annulation.");
     } finally {
       setIsSubmitting(false);
     }
@@ -233,307 +289,488 @@ export default function AdvancesPage() {
 
   const exportToCSV = () => {
     const headers = ["Client,Date,Montant Initial,Montant Restant,Moyen,Emplacement,Vendeur,Statut"];
-    const rows = filteredAdvances.map(a => 
-      `"${(a as any).clients?.nom || a.client_id}","${a.date_avance}",${a.montant_initial},${a.montant_restant},"${a.moyen_paiement}","${a.emplacement || 'Général'}","${a.utilisateur}","${a.statut}"`
+    const rows = filteredAdvances.map(
+      (a) =>
+        `"${(a as any).clients?.nom || a.client_id}","${a.date_avance}",${a.montant_initial},${
+          a.montant_restant
+        },"${a.moyen_paiement}","${a.emplacement || "Général"}","${a.utilisateur}","${a.statut}"`
     );
     const content = headers.concat(rows).join("\n");
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `advances_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
+    link.setAttribute("download", `advances_${new Date().toISOString().split("T")[0]}.csv`);
+    link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
+  const handleShareAdvanceWhatsApp = (adv: any) => {
+    const clientNom = (adv as any).clients?.nom || `Client #${adv.client_id}`;
+    const text = encodeURIComponent(
+      `💰 *Reçu de Dépôt / Acompte - GestionPro Global*\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `👤 *Client :* ${clientNom}\n` +
+        `📅 *Date :* ${adv.date_avance}\n` +
+        `💵 *Montant Déposé :* ${formatCurrencyAmount(Number(adv.montant_initial))}\n` +
+        `💳 *Solde Restant :* ${formatCurrencyAmount(Number(adv.montant_restant))}\n` +
+        `🏢 *Dépôt / Agence :* ${adv.emplacement || "BOUTIQUE"}\n` +
+        `🔢 *Mode de Paiement :* ${adv.moyen_paiement || "Espèce"}\n` +
+        `✅ *Statut :* ${adv.statut}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `_Merci pour votre confiance !_`
+    );
+    window.open(`https://wa.me/?text=${text}`, "_blank");
+  };
+
   return (
-    <div className="p-8 w-full max-w-7xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="flex items-center gap-5">
-          <div className="w-16 h-16 rounded-[24px] bg-blue-600/10 flex items-center justify-center text-blue-600 shadow-inner">
-             <Wallet size={32} />
-          </div>
+    <div className="space-y-8 animate-in fade-in duration-300">
+      {/* Hero Header */}
+      <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 text-white rounded-[32px] p-6 lg:p-8 shadow-2xl border border-white/10 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/15 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Dépôts & Avances</h1>
-            <p className="text-slate-500 font-medium italic font-outfit">Gestion centralisée des soldes clients et audits financiers.</p>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-3 py-1 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-xs font-black tracking-wider flex items-center gap-1.5 shadow-md">
+                <Wallet size={14} />
+                CUSTOMER WALLET & CASH ADVANCES
+              </span>
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 bg-emerald-950/60 px-3 py-1 rounded-xl border border-emerald-500/30">
+                <Sparkles size={12} className="text-amber-400" />
+                {clientSummaries.length} {locale === "ar" ? "محفظة عميل نشطة" : "Comptes Actifs"}
+              </span>
+            </div>
+
+            <h1 className="text-2xl lg:text-3xl font-black text-white">
+              {locale === "ar" ? "إدارة الودائع والأرصدة المسبقة للعملاء" : "Dépôts & Avances Clients"}
+            </h1>
+            <p className="text-xs lg:text-sm text-slate-300 font-medium mt-1">
+              {locale === "ar"
+                ? "إيداع الأرصدة، شحن المحافظ المالية للعملاء، والاستهلاك التلقائي في الفواتير والـ POS"
+                : "Gestion centralisée des acomptes, soldes prépayés et imputation automatique sur factures"}
+            </p>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <button 
-            onClick={exportToCSV}
-            className="flex items-center gap-2 px-6 py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-black text-xs hover:bg-slate-50 transition-all active:scale-95 shadow-sm uppercase tracking-widest"
-          >
-            <FileSpreadsheet size={18} className="text-emerald-500" /> Exporter
-          </button>
-          <button 
-            onClick={() => setIsGlobalPrintOpen(true)}
-            className="flex items-center gap-2 px-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-slate-800 transition-all active:scale-95 shadow-xl uppercase tracking-widest"
-          >
-            <Printer size={18} /> Imprimer Relevé
-          </button>
-          <button 
-            type="button"
-            onClick={() => setIsCreateClientModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs hover:bg-emerald-700 transition-all active:scale-95 shadow-xl shadow-emerald-500/20 uppercase tracking-widest"
-          >
-            <Plus size={18} /> Nouveau Client
-          </button>
-          <button 
-            onClick={() => setIsCreateModalOpen(true)}
-            className="flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs hover:bg-blue-700 transition-all active:scale-95 shadow-xl shadow-blue-500/20 uppercase tracking-widest"
-          >
-            <Plus size={18} /> Nouveau Dépôt
-          </button>
+
+          {/* Action Buttons Toolbar */}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={exportToCSV}
+              className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+              title="Exporter CSV"
+            >
+              <FileSpreadsheet size={15} className="text-emerald-400" />
+              <span>{locale === "ar" ? "تصدير" : "Exporter"}</span>
+            </button>
+
+            <button
+              onClick={() => setIsGlobalPrintOpen(true)}
+              className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+            >
+              <Printer size={15} />
+              <span>{locale === "ar" ? "طباعة الكشف" : "Imprimer Relevé"}</span>
+            </button>
+
+            <button
+              onClick={() => setIsCreateClientModalOpen(true)}
+              className="p-3 rounded-2xl bg-emerald-600/90 hover:bg-emerald-600 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-600/20"
+            >
+              <Plus size={15} />
+              <span>{locale === "ar" ? "عميل جديد" : "Nouveau Client"}</span>
+            </button>
+
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-black text-xs shadow-xl shadow-blue-500/25 transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>{locale === "ar" ? "تسجيل إيداع جديد" : "Nouveau Dépôt"}</span>
+            </button>
+          </div>
         </div>
       </div>
 
-    {/* View Selector Tabs */}
-    <div className="flex border-b border-slate-100 dark:border-slate-800 gap-6">
-      <button 
-        onClick={() => setActiveView('individual')}
-        className={`pb-4 px-2 font-black text-sm uppercase tracking-wider border-b-2 transition-all active:scale-95 ${
-          activeView === 'individual' 
-            ? 'border-blue-600 text-blue-600' 
-            : 'border-transparent text-slate-400 hover:text-slate-600'
-        }`}
-      >
-        Dépôts Individuels
-      </button>
-      <button 
-        onClick={() => setActiveView('client-summary')}
-        className={`pb-4 px-2 font-black text-sm uppercase tracking-wider border-b-2 transition-all active:scale-95 ${
-          activeView === 'client-summary' 
-            ? 'border-blue-600 text-blue-600' 
-            : 'border-transparent text-slate-400 hover:text-slate-600'
-        }`}
-      >
-        Synthèse par Client
-      </button>
-    </div>
+      {/* Top 3 Executive KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+              {locale === "ar" ? "إجمالي الودائع المقبوضة" : "Total Dépôts Encaissés"}
+            </span>
+            <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
+              <TrendingUp size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-slate-900">{formatCurrencyAmount(totalDepositedSum)}</div>
+          <div className="text-xs text-slate-500 font-bold mt-1.5 flex items-center gap-1">
+            <Layers size={13} className="text-blue-500" />
+            <span>{advances.length} {locale === "ar" ? "عملية إيداع مسجلة" : "avances enregistrées"}</span>
+          </div>
+        </div>
 
-      {/* Filters Bar */}
-      <div className="bg-white/60 backdrop-blur-2xl border border-white p-6 rounded-[32px] shadow-sm flex flex-wrap items-center gap-8">
-         <div className="flex items-center gap-3 flex-1 min-w-[300px]">
-            <div className="p-2 bg-slate-100 rounded-lg"><Search size={18} className="text-slate-400" /></div>
-            <input 
+        <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+              {locale === "ar" ? "الرصيد المتاح الجاهز للاستخدام" : "Solde Actif Disponible"}
+            </span>
+            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+              <CreditCard size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-emerald-600">{formatCurrencyAmount(totalRemainingSum)}</div>
+          <div className="text-xs text-emerald-600 font-bold mt-1.5 flex items-center gap-1">
+            <CheckCircle2 size={13} />
+            <span>{locale === "ar" ? "جاهز للخصم على المبيعات" : "Utilisable en caisse et facturation"}</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+              {locale === "ar" ? "المبالغ المستهلكة في الفواتير" : "Total Consommé sur Factures"}
+            </span>
+            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+              <Wallet size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-indigo-600">{formatCurrencyAmount(totalConsumedSum)}</div>
+          <div className="text-xs text-slate-500 font-bold mt-1.5">
+            {locale === "ar" ? "تم تحويلها لمبيعات فعلية" : "Imputé avec succès sur les ventes"}
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs Selector & Search Toolbar */}
+      <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Segmented Tab Controls */}
+          <div className="flex items-center bg-slate-100 p-1.5 rounded-2xl gap-1">
+            <button
+              onClick={() => setActiveView("individual")}
+              className={`px-5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                activeView === "individual"
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Layers size={14} />
+              <span>{locale === "ar" ? "سجل الإيداعات الفردية" : "Journal des Acomptes"}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveView("client-summary")}
+              className={`px-5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                activeView === "client-summary"
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <User size={14} />
+              <span>{locale === "ar" ? "كشف محافظ العملاء (صافي الرصيد)" : "Synthèse Portefeuilles Clients"}</span>
+            </button>
+          </div>
+
+          <div className="text-xs font-extrabold text-slate-500">
+            {activeView === "individual" ? (
+              <>
+                Total : <span className="text-blue-600">{filteredAdvances.length}</span> {locale === "ar" ? "إيداع" : "acomptes"}
+              </>
+            ) : (
+              <>
+                Total : <span className="text-blue-600">{filteredClientSummaries.length}</span> {locale === "ar" ? "عميل" : "clients"}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Search & Status Filter */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-1">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
               type="text"
-              placeholder="Rechercher par client, référence ou statut..." 
+              placeholder={
+                locale === "ar"
+                  ? "بحث باسم العميل، الهاتف، أو رقم الإيصال..."
+                  : "Rechercher par nom client, téléphone, référence..."
+              }
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-transparent border-none font-black text-slate-700 outline-none w-full placeholder:text-slate-300"
+              className="w-full pl-9 pr-4 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-         </div>
+          </div>
 
-         {isAdmin && (
-           <>
-             <div className="h-8 w-px bg-slate-100 mx-2 hidden md:block"></div>
-             <div className="flex items-center gap-3">
-                <Filter size={18} className="text-slate-400" />
-                <select 
-                   className="bg-transparent font-black text-slate-700 outline-none cursor-pointer"
-                   value={filterSeller}
-                   onChange={(e) => setFilterSeller(e.target.value)}
-                >
-                   <option value="Tous">Tous les vendeurs</option>
-                   {uniqueSellers.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-             </div>
-           </>
-         )}
-      </div>
+          {activeView === "individual" && (
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none"
+            >
+              <option value="Tous">{locale === "ar" ? "كافة الحالات" : "Tous les statuts"}</option>
+              <option value="Disponible">Disponible (Dispo)</option>
+              <option value="Partiellement utilisée">Partiellement Utilisée</option>
+              <option value="Épuisée">Épuisée (Consommée)</option>
+              <option value="Annulée">Annulée</option>
+            </select>
+          )}
 
-      {/* Stats Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-         <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-bl-[100px]"></div>
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Total Déposé</h3>
-            <p className="text-3xl font-black text-slate-900">
-               {new Intl.NumberFormat('fr-FR').format(filteredAdvances.reduce((sum, a) => sum + Number(a.montant_initial), 0))} <span className="text-xs">FCFA</span>
-            </p>
-         </div>
-         <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100px]"></div>
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Solde Disponible</h3>
-            <p className="text-3xl font-black text-emerald-600">
-               {new Intl.NumberFormat('fr-FR').format(filteredAdvances.reduce((sum, a) => sum + Number(a.montant_restant), 0))} <span className="text-xs text-slate-400">FCFA</span>
-            </p>
-         </div>
-         <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100px]"></div>
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Nombre d'avances</h3>
-            <p className="text-3xl font-black text-slate-900">{filteredAdvances.length}</p>
-         </div>
-      </div>
-
-      {/* Main Table */}
-    {activeView === 'individual' ? (
-      <div className="bg-white rounded-[40px] border border-slate-100 shadow-2xl overflow-hidden relative">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-50">
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Client</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Date</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Initial</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Restant</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Emplacement</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Statut</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {isLoading ? (
-                <tr><td colSpan={7} className="px-8 py-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600 mb-2" /><p className="font-black text-slate-400 uppercase text-[10px]">Chargement...</p></td></tr>
-              ) : filteredAdvances.length === 0 ? (
-                <tr><td colSpan={7} className="px-8 py-20 text-center grayscale opacity-30"><Wallet size={48} className="mx-auto mb-4" /><p className="font-black text-lg">Aucune avance trouvée.</p></td></tr>
-              ) : (
-                filteredAdvances.map((adv) => (
-                  <tr key={adv.id} className="hover:bg-slate-50/50 transition-all group">
-                    <td className="px-8 py-6">
-                       <div className="flex flex-col">
-                          <span className="font-black text-slate-800 text-[13px] tracking-tight">{(adv as any).clients?.nom || `Client #${adv.client_id}`}</span>
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">REF: {adv.reference_paiement || '—'}</span>
-                       </div>
-                    </td>
-                    <td className="px-8 py-6 text-center text-xs font-bold text-slate-500">
-                       {format(new Date(adv.date_avance), 'dd/MM/yyyy')}
-                    </td>
-                    <td className="px-8 py-6 text-right font-bold text-slate-400 text-xs">
-                      {new Intl.NumberFormat('fr-FR').format(adv.montant_initial)}
-                    </td>
-                    <td className="px-8 py-6 text-right">
-                       <span className="font-black text-blue-600 text-lg">
-                        {new Intl.NumberFormat('fr-FR').format(adv.montant_restant)}
-                       </span>
-                    </td>
-                    <td className="px-8 py-6">
-                       <div className="flex items-center gap-2">
-                          <MapPin size={14} className="text-slate-300" />
-                          <span className="text-[10px] font-black text-slate-500 uppercase">{adv.emplacement || "Général"}</span>
-                       </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm ${
-                        adv.statut === 'Disponible' ? 'bg-emerald-50 text-emerald-600' :
-                        adv.statut === 'Annulée' ? 'bg-rose-50 text-rose-600' :
-                        'bg-amber-50 text-amber-600'
-                      }`}>{adv.statut}</span>
-                    </td>
-                    <td className="px-8 py-6 text-right">
-                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={() => setHistoryAdvanceId(adv.id)}
-                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-                            title="Historique"
-                          >
-                            <Clock size={18} />
-                          </button>
-                          <button 
-                            onClick={() => setPrintAdvanceId(adv.id)}
-                            className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all"
-                            title="Imprimer"
-                          >
-                            <Printer size={18} />
-                          </button>
-                          {(adv.statut === 'Disponible' || adv.statut === 'Partiellement utilisée') && Number(adv.montant_restant) > 0 && (
-                            <button 
-                              onClick={() => { setSelectedAdvance(adv); setWithdrawAmount(""); setWithdrawNotes(""); setIsWithdrawModalOpen(true); }}
-                              className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
-                              title="Effectuer un retrait"
-                            >
-                              <ArrowDownToLine size={18} />
-                            </button>
-                          )}
-                          <button 
-                            onClick={() => { setSelectedAdvance(adv); setEditData({ moyen_paiement: adv.moyen_paiement, reference_paiement: adv.reference_paiement || '', notes: adv.notes || '', date_avance: adv.date_avance }); setIsEditModalOpen(true); }}
-                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                            title="Modifier"
-                          >
-                            <Pencil size={18} />
-                          </button>
-                          {adv.statut === 'Disponible' && (
-                            <button 
-                              onClick={() => { setSelectedAdvance(adv); setIsDeleteModalOpen(true); }}
-                              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                              title="Annuler"
-                            >
-                              <Ban size={18} />
-                            </button>
-                          )}
-                       </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          {isAdmin && activeView === "individual" && (
+            <select
+              value={filterSeller}
+              onChange={(e) => setFilterSeller(e.target.value)}
+              className="px-3 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold text-slate-700 focus:outline-none"
+            >
+              <option value="Tous">{locale === "ar" ? "كافة الكاشيرية" : "Tous les vendeurs"}</option>
+              {uniqueSellers.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
-    ) : (
-      <div className="bg-white rounded-[40px] border border-slate-100 shadow-2xl overflow-hidden relative animate-in fade-in duration-300">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-50">
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Client</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Téléphone</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total Déposé</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Solde d'avances</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Dette Factures</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Situation Nette</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {isLoading ? (
-                <tr><td colSpan={7} className="px-8 py-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600 mb-2" /><p className="font-black text-slate-400 uppercase text-[10px]">Chargement...</p></td></tr>
-              ) : filteredClientSummaries.length === 0 ? (
-                <tr><td colSpan={7} className="px-8 py-20 text-center grayscale opacity-30"><Wallet size={48} className="mx-auto mb-4" /><p className="font-black text-lg">Aucun client trouvé.</p></td></tr>
-              ) : (
-                filteredClientSummaries.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50/50 transition-all group">
-                    <td className="px-8 py-6">
-                      <div className="flex flex-col">
-                        <span className="font-black text-slate-800 text-[13px] tracking-tight">{c.nom}</span>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">REF: {c.ref_client || '—'}</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6 text-slate-500 font-bold text-xs">{c.tel || "—"}</td>
-                    <td className="px-8 py-6 text-right font-bold text-slate-400 text-xs">
-                      {new Intl.NumberFormat('fr-FR').format(c.total_depose)}
-                    </td>
-                    <td className="px-8 py-6 text-right font-black text-blue-600 text-sm">
-                      {new Intl.NumberFormat('fr-FR').format(c.solde_avances)}
-                    </td>
-                    <td className="px-8 py-6 text-right font-bold text-rose-600 text-xs">
-                      {new Intl.NumberFormat('fr-FR').format(c.credit_facture)}
-                    </td>
-                    <td className={`px-8 py-6 text-right font-black text-sm ${c.position_nette >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {c.position_nette >= 0 ? '+' : ''}{new Intl.NumberFormat('fr-FR').format(c.position_nette)}
-                    </td>
-                    <td className="px-8 py-6 text-right">
-                      <button 
-                        onClick={() => { setSelectedClientIdForStatement(c.id); setSelectedClientNomForStatement(c.nom); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-blue-100 transition-colors shadow-sm ml-auto"
-                      >
-                        <FileSpreadsheet size={12} /> Relevé
-                      </button>
+
+      {/* Main Table: Individual Advances Feed */}
+      {activeView === "individual" ? (
+        <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 overflow-hidden">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200/80">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
+                  <th className="py-3.5 px-4">{locale === "ar" ? "العميل" : "Client"}</th>
+                  <th className="py-3.5 px-4 text-center">{locale === "ar" ? "التاريخ" : "Date"}</th>
+                  <th className="py-3.5 px-4 text-right">{locale === "ar" ? "المبلغ الأولي" : "Montant Initial"}</th>
+                  <th className="py-3.5 px-4 text-right">{locale === "ar" ? "الرصيد المتبقي" : "Solde Restant"}</th>
+                  <th className="py-3.5 px-4">{locale === "ar" ? "الفرع / الدكان" : "Dépôt / Agence"}</th>
+                  <th className="py-3.5 px-4 text-center">{locale === "ar" ? "الحالة" : "Statut"}</th>
+                  <th className="py-3.5 px-4 text-right">{locale === "ar" ? "إجراءات" : "Actions"}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={7} className="py-16 text-center text-slate-400">
+                      <Loader2 size={32} className="animate-spin mx-auto text-blue-600 mb-2" />
+                      <span>{locale === "ar" ? "جاري تحميل سجل الأرصدة..." : "Chargement des acomptes..."}</span>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : filteredAdvances.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-16 text-center text-slate-400">
+                      <Wallet size={36} className="mx-auto text-slate-300 mb-2" />
+                      <span>{locale === "ar" ? "لا توجد ودائع أو أرصدة مسبقة مطابقة." : "Aucun acompte trouvé."}</span>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAdvances.map((adv) => {
+                    const isAvailable = adv.statut === "Disponible";
+                    const isPartial = adv.statut === "Partiellement utilisée";
+                    const isCanceled = adv.statut === "Annulée";
+
+                    return (
+                      <tr key={adv.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs uppercase">
+                              {((adv as any).clients?.nom || "C").slice(0, 2)}
+                            </div>
+                            <div>
+                              <div className="font-black text-slate-900">
+                                {(adv as any).clients?.nom || `Client #${adv.client_id}`}
+                              </div>
+                              <div className="font-mono text-[10px] text-slate-400">
+                                REF: {adv.reference_paiement || "—"}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center text-xs font-bold text-slate-600">
+                          {format(new Date(adv.date_avance), "dd/MM/yyyy")}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right font-bold text-slate-500 text-xs">
+                          {formatCurrencyAmount(Number(adv.montant_initial))}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          <span className="font-black text-blue-600 text-sm">
+                            {formatCurrencyAmount(Number(adv.montant_restant))}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-xs font-bold text-slate-700">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200">
+                            {adv.emplacement || "BOUTIQUE"}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              isAvailable
+                                ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
+                                : isPartial
+                                ? "bg-amber-100 text-amber-700 border border-amber-300"
+                                : isCanceled
+                                ? "bg-rose-100 text-rose-700 border border-rose-300"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {adv.statut}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleShareAdvanceWhatsApp(adv)}
+                              className="p-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer"
+                              title="Envoyer reçu via WhatsApp"
+                            >
+                              <MessageSquare size={14} />
+                            </button>
+
+                            <button
+                              onClick={() => setPrintAdvanceId(adv.id)}
+                              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                              title="Imprimer Reçu"
+                            >
+                              <Printer size={14} />
+                            </button>
+
+                            <button
+                              onClick={() => setHistoryAdvanceId(adv.id)}
+                              className="p-2 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
+                              title="Historique & Audit"
+                            >
+                              <Clock size={14} />
+                            </button>
+
+                            {(isAvailable || isPartial) && Number(adv.montant_restant) > 0 && (
+                              <button
+                                onClick={() => {
+                                  setSelectedAdvance(adv);
+                                  setWithdrawAmount("");
+                                  setWithdrawNotes("");
+                                  setIsWithdrawModalOpen(true);
+                                }}
+                                className="p-2 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer"
+                                title="Effectuer un retrait"
+                              >
+                                <ArrowDownToLine size={14} />
+                              </button>
+                            )}
+
+                            {isAvailable && (
+                              <button
+                                onClick={() => {
+                                  setSelectedAdvance(adv);
+                                  setIsDeleteModalOpen(true);
+                                }}
+                                className="p-2 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer"
+                                title="Annuler"
+                              >
+                                <Ban size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-    )}
+      ) : (
+        /* View 2: Client Summary Ledger */
+        <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 overflow-hidden">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200/80">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
+                  <th className="py-3.5 px-4">{locale === "ar" ? "العميل" : "Client"}</th>
+                  <th className="py-3.5 px-4">{locale === "ar" ? "الهاتف" : "Téléphone"}</th>
+                  <th className="py-3.5 px-4 text-right">{locale === "ar" ? "إجمالي الودائع" : "Total Déposé"}</th>
+                  <th className="py-3.5 px-4 text-right">{locale === "ar" ? "رصيد الأمانات" : "Solde d'avances"}</th>
+                  <th className="py-3.5 px-4 text-right">{locale === "ar" ? "ديون الفواتير" : "Dette Factures"}</th>
+                  <th className="py-3.5 px-4 text-right">{locale === "ar" ? "الوضعية الصافية" : "Position Nette"}</th>
+                  <th className="py-3.5 px-4 text-right">{locale === "ar" ? "كشف الحساب" : "Relevé"}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={7} className="py-16 text-center text-slate-400">
+                      <Loader2 size={32} className="animate-spin mx-auto text-blue-600 mb-2" />
+                      <span>{locale === "ar" ? "جاري الحساب..." : "Chargement des soldes..."}</span>
+                    </td>
+                  </tr>
+                ) : filteredClientSummaries.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-16 text-center text-slate-400">
+                      <User size={36} className="mx-auto text-slate-300 mb-2" />
+                      <span>{locale === "ar" ? "لا يوجد عملاء لديهم أرصدة مسبقة." : "Aucun compte client trouvé."}</span>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredClientSummaries.map((c) => {
+                    const isPositive = c.position_nette >= 0;
 
-      {/* --- MODALS --- */}
+                    return (
+                      <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <div className="font-black text-slate-900">{c.nom}</div>
+                          <div className="font-mono text-[10px] text-slate-400">REF: {c.ref_client || "—"}</div>
+                        </td>
 
+                        <td className="py-3.5 px-4 text-xs font-bold text-slate-600">{c.tel || "—"}</td>
+
+                        <td className="py-3.5 px-4 text-right font-bold text-slate-500 text-xs">
+                          {formatCurrencyAmount(c.total_depose)}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right font-black text-blue-600 text-sm">
+                          {formatCurrencyAmount(c.solde_avances)}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right font-bold text-rose-600 text-xs">
+                          {formatCurrencyAmount(c.credit_facture)}
+                        </td>
+
+                        <td className={`py-3.5 px-4 text-right font-black text-sm ${isPositive ? "text-emerald-600" : "text-rose-600"}`}>
+                          {isPositive ? "+" : ""}
+                          {formatCurrencyAmount(c.position_nette)}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            onClick={() => {
+                              setSelectedClientIdForStatement(c.id);
+                              setSelectedClientNomForStatement(c.nom);
+                            }}
+                            className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl text-xs font-black transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <FileSpreadsheet size={13} />
+                            <span>{locale === "ar" ? "الكشف" : "Relevé"}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* --- INTEGRATED MODALS --- */}
       {historyAdvanceId && (
         <HistoryModal advanceId={historyAdvanceId} onClose={() => setHistoryAdvanceId(null)} />
       )}
@@ -547,64 +784,144 @@ export default function AdvancesPage() {
       )}
 
       {selectedClientIdForStatement && (
-        <ClientStatementModal 
-          clientId={selectedClientIdForStatement} 
-          clientNom={selectedClientNomForStatement} 
-          onClose={() => { setSelectedClientIdForStatement(null); setSelectedClientNomForStatement(""); }} 
+        <ClientStatementModal
+          clientId={selectedClientIdForStatement}
+          clientNom={selectedClientNomForStatement}
+          onClose={() => {
+            setSelectedClientIdForStatement(null);
+            setSelectedClientNomForStatement("");
+          }}
         />
       )}
 
       {/* Create Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsCreateModalOpen(false)}></div>
-          <div className="bg-white rounded-[32px] overflow-hidden relative z-10 w-full max-w-lg border border-slate-100 shadow-2xl">
-            <div className="px-8 py-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-              <div>
-                <h3 className="text-xl font-black text-slate-900">Nouveau Dépôt</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enregistrement d'une avance client</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">
+                  <Wallet size={16} />
+                </div>
+                <h3 className="text-base font-black text-slate-900">
+                  {locale === "ar" ? "تسجيل إيداع / أمانة جديدة للعميل" : "Nouveau Dépôt / Acompte Client"}
+                </h3>
               </div>
-              <button onClick={() => setIsCreateModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors"><X size={20} className="text-slate-400" /></button>
+              <button
+                onClick={() => setIsCreateModalOpen(false)}
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
             </div>
-            <form onSubmit={handleCreateSubmit} className="p-8 space-y-6">
+
+            <form onSubmit={handleCreateSubmit} className="p-6 space-y-4">
               <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest block">Client *</label>
-                  <button 
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-bold text-slate-700">
+                    {locale === "ar" ? "العميل" : "Client"} *
+                  </label>
+                  <button
                     type="button"
                     onClick={() => setIsCreateClientModalOpen(true)}
-                    className="text-[11px] font-black text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+                    className="text-xs font-black text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
                   >
-                    <Plus size={12} /> Nouveau Client
+                    <Plus size={12} /> {locale === "ar" ? "إضافة عميل جديد" : "Créer Client"}
                   </button>
                 </div>
-                <select 
-                  className="w-full rounded-2xl border-2 border-slate-100 p-4 bg-slate-50 focus:border-blue-500 focus:bg-white outline-none font-bold transition-all"
-                  value={createData.client_id} onChange={e => setCreateData({...createData, client_id: e.target.value})} required
+                <select
+                  required
+                  value={createData.client_id}
+                  onChange={(e) => setCreateData({ ...createData, client_id: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="" disabled>Sélectionner un client...</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.nom || c.ref_client}</option>)}
+                  <option value="" disabled>
+                    Sélectionner un client...
+                  </option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nom} {c.tel ? `(${c.tel})` : ""}
+                    </option>
+                  ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-6">
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 block">Montant (FCFA) *</label>
-                  <input type="number" step="0.01" className="w-full rounded-2xl border-2 border-slate-100 p-4 bg-slate-50 font-black text-lg focus:border-blue-500 focus:bg-white outline-none" 
-                    value={createData.montant_initial} onChange={e => setCreateData({...createData, montant_initial: e.target.value})} required/>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {locale === "ar" ? "المبلغ (FCFA)" : "Montant Déposé"} *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    placeholder="Ex: 100000"
+                    value={createData.montant_initial}
+                    onChange={(e) => setCreateData({ ...createData, montant_initial: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-base font-black text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
+
                 <div>
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 block">Moyen</label>
-                  <select className="w-full rounded-2xl border-2 border-slate-100 p-4 bg-slate-50 font-bold focus:border-blue-500 focus:bg-white outline-none"
-                    value={createData.moyen_paiement} onChange={e => setCreateData({...createData, moyen_paiement: e.target.value})}>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {locale === "ar" ? "طريقة الدفع" : "Mode de Paiement"}
+                  </label>
+                  <select
+                    value={createData.moyen_paiement}
+                    onChange={(e) => setCreateData({ ...createData, moyen_paiement: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
+                  >
                     <option value="Espece">Espèce</option>
                     <option value="Cheque">Chèque</option>
-                    <option value="Virement">Virement</option>
+                    <option value="Virement">Virement Bancaire</option>
+                    <option value="Mobile Money">Mobile Money (Wave/Orange/Moov)</option>
                   </select>
                 </div>
               </div>
-              <div className="flex justify-end pt-4">
-                <button type="submit" disabled={isSubmitting} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20 active:scale-95">
-                  {isSubmitting ? "Traitement..." : "Confirmer le dépôt"}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {locale === "ar" ? "تاريخ العملية" : "Date de Dépôt"}
+                  </label>
+                  <input
+                    type="date"
+                    value={createData.date_avance}
+                    onChange={(e) => setCreateData({ ...createData, date_avance: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {locale === "ar" ? "رقم المرجع / الوصل" : "Référence / N° Reçu"}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: REC-2026-001"
+                    value={createData.reference_paiement}
+                    onChange={(e) => setCreateData({ ...createData, reference_paiement: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  {locale === "ar" ? "إلغاء" : "Annuler"}
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                  <span>{locale === "ar" ? "تأكيد الإيداع" : "Confirmer le Dépôt"}</span>
                 </button>
               </div>
             </form>
@@ -612,58 +929,73 @@ export default function AdvancesPage() {
         </div>
       )}
 
-      {/* Create Client Modal */}
+      {/* Quick Create Client Modal */}
       {isCreateClientModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsCreateClientModalOpen(false)}></div>
-          <div className="bg-white rounded-[32px] overflow-hidden relative z-10 w-full max-w-lg border border-slate-100 shadow-2xl">
-            <div className="px-8 py-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-              <div>
-                <h3 className="text-xl font-black text-slate-900">Nouveau Client</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ajouter un nouveau client au système</p>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold">
+                  <User size={16} />
+                </div>
+                <h3 className="text-base font-black text-slate-900">
+                  {locale === "ar" ? "إضافة عميل جديد" : "Créer un Nouveau Client"}
+                </h3>
               </div>
-              <button type="button" onClick={() => setIsCreateClientModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors"><X size={20} className="text-slate-400" /></button>
+              <button
+                type="button"
+                onClick={() => setIsCreateClientModalOpen(false)}
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
             </div>
-            <form onSubmit={handleCreateClientSubmit} className="p-8 space-y-6">
+
+            <form onSubmit={handleCreateClientSubmit} className="p-6 space-y-4">
               <div>
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 block">Nom complet *</label>
-                <input 
-                  type="text" 
-                  className="w-full rounded-2xl border-2 border-slate-100 p-4 bg-slate-50 font-bold focus:border-emerald-500 focus:bg-white outline-none transition-all"
-                  value={createClientData.nom} 
-                  onChange={e => setCreateClientData({...createClientData, nom: e.target.value})} 
-                  placeholder="Ex: Jean Dupont"
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {locale === "ar" ? "اسم العميل الكامل" : "Nom & Prénom / Société"} *
+                </label>
+                <input
+                  type="text"
                   required
                   autoFocus
+                  placeholder="Ex: Elhadj Mamane"
+                  value={createClientData.nom}
+                  onChange={(e) => setCreateClientData({ ...createClientData, nom: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
-              
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 block">Téléphone</label>
-                  <input 
-                    type="text" 
-                    className="w-full rounded-2xl border-2 border-slate-100 p-4 bg-slate-50 font-bold focus:border-emerald-500 focus:bg-white outline-none transition-all"
-                    value={createClientData.tel} 
-                    onChange={e => setCreateClientData({...createClientData, tel: e.target.value})} 
-                    placeholder="Ex: 22890000000"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 block">Référence Client</label>
-                  <input 
-                    type="text" 
-                    className="w-full rounded-2xl border-2 border-slate-100 p-4 bg-slate-50 font-bold focus:border-emerald-500 focus:bg-white outline-none transition-all"
-                    value={createClientData.ref_client} 
-                    onChange={e => setCreateClientData({...createClientData, ref_client: e.target.value})} 
-                    placeholder="Auto-générée si vide"
-                  />
-                </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {locale === "ar" ? "رقم الهاتف" : "Téléphone"}
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: +227 90 00 00 00"
+                  value={createClientData.tel}
+                  onChange={(e) => setCreateClientData({ ...createClientData, tel: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
               </div>
 
-              <div className="flex justify-end pt-4">
-                <button type="submit" disabled={isSubmitting} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-500/20 active:scale-95">
-                  {isSubmitting ? "Création..." : "Enregistrer le client"}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateClientModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  {locale === "ar" ? "إلغاء" : "Annuler"}
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                  <span>{locale === "ar" ? "حفظ العميل" : "Enregistrer le Client"}</span>
                 </button>
               </div>
             </form>
@@ -673,25 +1005,69 @@ export default function AdvancesPage() {
 
       {/* Withdraw Modal */}
       {isWithdrawModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsWithdrawModalOpen(false)}></div>
-          <div className="bg-white rounded-[32px] overflow-hidden relative z-10 w-full max-w-md border border-slate-100 shadow-2xl">
-            <div className="px-8 py-6 border-b border-amber-100 flex justify-between items-center bg-amber-50/50 text-amber-900">
-               <h3 className="text-xl font-black tracking-tight">Retrait de fonds</h3>
-               <button onClick={() => setIsWithdrawModalOpen(false)}><X size={24} /></button>
-            </div>
-            <form onSubmit={handleWithdrawSubmit} className="p-8 space-y-6">
-              <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                 <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Disponible</p>
-                 <p className="text-2xl font-black text-amber-900">{new Intl.NumberFormat('fr-FR').format(selectedAdvance?.montant_restant)} FCFA</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-amber-100 flex items-center justify-between bg-amber-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center font-bold">
+                  <ArrowDownToLine size={16} />
+                </div>
+                <h3 className="text-base font-black text-amber-950">
+                  {locale === "ar" ? "سحب / استرداد من الأمانة" : "Retrait de Fonds"}
+                </h3>
               </div>
-              <div>
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 block">Montant à retirer</label>
-                <input type="number" step="0.01" className="w-full rounded-2xl border-2 border-slate-100 p-4 bg-slate-50 font-black text-2xl focus:border-amber-500 outline-none" max={selectedAdvance?.montant_restant} value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)} required autoFocus/>
-              </div>
-              <button type="submit" disabled={isSubmitting} className="w-full py-4 bg-amber-500 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-amber-600 transition-all shadow-xl shadow-amber-500/20 active:scale-95">
-                {isSubmitting ? "Validation..." : "Confirmer le retrait"}
+              <button
+                onClick={() => setIsWithdrawModalOpen(false)}
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer"
+              >
+                <X size={16} />
               </button>
+            </div>
+
+            <form onSubmit={handleWithdrawSubmit} className="p-6 space-y-4">
+              <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200/80">
+                <span className="text-[11px] font-black text-amber-700 uppercase block">
+                  {locale === "ar" ? "الرصيد المتبقي المتاح للسحب" : "Solde Actuel Disponible"}
+                </span>
+                <span className="text-xl font-black text-amber-950 mt-0.5 block">
+                  {formatCurrencyAmount(Number(selectedAdvance?.montant_restant))}
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {locale === "ar" ? "المبلغ المراد سحبه (FCFA)" : "Montant à Retirer"} *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  autoFocus
+                  max={selectedAdvance?.montant_restant}
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-base font-black text-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsWithdrawModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  {locale === "ar" ? "إلغاء" : "Annuler"}
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <ArrowDownToLine size={16} />}
+                  <span>{locale === "ar" ? "تأكيد السحب" : "Confirmer le Retrait"}</span>
+                </button>
+              </div>
             </form>
           </div>
         </div>
@@ -699,23 +1075,39 @@ export default function AdvancesPage() {
 
       {/* Delete Confirmation */}
       {isDeleteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsDeleteModalOpen(false)}></div>
-           <div className="bg-white rounded-[40px] overflow-hidden relative z-10 w-full max-w-sm border border-slate-100 shadow-2xl p-8 text-center">
-              <div className="mx-auto w-20 h-20 bg-rose-50 text-rose-500 rounded-[30px] flex items-center justify-center mb-6 shadow-inner">
-                <AlertTriangle size={40} />
-              </div>
-              <h3 className="text-2xl font-black text-slate-900 mb-2">Annuler ce dépôt ?</h3>
-              <p className="text-slate-500 font-medium italic mb-8">Cette action est irréversible et marquera le dépôt comme annulé.</p>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <button onClick={() => setIsDeleteModalOpen(false)} className="px-6 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-[10px]">Fermer</button>
-                <button onClick={handleCancelSubmit} disabled={isSubmitting} className="px-6 py-4 bg-rose-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-rose-500/20">Confirmer</button>
-              </div>
-           </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 text-center space-y-4">
+            <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+              <AlertTriangle size={32} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900">
+                {locale === "ar" ? "إلغاء هذا الإيداع؟" : "Annuler cet Acompte ?"}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium mt-1">
+                {locale === "ar"
+                  ? "سيتم تمييز الإيداع كملغي وإيقاف إمكانية استخدامه في الفواتير."
+                  : "Cette action annulera l'avance et la rendra inutilisable pour les factures."}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                {locale === "ar" ? "تراجع" : "Fermer"}
+              </button>
+              <button
+                onClick={handleCancelSubmit}
+                disabled={isSubmitting}
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {locale === "ar" ? "تأكيد الإلغاء" : "Confirmer"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
-
     </div>
   );
 }

@@ -30,12 +30,16 @@ import {
   Loader2,
   ArrowLeft,
   Info,
+  Camera,
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { getClientSessionFromCookie, isAdminOrManagerSession, DEFAULT_CLIENT_ID } from "@/lib/client_helpers";
 import InvoiceModal from "../invoices/InvoiceModal";
 import PaymentModal from "../invoices/PaymentModal";
+import OfflinePOSBar from "@/components/OfflinePOSBar";
+import BarcodeCameraScanner from "@/components/BarcodeCameraScanner";
+import { cacheArticlesOffline, getOfflineArticles, recordOfflineInvoice } from "@/lib/utils/offline-sync";
 
 /* ═══════════════════════════════════════════════════════════════════
    TYPES
@@ -1003,6 +1007,7 @@ function PosPage() {
   const [paymentInvoice, setPaymentInvoice] = useState<any>(null);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickAddForm, setQuickAddForm] = useState({ designation: "", price: "", quantity: "1" });
+  const [showCameraScanner, setShowCameraScanner] = useState(false);
   
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [clientSaving, setClientSaving] = useState(false);
@@ -1347,10 +1352,12 @@ function PosPage() {
           }
 
           console.log(`✅ Articles fetched: ${mapped.length} (filtered for depot: ${userEmplacement})`);
+          setArticles(mapped);
+          cacheArticlesOffline(mapped);
+
           const fallbackDepot = findBestDepotMatch(resolvedSelectedDepot, allStockDepotNames) || allStockDepotNames[0] || "";
 
           console.log(`POS visible articles: ${mapped.length} for depot ${resolvedSelectedDepot || userEmplacement || "all"}`);
-          setArticles(mapped);
 
           if (mapped.length === 0 && isAdmin && !editInvoiceId && fallbackDepot && fallbackDepot !== selectedDepot) {
             setSelectedDepot(fallbackDepot);
@@ -1429,6 +1436,25 @@ function PosPage() {
       return [...prev, { ...article, quantite: 1, original_price: article.p_vente_ttc, price_modified: false }];
     });
   }, [editInvoiceId, selectedDepot]);
+
+  const handleCameraBarcodeScanned = useCallback((scannedCode: string) => {
+    const clean = scannedCode.trim().toLowerCase();
+    const matched = articles.find(
+      (a) =>
+        a.code_barre?.toLowerCase() === clean ||
+        a.reference?.toLowerCase() === clean ||
+        String(a.id) === clean
+    );
+
+    if (matched) {
+      addItem(matched);
+      setSuccess(`✅ Article scanné: ${matched.designation}`);
+      setTimeout(() => setSuccess(null), 3500);
+    } else {
+      setError(`⚠️ Aucun article trouvé pour le code scanné: ${scannedCode}`);
+      setTimeout(() => setError(null), 4000);
+    }
+  }, [articles, addItem]);
 
   const removeItem = useCallback((id: string | number) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
@@ -1684,6 +1710,54 @@ function PosPage() {
     setSubmitting(true);
     setError(null);
     setSuccess(null);
+
+    // ── OFFLINE MODE INTERCEPTION ──
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+    if (isOffline) {
+      try {
+        const offlineSale = recordOfflineInvoice({
+          clientId: selectedClientId || 1,
+          clientName: clients.find((c) => c.id === selectedClientId)?.nom || "Client Passant",
+          items: cart.map((it) => ({
+            articleId: it.id,
+            reference: it.reference,
+            designation: it.designation,
+            quantite: it.quantite,
+            p_vente_ttc: it.p_vente_ttc,
+            total: it.p_vente_ttc * it.quantite,
+            depot_origine: selectedDepot || it.depot_origine,
+          })),
+          totalTTC: cart.reduce((acc, it) => acc + it.p_vente_ttc * it.quantite, 0),
+          remise: 0,
+          modePaiement: paymentMethod,
+          montantRecu: Number(receivedAmount) || 0,
+          monnaieRendue: Math.max(
+            0,
+            (Number(receivedAmount) || 0) - cart.reduce((acc, it) => acc + it.p_vente_ttc * it.quantite, 0)
+          ),
+        });
+
+        // Update local stock immediately
+        setArticles((prev) =>
+          prev.map((article) => {
+            const cartItem = cart.find((ci) => ci.id === article.id);
+            if (cartItem) {
+              return { ...article, stock_total: Math.max(0, article.stock_total - cartItem.quantite) };
+            }
+            return article;
+          })
+        );
+
+        setSuccess(`⚡ Vente hors-ligne enregistrée #${offlineSale.offlineId} (Stock local mis à jour). Elle sera synchronisée dès le retour du réseau.`);
+        clearCart();
+        setTimeout(() => setSuccess(null), 8000);
+      } catch (e: any) {
+        setError("Erreur d'enregistrement hors-ligne.");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
 
     try {
       const response = await fetch("/api/pos/checkout", {
@@ -2079,6 +2153,11 @@ function PosPage() {
           </div>
         </header>
 
+        {/* ════════════════════ OFFLINE POS STATUS & SYNC BAR ════════════════════ */}
+        <div style={{ padding: "10px 24px 0 24px" }}>
+          <OfflinePOSBar />
+        </div>
+
         {/* ════════════════════ TABS / PARKED CARTS ════════════════════ */}
         {parkedCarts.length > 0 && (
           <div style={{ padding: "10px 24px", display: "flex", gap: "10px", overflowX: "auto", background: "rgba(15, 23, 42, 0.04)", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
@@ -2141,12 +2220,40 @@ function PosPage() {
                     recognition.onend = () => setIsListening(false);
                     recognition.start();
                   }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 8, display: 'flex', alignItems: 'center' }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', marginRight: 4, display: 'flex', alignItems: 'center' }}
                   title="Recherche vocale"
                 >
                   <Mic size={16} style={{ color: isListening ? '#ef4444' : '#95a5a6', animation: isListening ? 'pulse 1s infinite' : 'none' }} />
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCameraScanner(true)}
+                  style={{
+                    background: '#4f46e5',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '6px',
+                    cursor: 'pointer',
+                    marginRight: 6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    boxShadow: '0 2px 4px rgba(79,70,229,0.3)',
+                  }}
+                  title="Scanner le code-barres avec la caméra"
+                >
+                  <Camera size={15} />
+                </button>
               </div>
+
+              {/* Camera Scanner Modal */}
+              {showCameraScanner && (
+                <BarcodeCameraScanner
+                  onScan={handleCameraBarcodeScanned}
+                  onClose={() => setShowCameraScanner(false)}
+                />
+              )}
 
               {/* Product Grid */}
               <div className="pos-scrollbar" style={{ flex: 1, overflowY: "auto", paddingRight: 4 }}>

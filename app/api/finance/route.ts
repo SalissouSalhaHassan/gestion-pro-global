@@ -8,36 +8,10 @@ export const revalidate = 0;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const money = (v: any) => Number(v || 0);
 
-function inRange(dateValue: string | null | undefined, start?: string | null, end?: string | null) {
-  if (!dateValue) return false;
-  const d = dateValue.slice(0, 10);
-  if (start && d < start) return false;
-  if (end && d > end) return false;
-  return true;
-}
-
-function bucketLabel(dateValue: string, period: string) {
-  const d = new Date(dateValue);
-  if (period === "annee") return String(d.getFullYear());
-  if (period === "mois") return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  if (period === "semaine") {
-    const first = new Date(d.getFullYear(), 0, 1);
-    const days = Math.floor((d.getTime() - first.getTime()) / 86400000);
-    return `S${String(Math.ceil((days + first.getDay() + 1) / 7)).padStart(2, "0")}`;
-  }
-  return dateValue.slice(0, 10);
-}
-
 function statusOf(expected: number, paid: number) {
-  if (paid >= expected && expected > 0) return "Payé";
-  if (paid > 0) return "Partiel";
-  return "Impayé";
-}
-
-function groupSum(rows: any[], key: string, valueKey = "montantPaye") {
-  const map = new Map<string, number>();
-  rows.forEach((r) => map.set(r[key] || "Non défini", (map.get(r[key] || "Non défini") || 0) + money(r[valueKey])));
-  return Array.from(map, ([name, value]) => ({ name, value: Math.round(value) })).sort((a, b) => b.value - a.value);
+  if (paid >= expected && expected > 0) return "Payée";
+  if (paid > 0) return "Partielle";
+  return "Non Payée";
 }
 
 export async function GET(request: Request) {
@@ -54,146 +28,204 @@ export async function GET(request: Request) {
     const isPrivileged = await isAdminOrManager(session);
     const cashier = isPrivileged ? searchParams.get("cashier") : session.username;
 
+    // 1. Fetch Invoices (using exact database columns)
     let invoiceQuery = supabase
       .from("factures")
-      .select("id, bl_number, date_facture, total_ttc, montant_paye, montant_restant, statut, mode_paiement, vendeur, emplacement, clients(nom)")
+      .select("id, bl_number, date_facture, total_ht, total_ttc, montant_paye, montant_restant, statut, vendeur, clients(id, nom, tel, ref_client)")
       .neq("statut", "Annulée")
-      .gte("date_facture", start)
-      .lte("date_facture", end)
-      .order("date_facture", { ascending: false });
-    if (cashier && cashier !== "Tous") invoiceQuery = invoiceQuery.eq("vendeur", cashier);
-    const { data: invoices, error: invoicesError } = await invoiceQuery;
-    if (invoicesError) throw invoicesError;
+      .eq("is_deleted", false)
+      .order("id", { ascending: false });
 
-    let paymentQuery = supabase
-      .from("paiements")
-      .select("id, date_operation, montant_regle, moyen_reglement, utilisateur, reference_paiement, factures(bl_number, date_facture, total_ttc, emplacement, vendeur, clients(nom))")
-      .neq("moyen_reglement", "Crédit")
-      .gte("date_operation", start)
-      .lte("date_operation", end)
-      .order("date_operation", { ascending: false });
-    if (cashier && cashier !== "Tous") paymentQuery = paymentQuery.eq("utilisateur", cashier);
-    const { data: payments } = await paymentQuery;
+    if (start && end) {
+      invoiceQuery = invoiceQuery.gte("date_facture", start).lte("date_facture", end);
+    }
+    if (cashier && cashier !== "Tous") {
+      invoiceQuery = invoiceQuery.eq("vendeur", cashier);
+    }
 
+    const { data: invoicesRaw, error: invoicesError } = await invoiceQuery;
+    if (invoicesError) {
+      console.error("Invoices fetch error in finance:", invoicesError);
+      throw invoicesError;
+    }
+
+    const invoices = invoicesRaw || [];
+
+    // 2. Fetch Payments
+    let payments: any[] = [];
+    try {
+      let paymentQuery = supabase
+        .from("paiements")
+        .select("id, date_operation, montant_regle, moyen_reglement, reference_paiement, factures(id, bl_number, total_ttc, clients(nom))")
+        .order("id", { ascending: false });
+      if (start && end) {
+        paymentQuery = paymentQuery.gte("date_operation", start).lte("date_operation", `${end}T23:59:59.999Z`);
+      }
+      const { data: paymentsRaw } = await paymentQuery;
+      payments = paymentsRaw || [];
+    } catch (e) {
+      console.warn("Payment fetch warning in finance:", e);
+    }
+
+    // 3. Fetch Expenses
     let expenses: any[] = [];
     try {
-      let q = supabase.from("depenses").select("date_depense, montant, operateur, emplacement").gte("date_depense", start).lte("date_depense", end);
-      if (cashier && cashier !== "Tous") q = q.eq("operateur", cashier);
-      const { data } = await q;
-      expenses = data || [];
-    } catch {}
+      let expQuery = supabase
+        .from("depenses")
+        .select("id, date_depense, montant, operateur, no_caisse");
+      if (start && end) {
+        expQuery = expQuery.gte("date_depense", start).lte("date_depense", `${end}T23:59:59.999Z`);
+      }
+      if (cashier && cashier !== "Tous") {
+        expQuery = expQuery.eq("operateur", cashier);
+      }
+      const { data: expRaw } = await expQuery;
+      expenses = expRaw || [];
+    } catch (e) {
+      console.warn("Expenses fetch warning in finance:", e);
+    }
 
-    const rows = (invoices || []).map((f: any, index: number) => {
+    // 4. Fetch Clients for debt analysis
+    const { data: clientsRaw } = await supabase
+      .from("clients")
+      .select("id, nom, tel, credit_facture, credit_bl")
+      .eq("is_deleted", false);
+
+    const clients = clientsRaw || [];
+
+    // Calculations
+    const totalAttendu = invoices.reduce((acc, f) => acc + money(f.total_ttc), 0);
+    const totalEncaisse = invoices.reduce((acc, f) => acc + money(f.montant_paye), 0);
+    const totalImpaye = invoices.reduce((acc, f) => acc + Math.max(0, money(f.total_ttc) - money(f.montant_paye)), 0);
+    const totalDepenses = expenses.reduce((acc, e) => acc + money(e.montant), 0);
+    const soldeActuel = totalEncaisse - totalDepenses;
+
+    const tauxRecouvrement = totalAttendu > 0 ? (totalEncaisse / totalAttendu) * 100 : 100;
+
+    // Time-based calculations
+    const todayStr = iso(now);
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    const startOfWeekStr = iso(startOfWeek);
+    const startOfMonthStr = iso(new Date(now.getFullYear(), now.getMonth(), 1));
+    const startOfYearStr = iso(new Date(now.getFullYear(), 0, 1));
+
+    const revenusAujourdhui = invoices
+      .filter((f) => f.date_facture === todayStr)
+      .reduce((acc, f) => acc + money(f.montant_paye), 0);
+
+    const revenusCetteSemaine = invoices
+      .filter((f) => f.date_facture >= startOfWeekStr)
+      .reduce((acc, f) => acc + money(f.montant_paye), 0);
+
+    const revenusCeMois = invoices
+      .filter((f) => f.date_facture >= startOfMonthStr)
+      .reduce((acc, f) => acc + money(f.montant_paye), 0);
+
+    const revenusCetteAnnee = invoices
+      .filter((f) => f.date_facture >= startOfYearStr)
+      .reduce((acc, f) => acc + money(f.montant_paye), 0);
+
+    // Client debt metrics
+    const clientsPayesCount = clients.filter((c) => money(c.credit_facture) <= 0).length;
+    const clientsImpayesCount = clients.filter((c) => money(c.credit_facture) > 0).length;
+
+    // Mode of payment breakdown (derived from paiements table)
+    const modeMap: Record<string, number> = {};
+    payments.forEach((p) => {
+      const mode = p.moyen_reglement || "Espèces";
+      modeMap[mode] = (modeMap[mode] || 0) + money(p.montant_regle);
+    });
+
+    // If no payments recorded yet, default from invoices
+    if (Object.keys(modeMap).length === 0 && totalEncaisse > 0) {
+      modeMap["Espèces"] = totalEncaisse;
+    }
+
+    const modesDePaiement = Object.keys(modeMap).map((name) => ({
+      name,
+      value: Math.round(modeMap[name]),
+    }));
+
+    // Daily/Monthly timeline curve
+    const timelineMap: Record<string, { label: string; encaisse: number; attendu: number; depenses: number }> = {};
+    invoices.forEach((f) => {
+      const d = f.date_facture || todayStr;
+      if (!timelineMap[d]) {
+        timelineMap[d] = { label: d, encaisse: 0, attendu: 0, depenses: 0 };
+      }
+      timelineMap[d].attendu += money(f.total_ttc);
+      timelineMap[d].encaisse += money(f.montant_paye);
+    });
+
+    expenses.forEach((e) => {
+      const d = e.date_depense || todayStr;
+      if (!timelineMap[d]) {
+        timelineMap[d] = { label: d, encaisse: 0, attendu: 0, depenses: 0 };
+      }
+      timelineMap[d].depenses += money(e.montant);
+    });
+
+    const evolutionEncaissements = Object.values(timelineMap)
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .slice(-15);
+
+    // Rows for the commercial financial table
+    const rows = invoices.map((f: any, idx: number) => {
       const client = Array.isArray(f.clients) ? f.clients[0] : f.clients;
       const expected = money(f.total_ttc);
       const paid = money(f.montant_paye);
-      const status = statusOf(expected, paid);
+      const reste = Math.max(0, expected - paid);
+      const st = f.statut || statusOf(expected, paid);
+
       return {
-        no: index + 1,
-        reference: f.bl_number || `F-${f.id}`,
-        eleve: client?.nom || "Client / élève",
-        classe: f.emplacement || "Général",
-        niveau: f.emplacement || "Standard",
-        secteur: f.emplacement || "Général",
-        montantAttendu: expected,
+        id: f.id,
+        no: idx + 1,
+        reference: f.bl_number || `FAC-${f.id}`,
+        date: f.date_facture || todayStr,
+        client: client?.nom || "Client Divers",
+        clientTel: client?.tel || "",
+        emplacement: "BOUTIQUE",
+        vendeur: f.vendeur || "Admin",
+        modePaiement: "Espèces",
+        totalTTC: expected,
         montantPaye: paid,
-        reste: Math.max(0, expected - paid),
-        statut: status,
-        date: f.date_facture,
-        modePaiement: f.mode_paiement || "Non défini",
-        caissier: f.vendeur || "Non défini",
-        referencePaiement: f.bl_number || `F-${f.id}`,
-        observation: status === "Impayé" ? "A relancer" : status === "Partiel" ? "Solde ouvert" : "Soldé",
+        reste,
+        statut: st,
       };
     });
 
-    const totalExpected = rows.reduce((s, r) => s + r.montantAttendu, 0);
-    const totalPaid = rows.reduce((s, r) => s + r.montantPaye, 0);
-    const totalUnpaid = rows.reduce((s, r) => s + r.reste, 0);
-    const expensesTotal = expenses.reduce((s, e) => s + money(e.montant), 0);
-    const paidStudents = new Set(rows.filter((r) => r.statut === "Payé").map((r) => r.eleve)).size;
-    const unpaidStudents = new Set(rows.filter((r) => r.statut !== "Payé").map((r) => r.eleve)).size;
-
-    const today = iso(now);
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay() + 1);
-    const monthStart = iso(new Date(now.getFullYear(), now.getMonth(), 1));
-    const yearStart = iso(new Date(now.getFullYear(), 0, 1));
-    const paymentRows = payments || [];
-
-    const revenueFor = (from: string, to = today) =>
-      paymentRows.filter((p: any) => inRange(p.date_operation, from, to)).reduce((s: number, p: any) => s + money(p.montant_regle), 0);
-
-    const evolutionMap = new Map<string, number>();
-    paymentRows.forEach((p: any) => {
-      const label = bucketLabel(p.date_operation, period);
-      evolutionMap.set(label, (evolutionMap.get(label) || 0) + money(p.montant_regle));
-    });
-
-    const modeMap = new Map<string, number>();
-    paymentRows.forEach((p: any) => {
-      const mode = p.moyen_reglement || "Espèces";
-      modeMap.set(mode, (modeMap.get(mode) || 0) + money(p.montant_regle));
-    });
-
-    const monthlyGrowth = totalExpected > 0 ? ((totalPaid - totalExpected / 2) / Math.max(1, totalExpected / 2)) * 100 : 0;
-    const recoveryRate = totalExpected > 0 ? (totalPaid / totalExpected) * 100 : 0;
-    const averageDaily = paymentRows.length ? totalPaid / Math.max(1, new Set(paymentRows.map((p: any) => p.date_operation?.slice(0, 10))).size) : 0;
-
     return NextResponse.json({
-      filters: { start, end, period, cashier: cashier || "Tous", isPrivileged },
+      success: true,
       summary: {
-        totalExpected,
-        totalPaid,
-        totalUnpaid,
-        balance: totalPaid - expensesTotal,
-        recoveryRate,
-        paymentCount: paymentRows.length,
-        paidStudents,
-        unpaidStudents,
-        revenueToday: revenueFor(today),
-        revenueWeek: revenueFor(iso(weekStart)),
-        revenueMonth: revenueFor(monthStart),
-        revenueYear: revenueFor(yearStart),
+        totalAttendu,
+        totalEncaisse,
+        totalImpaye,
+        soldeActuel,
+        tauxRecouvrement: Number(tauxRecouvrement.toFixed(2)),
+        nombrePaiements: payments.length > 0 ? payments.length : invoices.length,
+        clientsPayes: clientsPayesCount,
+        clientsImpayes: clientsImpayesCount,
+        revenusAujourdhui,
+        revenusCetteSemaine,
+        revenusCeMois,
+        revenusCetteAnnee,
+        totalDepenses,
       },
       charts: {
-        evolution: Array.from(evolutionMap, ([name, value]) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name)),
-        repartition: ["Payé", "Partiel", "Impayé"].map((name) => ({ name, value: rows.filter((r) => r.statut === name).length })),
-        byClass: groupSum(rows, "classe"),
-        byLevel: groupSum(rows, "niveau"),
-        bySector: groupSum(rows, "secteur"),
-        modes: Array.from(modeMap, ([name, value]) => ({ name, value: Math.round(value) })),
-        comparison: [{ name: "Période", attendu: Math.round(totalExpected), encaisse: Math.round(totalPaid) }],
+        evolution: evolutionEncaissements.length > 0 ? evolutionEncaissements : [{ label: todayStr, encaisse: totalEncaisse, attendu: totalAttendu, depenses: totalDepenses }],
+        modesPaiement: modesDePaiement.length > 0 ? modesDePaiement : [{ name: "Espèces", value: totalEncaisse || 1 }],
       },
-      analysis: {
-        monthlyGrowth,
-        revenueForecast: Math.round(averageDaily * 30),
-        delayRisk: rows.filter((r) => r.statut !== "Payé").length,
-        receivables: Math.round(totalUnpaid),
-        treasuryForecast: Math.round(totalPaid - expensesTotal + averageDaily * 15),
-        paymentRate: recoveryRate,
-        topClasses: groupSum(rows, "classe").slice(0, 5),
-        topStudents: groupSum(rows, "eleve").slice(0, 5),
-        topCashiers: groupSum(rows, "caissier").slice(0, 5),
-      },
-      alerts: [
-        { type: "Retards importants", count: rows.filter((r) => r.statut === "Impayé").length, level: "danger" },
-        { type: "Échéances proches", count: rows.filter((r) => r.statut === "Partiel").length, level: "warning" },
-        { type: "Montants anormaux", count: rows.filter((r) => r.montantAttendu > totalExpected / Math.max(1, rows.length) * 2).length, level: "info" },
-        { type: "Double paiement", count: 0, level: "success" },
-      ],
       rows,
-      reports: [
-        "Rapport Journalier", "Rapport Hebdomadaire", "Rapport Mensuel", "Rapport Annuel", "Rapport des Élèves",
-        "Rapport des Classes", "Rapport des Niveaux", "Rapport des Secteurs", "Rapport des Modes de Paiement",
-        "Rapport des Retards", "Rapport des Soldes", "Rapport des Annulations", "Rapport des Remises",
-        "Rapport des Bourses", "Rapport des Encaissements", "Rapport Comptable", "Grand Livre",
-        "Balance Financière", "Rapport de Trésorerie"
-      ],
-      security: ["Super Admin", "Directeur", "Comptable", "Caissier", "Consultation"],
+      filters: {
+        start,
+        end,
+        period,
+        cashier: cashier || "Tous",
+      },
     });
-  } catch (error: any) {
-    console.error("Finance API Error:", error);
-    return NextResponse.json({ error: error.message || "Erreur finance" }, { status: 500 });
+  } catch (err: any) {
+    console.error("Finance API error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

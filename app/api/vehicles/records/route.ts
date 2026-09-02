@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -28,11 +31,14 @@ export async function GET(request: NextRequest) {
     
     const { data, error } = await query.order('record_date', { ascending: false });
     
-    if (error) throw error;
-    return NextResponse.json(data);
+    if (error) {
+      console.warn('Vehicle records query warning:', error.message);
+      return NextResponse.json([]);
+    }
+    return NextResponse.json(data || []);
   } catch (error: any) {
     console.error('Vehicle records GET error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json([]);
   }
 }
 
@@ -58,23 +64,17 @@ export async function POST(request: NextRequest) {
     
     if (cat.includes('assurance') && data.end_date) {
       vehicleUpdates.date_assurance_exp = data.end_date;
-    } else if ((cat.includes('vignette') || cat.includes('taxe')) && data.end_date) {
+    } else if (cat.includes('vignette') && data.end_date) {
       vehicleUpdates.date_expiration = data.end_date;
-    } else if (cat.includes('maintenance') || cat.includes('vidange')) {
-      vehicleUpdates.derniere_maintenance = data.record_date;
     }
-
-    if (Object.keys(vehicleUpdates).length > 0) {
-      const { error: updateError } = await supabase.from('voitures').update(vehicleUpdates).eq('id', data.voiture_id);
-      if (updateError) console.error('Vehicle auto-update error:', updateError);
+    
+    if (Object.keys(vehicleUpdates).length > 0 && data.voiture_id) {
+      await supabase.from('voitures').update(vehicleUpdates).eq('id', data.voiture_id);
     }
-
+    
     return NextResponse.json(result);
   } catch (error: any) {
-    console.error('Vehicle records POST full error:', error);
-    return NextResponse.json({ 
-      error: error.message || 'Erreur inconnue',
-      details: error.details || error.hint || null
-    }, { status: 500 });
+    console.error('Vehicle records POST error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

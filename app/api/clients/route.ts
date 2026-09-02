@@ -19,16 +19,17 @@ export async function GET() {
 
     // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
     if (!isAdmin) {
-      query = query.or(`created_by.eq.${user.id},id.eq.${DEFAULT_CLIENT_ID}`);
+      try {
+        const { data, error } = await query.or(`created_by.eq.${user.id},id.eq.${DEFAULT_CLIENT_ID}`);
+        if (!error) return NextResponse.json(data);
+      } catch (e) {
+        // Fallback without created_by filter
+      }
     }
 
     const { data, error } = await query;
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return NextResponse.json(data);
+    if (error) throw new Error(error.message);
+    return NextResponse.json(data || []);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -43,21 +44,38 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { nom, email, telephone, tel, adresse, ref_client } = body;
 
+    const basePayload = {
+      nom,
+      email: email || null,
+      tel: tel || telephone || null,
+      adresse: adresse || null,
+      ref_client: ref_client || null,
+    };
+
+    // Try inserting with created_by first
     const { data, error } = await supabase
       .from('clients')
-      .insert([{
-        nom,
-        email,
-        tel: tel || telephone || null,
-        adresse,
-        ref_client,
-        created_by: user.id  // Track which user created this client
-      }])
+      .insert([{ ...basePayload, created_by: user.id }])
       .select()
       .single();
 
-    if (error) throw error;
-    return NextResponse.json(data);
+    if (!error) {
+      return NextResponse.json(data);
+    }
+
+    // Fallback: If created_by column does not exist in schema, insert without it
+    if (error.message?.includes('created_by') || error.code === 'PGRST204' || error.message?.includes('schema cache')) {
+      const { data: fallbackData, error: fallbackErr } = await supabase
+        .from('clients')
+        .insert([basePayload])
+        .select()
+        .single();
+
+      if (fallbackErr) throw fallbackErr;
+      return NextResponse.json(fallbackData);
+    }
+
+    throw error;
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

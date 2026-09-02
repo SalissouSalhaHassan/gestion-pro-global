@@ -25,10 +25,16 @@ import {
   Layers,
   Car,
   BarChart3,
-  Landmark
+  Landmark,
+  Crown,
+  Sparkles,
+  Bot,
+  Headphones
 } from "lucide-react";
 import UnifiedSearch from "@/components/UnifiedSearch";
 import NotificationBell from "@/components/NotificationBell";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useLanguage } from "@/lib/i18n/context";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -36,6 +42,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const isPos = pathname === "/dashboard/pos";
   const [loggingOut, setLoggingOut] = useState(false);
   const [userSession, setUserSession] = useState<any>(null);
+  const { t, dir, locale } = useLanguage();
 
   useEffect(() => {
     // Client-side session retrieval
@@ -61,29 +68,33 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const isAdmin = userSession?.admin === "Oui" || userSession?.role === 1 || userSession?.role === "1";
 
   const allNavItems = [
-    { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard, perm: "sale.dashboard" },
-    { href: "/dashboard/pos", label: "Point de vente (POS)", icon: ShoppingCart, highlight: true, perm: "pos.access" },
-    { href: "/dashboard/articles", label: "Articles", icon: Package, perm: "stock.articles" },
-    { href: "/dashboard/stock", label: "Gestion du Stock", icon: Boxes, perm: "stock.inventory" },
-    { href: "/dashboard/stock/valuation", label: "Valorisation Stock", icon: BarChart3, perm: "report.stock_valuation" },
-    { href: "/dashboard/stock/transit", label: "Suivi Transits", icon: Truck, perm: "stock.transfer" },
-    { href: "/dashboard/inventory", label: "Jeu d'Inventaire", icon: ScanLine, perm: "stock.inventory" },
-    { href: "/dashboard/ciment", label: "Gestion Ciment", icon: Layers, perm: "cement.access" },
-    { href: "/dashboard/mouvements", label: "Journal d'Audit", icon: ArrowRightLeft, perm: "report.activity_log" },
-    { href: "/dashboard/clients", label: "Clients", icon: Users, perm: "client.access" },
-    { href: "/dashboard/suppliers", label: "Fournisseurs", icon: Users, perm: "supplier.access" },
-    { href: "/dashboard/invoices", label: "Factures", icon: FileText, perm: "sale.invoices_view" },
-    { href: "/dashboard/purchases", label: "Achats", icon: ShoppingCart, perm: "purchase.access" },
-    { href: "/dashboard/expenses", label: "Dépenses", icon: TrendingDown, perm: "expense.access" },
-    { href: "/dashboard/reports/cash-balance", label: "Bilan de Caisse", icon: Scale, perm: "expense.cash_balance" },
-    { href: "/dashboard/finance", label: "Gestion Financière", icon: Landmark, perm: "report.finance" },
-    { href: "/dashboard/advances", label: "Dépôts & Avances", icon: Wallet, perm: "deposit.access" },
-    { href: "/dashboard/loyers", label: "Gestion des Loyers", icon: Home, perm: "rent.access" },
-    { href: "/dashboard/vehicles", label: "Gestion des Véhicules", icon: Car, perm: "vehicles.access" },
-    { href: "/dashboard/depots", label: "Gestion des Dépôts", icon: Warehouse, adminOnly: true },
-    { href: "/dashboard/users", label: "Utilisateurs", icon: Users, adminOnly: true },
-    { href: "/dashboard/permissions", label: "Permissions", icon: Shield, adminOnly: true },
-    { href: "/dashboard/settings", label: "Paramètres", icon: Settings, adminOnly: true },
+    { href: "/dashboard", label: t("nav_dashboard", "Tableau de bord"), icon: LayoutDashboard, perm: "sale.dashboard" },
+    { href: "/dashboard/pos", label: t("nav_pos", "Point de vente (POS)"), icon: ShoppingCart, highlight: true, perm: "pos.access" },
+    { href: "/dashboard/articles", label: t("nav_articles", "Articles"), icon: Package, perm: "stock.articles" },
+    { href: "/dashboard/stock", label: t("nav_stock", "Gestion du Stock"), icon: Boxes, perm: "stock.inventory" },
+    { href: "/dashboard/stock/valuation", label: t("nav_valuation", "Valorisation Stock"), icon: BarChart3, perm: "report.stock_valuation" },
+    { href: "/dashboard/stock/transit", label: t("nav_transits", "Suivi Transits"), icon: Truck, perm: "stock.transfer" },
+    { href: "/dashboard/inventory", label: t("nav_inventory", "Jeu d'Inventaire"), icon: ScanLine, perm: "stock.inventory" },
+    { href: "/dashboard/ciment", label: t("nav_ciment", "Gestion Ciment"), icon: Layers, perm: "cement.access" },
+    { href: "/dashboard/mouvements", label: t("nav_audit", "Journal d'Audit"), icon: ArrowRightLeft, perm: "report.activity_log" },
+    { href: "/dashboard/clients", label: t("nav_clients", "Clients"), icon: Users, perm: "client.access" },
+    { href: "/dashboard/suppliers", label: t("nav_suppliers", "Fournisseurs"), icon: Users, perm: "supplier.access" },
+    { href: "/dashboard/invoices", label: t("nav_invoices", "Factures"), icon: FileText, perm: "sale.invoices_view" },
+    { href: "/dashboard/purchases", label: t("nav_purchases", "Achats"), icon: ShoppingCart, perm: "purchase.access" },
+    { href: "/dashboard/expenses", label: t("nav_expenses", "Dépenses"), icon: TrendingDown, perm: "expense.access" },
+    { href: "/dashboard/reports/cash-balance", label: t("nav_cash_balance", "Bilan de Caisse"), icon: Scale, perm: "expense.cash_balance" },
+    { href: "/dashboard/finance", label: t("nav_finance", "Gestion Financière"), icon: Landmark, perm: "report.finance" },
+    { href: "/dashboard/advances", label: t("nav_advances", "Dépôts & Avances"), icon: Wallet, perm: "deposit.access" },
+    { href: "/dashboard/loyers", label: t("nav_loyers", "Gestion des Loyers"), icon: Home, perm: "rent.access" },
+    { href: "/dashboard/vehicles", label: t("nav_vehicles", "Gestion des Véhicules"), icon: Car, perm: "vehicles.access" },
+    { href: "/dashboard/depots", label: t("nav_depots", "Gestion des Dépôts"), icon: Warehouse, adminOnly: true },
+    { href: "/dashboard/users", label: t("nav_users", "Utilisateurs"), icon: Users, adminOnly: true },
+    { href: "/dashboard/permissions", label: t("nav_permissions", "Permissions"), icon: Shield, adminOnly: true },
+    { href: "/dashboard/settings", label: t("nav_settings", "Paramètres"), icon: Settings, adminOnly: true },
+    { href: "/dashboard/platform", label: t("nav_platform", "Gestion de la plateforme"), icon: Landmark, adminOnly: true },
+    { href: "/dashboard/super-admin", label: t("nav_super_admin", "Tableau de bord Super Admin"), icon: Crown, adminOnly: true },
+    { href: "/dashboard/copilot", label: t("nav_copilot", "Assistant IA Copilot"), icon: Bot, highlight: true },
+    { href: "/dashboard/support", label: t("nav_support", "Support & Assistance"), icon: Headphones },
   ];
 
   const userPermissions = userSession?.permissions || [];
@@ -95,52 +106,54 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   });
 
   return (
-    <div className="flex min-h-screen relative overflow-hidden font-sans print:block print:overflow-visible print:h-auto print:bg-none print:shadow-none" dir="ltr" style={{
+    <div className="flex min-h-screen relative overflow-hidden font-sans print:block print:overflow-visible print:h-auto print:bg-none print:shadow-none" dir={dir} style={{
       background: "radial-gradient(at 0% 0%, rgba(240, 244, 255, 1) 0, transparent 50%), radial-gradient(at 100% 0%, rgba(245, 239, 255, 1) 0, transparent 50%), radial-gradient(at 100% 100%, rgba(235, 250, 255, 1) 0, transparent 50%), radial-gradient(at 0% 100%, rgba(240, 240, 255, 1) 0, transparent 50%), #ffffff"
     }}>
-      {/* Sidebar - Precision Premium Dark */}
+      {/* Sidebar - Precision Premium Dark (Sticky & Smooth Scrollable) */}
       <aside
-        className={`flex w-72 flex-col m-4 mr-0 rounded-[32px] backdrop-blur-2xl text-white shadow-[0_10px_50px_rgba(0,0,0,0.4)] transition-all duration-300 no-print print:hidden ${isPos ? "hidden" : ""}`}
+        className={`sticky top-4 h-[calc(100vh-2rem)] w-72 shrink-0 self-start flex flex-col m-4 mr-0 rounded-[32px] backdrop-blur-2xl text-white shadow-[0_10px_50px_rgba(0,0,0,0.4)] transition-all duration-300 z-50 no-print print:hidden ${isPos ? "hidden" : ""}`}
         style={{ backgroundColor: 'rgba(2, 6, 23, 0.98)', border: '1px solid rgba(255, 255, 255, 0.05)' }}
       >
-        <div className="p-8 pb-4">
-          <div className="flex items-center gap-4 mb-8 group cursor-pointer">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-500 via-indigo-600 to-indigo-700 flex items-center justify-center shadow-[0_10px_25px_rgba(79,70,229,0.4)] group-hover:scale-110 transition-transform duration-300">
-              <Database size={24} className="text-white" />
+        {/* Fixed Header Logo */}
+        <div className="p-6 pb-2 shrink-0">
+          <div className="flex items-center gap-3.5 mb-4 group cursor-pointer" onClick={() => router.push("/dashboard")}>
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-500 via-indigo-600 to-indigo-700 flex items-center justify-center shadow-[0_10px_25px_rgba(79,70,229,0.4)] group-hover:scale-105 transition-transform duration-300">
+              <Database size={22} className="text-white" />
             </div>
             <div>
-              <span className="text-2xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-white to-slate-400 block leading-tight">
+              <span className="text-xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-white to-slate-400 block leading-tight">
                 GestionPro
               </span>
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400/80 block -mt-1">
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-400/80 block">
                 Enterprise 4K
               </span>
             </div>
           </div>
         </div>
 
-        <div className="flex-1 px-4 py-2 overflow-hidden flex flex-col">
-          <div className="flex-1 bg-white/[0.02] border border-white/5 rounded-[32px] overflow-hidden flex flex-col shadow-inner">
-            <nav className="flex-1 space-y-2 overflow-y-auto px-4 custom-scrollbar py-6">
+        {/* Scrollable Navigation Button Container */}
+        <div className="flex-1 min-h-0 px-3 py-1 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 bg-white/[0.02] border border-white/5 rounded-[28px] overflow-hidden flex flex-col shadow-inner">
+            <nav className="flex-1 space-y-1.5 overflow-y-auto px-2.5 py-3 custom-scrollbar">
               {visibleNavItems.map((item) => {
                 const isActive = pathname === item.href;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-4 rounded-2xl p-4 text-sm font-black transition-all duration-300 group relative ${isActive
-                      ? "bg-gradient-to-r from-indigo-600 via-indigo-600 to-indigo-500 text-white shadow-[0_10px_30px_rgba(79,70,229,0.4)] border-t border-white/10 scale-[1.02] z-10"
+                    className={`flex items-center gap-3.5 rounded-2xl px-3.5 py-3 text-xs font-black transition-all duration-200 group relative ${isActive
+                      ? "bg-gradient-to-r from-indigo-600 via-indigo-600 to-indigo-500 text-white shadow-[0_8px_25px_rgba(79,70,229,0.4)] border-t border-white/10 scale-[1.01] z-10"
                       : item.highlight
                         ? "text-indigo-400 hover:bg-indigo-500/10"
                         : "text-slate-400/80 hover:bg-white/5 hover:text-white"
                       }`}
                   >
-                    <item.icon size={22} className={`transition-all duration-300 ${isActive ? "scale-110 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]" : "group-hover:scale-110 group-hover:text-white"}`} />
-                    <span className="tracking-wide">{item.label}</span>
+                    <item.icon size={19} className={`shrink-0 transition-all duration-200 ${isActive ? "scale-110 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]" : "group-hover:scale-110 group-hover:text-white"}`} />
+                    <span className="tracking-wide truncate">{item.label}</span>
 
                     {isActive && (
                       <>
-                        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_12px_#fff]"></div>
+                        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_10px_#fff]"></div>
                         <div className="absolute inset-0 rounded-2xl bg-indigo-400/10 blur-xl -z-10 animate-pulse"></div>
                       </>
                     )}
@@ -151,22 +164,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <div className="p-5 mt-auto">
-          <div className="bg-gradient-to-b from-white/[0.03] to-transparent rounded-3xl p-5 border border-white/5 backdrop-blur-sm">
+        {/* Fixed Footer Logout */}
+        <div className="p-4 shrink-0 mt-auto">
+          <div className="bg-gradient-to-b from-white/[0.03] to-transparent rounded-2xl p-2 border border-white/5 backdrop-blur-sm">
             <button
               onClick={handleLogout}
               disabled={loggingOut}
-              className="flex w-full items-center gap-4 rounded-xl p-3 text-rose-400 font-extrabold transition-all duration-300 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50 group"
+              className="flex w-full items-center gap-3 rounded-xl p-2.5 text-rose-400 font-extrabold text-xs transition-all duration-200 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-50 group cursor-pointer"
             >
-              <LogOut size={22} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="tracking-wide">{loggingOut ? "Déconnexion..." : "Se déconnecter"}</span>
+              <LogOut size={18} className="group-hover:-translate-x-1 transition-transform" />
+              <span className="tracking-wide">{loggingOut ? "Déconnexion..." : (locale === "ar" ? "تسجيل الخروج" : "Se déconnecter")}</span>
             </button>
           </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className={`flex-1 relative overflow-y-auto print:block print:overflow-visible print:h-auto print:p-0 print:m-0 ${isPos ? "p-0 h-screen" : "p-6 lg:p-10"}`}>
+      <main className={`flex-1 min-w-0 relative overflow-y-auto print:block print:overflow-visible print:h-auto print:p-0 print:m-0 ${isPos ? "p-0 h-screen" : "p-6 lg:p-10"}`}>
         {/* Background purely decorative blobs */}
         {!isPos && (
           <div className="print:hidden">
@@ -175,13 +189,30 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <div className="relative z-[60] mb-8 print:hidden no-print flex items-center gap-4">
+        <div className="relative z-[60] mb-8 print:hidden no-print flex items-center justify-between gap-4">
           {!isPos && (
             <>
-              <div className="flex-1">
+              <div className="flex-1 max-w-xl">
                 <UnifiedSearch />
               </div>
-              <NotificationBell />
+              
+              {/* Global Multi-Tenant Header Badge */}
+              <div className="flex items-center gap-3 ml-auto">
+                <div className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/80 border border-slate-200/80 shadow-xs backdrop-blur-md">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-xs font-bold text-slate-700">
+                    🏢 {userSession?.organization_name || "GESTION PRO GLOBAL"}
+                  </span>
+                  <span className="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-100">
+                    {userSession?.plan === "trial" ? "Essai 14j" : "Global SaaS"}
+                  </span>
+                </div>
+
+                {/* Language Switcher Dropdown */}
+                <LanguageSwitcher />
+
+                <NotificationBell />
+              </div>
             </>
           )}
         </div>
@@ -212,19 +243,20 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         }
 
         .custom-scrollbar::-webkit-scrollbar {
-          width: 4px;
+          width: 5px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
+          background: rgba(255, 255, 255, 0.02);
+          border-radius: 10px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.05);
+          background: rgba(99, 102, 241, 0.35);
           border-radius: 10px;
           transition: all 0.3s;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #6366f1;
-          box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+          background: rgba(99, 102, 241, 0.8);
+          box-shadow: 0 0 12px rgba(99, 102, 241, 0.6);
         }
 
         ::selection {

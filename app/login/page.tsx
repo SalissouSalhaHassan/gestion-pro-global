@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useLanguage } from "@/lib/i18n/context";
 
 /* ═══════════════════════════════════════════════════════════════
    ANIMATED PARTICLE BACKGROUND
@@ -156,6 +159,7 @@ export default function LoginPage() {
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
+  const { t, dir } = useLanguage();
 
   useEffect(() => {
     setMounted(true);
@@ -213,6 +217,7 @@ export default function LoginPage() {
       admin: userRecord.admin,
       emplacement: primaryDepot,
       depots: depotsString,
+      organization_id: userRecord.organization_id || "00000000-0000-0000-0000-000000000001",
       permissions: permissionKeys
     };
     document.cookie = `gp_session=${encodeURIComponent(JSON.stringify(sessionData))}; path=/; max-age=86400; SameSite=Lax`;
@@ -276,7 +281,12 @@ export default function LoginPage() {
         }
       `}</style>
 
-      <div style={styles.root} dir="ltr">
+      <div style={styles.root} dir={dir}>
+        {/* Top Right Language Switcher */}
+        <div style={{ position: "absolute", top: 20, right: 20, zIndex: 100 }}>
+          <LanguageSwitcher variant="dark" />
+        </div>
+
         {/* Animated particle background */}
         <ParticleCanvas />
 
@@ -464,6 +474,14 @@ export default function LoginPage() {
                   </div>
                 )}
               </button>
+
+              {/* Create Organization Link */}
+              <div style={{ textAlign: "center", marginTop: 4 }}>
+                <span style={{ fontSize: 13, color: "#94a3b8" }}>Nouveau sur la plateforme ? </span>
+                <Link href="/register" style={{ fontSize: 13, color: "#3b82f6", fontWeight: "600", textDecoration: "none" }}>
+                  Créer un Espace Entreprise (Essai gratuit)
+                </Link>
+              </div>
             </form>
 
             {/* Footer */}

@@ -9,20 +9,25 @@ import {
   TrendingDown, 
   Wallet, 
   ArrowUpRight, 
-  ArrowDownRight,
-  Loader2,
-  FileText,
-  User,
-  MapPin,
-  Download,
-  Database,
-  Printer,
-  Info
+  ArrowDownRight, 
+  Loader2, 
+  FileText, 
+  User, 
+  MapPin, 
+  Printer, 
+  Info,
+  Sparkles,
+  RefreshCw,
+  CreditCard,
+  Banknote,
+  Receipt
 } from "lucide-react";
-
+import { useLanguage } from "@/lib/i18n/context";
+import { formatCurrencyAmount } from "@/lib/utils/currency";
 import CashBalanceModal from "./CashBalanceModal";
 
 export default function CashBalancePage() {
+  const { t, locale } = useLanguage();
   const [data, setData] = useState<{
     summary: { 
       totalIncome: number; 
@@ -40,6 +45,7 @@ export default function CashBalancePage() {
     };
     entries: any[];
   } | null>(null);
+  
   const [loading, setLoading] = useState(true);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [filters, setFilters] = useState({ 
@@ -87,68 +93,90 @@ export default function CashBalancePage() {
 
   const summaryItems = [
     {
-      label: "Total Recettes",
+      label: locale === "ar" ? "إجمالي المقبوضات النقدية" : "Total Recettes en Caisse",
       value: data?.summary.totalIncome || 0,
       icon: TrendingUp,
       color: "emerald",
       bg: "bg-emerald-50",
       text: "text-emerald-600",
-      gradient: "from-emerald-500 to-emerald-600"
     },
     {
-      label: "Total Dépenses",
+      label: locale === "ar" ? "إجمالي المصروفات" : "Total Dépenses",
       value: data?.summary.totalExpenses || 0,
       icon: TrendingDown,
       color: "rose",
       bg: "bg-rose-50",
       text: "text-rose-600",
-      gradient: "from-rose-500 to-rose-600"
     },
     {
-      label: "Total Non Payé (Crédit)",
+      label: locale === "ar" ? "المبيعات الآجلة (ديون معلقة)" : "Total Non Payé (Crédit)",
       value: data?.summary.totalUnpaid || 0,
       icon: Scale,
       color: "amber",
       bg: "bg-amber-50",
       text: "text-amber-600",
-      gradient: "from-amber-500 to-amber-600"
     },
     {
-      label: "Solde Net en Caisse",
+      label: locale === "ar" ? "صافي الرصيد في الخزينة" : "Solde Net en Caisse",
       value: data?.summary.netBalance || 0,
       icon: Wallet,
       color: "indigo",
       bg: "bg-indigo-50",
       text: "text-indigo-600",
-      gradient: "from-indigo-600 to-indigo-700"
     }
   ];
 
   return (
-    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center gap-5">
-          <div className="w-16 h-16 rounded-3xl bg-indigo-500/10 flex items-center justify-center text-indigo-600 shadow-inner text-indigo-600">
-            <Scale size={32} />
-          </div>
+    <div className="space-y-8 animate-in fade-in duration-300">
+      
+      {/* ── 4K EXECUTIVE HERO HEADER ── */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-950 text-white rounded-[32px] p-6 lg:p-8 shadow-2xl border border-white/10 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">
-               {isAdmin ? "Bilan de Caisse Global" : "Mon Bilan de Caisse"}
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-3 py-1 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-black tracking-wider flex items-center gap-1.5 shadow-md">
+                <Scale size={14} />
+                FINANCIAL RECONCILIATION HUB 4K
+              </span>
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 bg-emerald-950/60 px-3 py-1 rounded-xl border border-emerald-500/30">
+                <Sparkles size={12} className="text-amber-400" />
+                {isAdmin ? "TOUTES LES CAISSES" : `CAISSE : ${userSession?.username || 'ACTIF'}`}
+              </span>
+            </div>
+
+            <h1 className="text-2xl lg:text-3xl font-black text-white">
+              {isAdmin 
+                ? (locale === "ar" ? "الميزانية والتدقيق المالي الشامل للصناديق" : "Bilan de Caisse Global & Trésorerie")
+                : (locale === "ar" ? "ميزانية الصندوق والكاشير" : "Mon Bilan de Caisse")}
             </h1>
-            <p className="text-slate-500 font-medium italic font-outfit">
-               {isAdmin ? "Réconciliation financière de tous les points de vente." : "Suivi personnel de vos flux de trésorerie."}
+            <p className="text-xs lg:text-sm text-slate-300 font-medium mt-1">
+              {locale === "ar"
+                ? "مطابقة وتدقيق فوري لحجم المبيعات الفعلي مع المقبوضات النقدية والودائع ومصروفات الصندوق"
+                : "Réconciliation financière en temps réel des ventes, dépôts d'avances, crédits et dépenses"}
             </p>
           </div>
-        </div>
 
-        <button 
-          onClick={() => setIsPrintModalOpen(true)}
-          className="flex items-center gap-3 px-6 py-4 bg-emerald-600 text-white rounded-2xl font-black hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-500/20 active:scale-95"
-        >
-           <Printer size={20} />
-           Imprimer le rapport
-        </button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={fetchBalance}
+              className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+              title="Actualiser"
+            >
+              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+              <span>{locale === "ar" ? "تحديث" : "Actualiser"}</span>
+            </button>
+
+            <button 
+              onClick={() => setIsPrintModalOpen(true)}
+              className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-black text-xs shadow-xl shadow-emerald-600/25 transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Printer size={16} />
+              <span>{locale === "ar" ? "طباعة التقرير المالي" : "Imprimer le Rapport"}</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {isPrintModalOpen && (
@@ -158,282 +186,274 @@ export default function CashBalancePage() {
         />
       )}
 
-      {/* Filters */}
-      <div className="bg-white/60 backdrop-blur-2xl border border-white p-6 rounded-[32px] shadow-sm flex flex-wrap items-center gap-6">
-         <div className="flex items-center gap-3">
-            <div className="p-2 bg-slate-100 rounded-lg"><Calendar size={18} className="text-slate-500" /></div>
-            <div className="flex items-center gap-2">
-               <input 
-                 type="date" 
-                 className="bg-transparent border-none font-black text-slate-700 outline-none"
-                 value={filters.start}
-                 onChange={(e) => setFilters({...filters, start: e.target.value})}
-               />
-               <span className="text-slate-300">→</span>
-               <input 
-                 type="date" 
-                 className="bg-transparent border-none font-black text-slate-700 outline-none"
-                 value={filters.end}
-                 onChange={(e) => setFilters({...filters, end: e.target.value})}
-               />
-            </div>
-         </div>
-         
-         {isAdmin && (
-           <>
-             <div className="h-8 w-px bg-slate-100 mx-2 hidden md:block"></div>
-             <div className="flex items-center gap-3">
-                <User size={18} className="text-slate-400" />
-                <select 
-                   className="bg-transparent font-black text-slate-700 outline-none cursor-pointer"
-                   value={filters.cashier}
-                   onChange={(e) => setFilters({...filters, cashier: e.target.value})}
-                >
-                   <option value="Tous">Tous les caissiers</option>
-                   <option value="ADRR">ADRR</option>
-                   <option value="ADMIN">ADMIN</option>
-                   <option value="KADER">KADER</option>
-                </select>
-             </div>
-           </>
-         )}
-         
-         {!isAdmin && (
-           <>
-             <div className="h-8 w-px bg-slate-100 mx-2 hidden md:block"></div>
-             <div className="flex items-center gap-3">
-                <User size={18} className="text-slate-400" />
-                <span className="font-black text-slate-700 uppercase tracking-tight">{userSession?.username}</span>
-             </div>
-           </>
-         )}
+      {/* ── FILTERS TOOLBAR ── */}
+      <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2">
+          <Calendar size={15} className="text-slate-500" />
+          <input 
+            type="date" 
+            className="bg-transparent border-none text-xs font-black text-slate-800 outline-none"
+            value={filters.start}
+            onChange={(e) => setFilters({...filters, start: e.target.value})}
+          />
+          <span className="text-slate-400 text-xs">→</span>
+          <input 
+            type="date" 
+            className="bg-transparent border-none text-xs font-black text-slate-800 outline-none"
+            value={filters.end}
+            onChange={(e) => setFilters({...filters, end: e.target.value})}
+          />
+        </div>
 
-         <div className="h-8 w-px bg-slate-100 mx-2 hidden md:block"></div>
-         <div className="flex items-center gap-3">
-            <Filter size={18} className="text-slate-400" />
+        {isAdmin && (
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2">
+            <User size={15} className="text-slate-400" />
             <select 
-               className="bg-transparent font-black text-slate-700 outline-none cursor-pointer"
-               value={filters.type}
-               onChange={(e) => setFilters({...filters, type: e.target.value})}
+              className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
+              value={filters.cashier}
+              onChange={(e) => setFilters({...filters, cashier: e.target.value})}
             >
-               <option value="Tous">Tous les types</option>
-               <option value="Vente (Caisse)">Ventes</option>
-               <option value="Paiement Ciment">Ciment</option>
-               <option value="Dépense (Administrative)">Dépenses</option>
-               <option value="Avance Client">Avances</option>
-               <option value="Retrait">Retraits</option>
+              <option value="Tous">Tous les caissiers</option>
+              <option value="admin">admin</option>
+              <option value="ADRR">ADRR</option>
+              <option value="KADER">KADER</option>
             </select>
-         </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2">
+          <Filter size={15} className="text-slate-400" />
+          <select 
+            className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
+            value={filters.type}
+            onChange={(e) => setFilters({...filters, type: e.target.value})}
+          >
+            <option value="Tous">Tous les types de flux</option>
+            <option value="Vente">Ventes Facturées</option>
+            <option value="Dépôt">Dépôts / Avances</option>
+            <option value="Dépense">Dépenses Caisse</option>
+            <option value="Paiement Ciment">Ciment</option>
+          </select>
+        </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-         {summaryItems.map((item, i) => (
-            <div key={i} className="group relative overflow-hidden bg-white p-8 rounded-[40px] border border-slate-100 shadow-xl transition-all duration-300 hover:scale-[1.02]">
-               <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${item.gradient} opacity-[0.03] rounded-bl-[100px] group-hover:opacity-[0.07] transition-opacity`}></div>
-               <div className="relative z-10">
-                  <div className="flex items-center justify-between mb-6">
-                     <div className={`w-14 h-14 rounded-2xl ${item.bg} ${item.text} flex items-center justify-center`}>
-                        <item.icon size={28} />
-                     </div>
-                     <div className={`px-4 py-1.5 rounded-full ${item.bg} ${item.text} text-[10px] font-black uppercase tracking-wider`}>
-                        {new Date().toLocaleDateString('fr-FR', { month: 'short' })}
-                     </div>
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">{item.label}</h3>
-                  <p className={`text-4xl font-black tracking-tight ${item.text}`}>
-                     {loading ? "..." : new Intl.NumberFormat('fr-FR').format(item.value)}
-                  </p>
-               </div>
+      {/* ── 4 EXECUTIVE FINANCIAL KPIS ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {summaryItems.map((item, i) => (
+          <div key={i} className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-md transition-all">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">{item.label}</span>
+              <div className={`p-2 rounded-xl ${item.bg} ${item.text}`}>
+                <item.icon size={18} />
+              </div>
             </div>
-         ))}
+            <div className={`text-2xl font-black ${item.text}`}>
+              {loading ? "..." : formatCurrencyAmount(item.value)}
+            </div>
+            <div className="text-[11px] text-slate-400 font-bold mt-1.5">
+              {locale === "ar" ? "المبالغ المحققة خلال الفترة المحددة" : "Flux consolidés de la période"}
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Reconciliation Section */}
+      {/* ── ACCOUNTING MATCH & RECONCILIATION MATRIX ── */}
       {data?.summary?.reconciliation && (
-        <div className="bg-white/60 backdrop-blur-md rounded-[32px] border border-slate-100 p-8 shadow-xl space-y-6">
+        <div className="bg-white rounded-3xl p-6 lg:p-8 shadow-xs border border-slate-200/80 space-y-6">
           <div className="flex items-center gap-3">
-             <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600">
-                <Scale size={24} />
-             </div>
-             <div>
-                <h2 className="text-xl font-black text-slate-900">Match Comptable & Réconciliation Caisse</h2>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">Vérification de la concordance Ventes vs Encaissé</p>
-             </div>
+            <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600">
+              <Scale size={22} />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-900">
+                {locale === "ar" ? "جدول المطابقة المحاسبية وتدقيق الصندوق" : "Match Comptable & Réconciliation Caisse"}
+              </h2>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+                {locale === "ar" ? "مقارنة المبيعات الإجمالية مقابل السيولة المقبوضة فعلياً" : "Vérification de la concordance Ventes vs Encaissé"}
+              </p>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-             {/* Reconciliation details */}
-             <div className="space-y-4">
-                <div className="flex justify-between items-center py-2.5 border-b border-slate-100">
-                   <span className="text-slate-500 font-medium">Chiffre d'Affaires de la période (A)</span>
-                   <span className="font-extrabold text-slate-800">
-                      {new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalInvoiced)} F CFA
-                   </span>
-                </div>
-                <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-rose-600">
-                   <span className="font-medium">(-) Crédits accordés (Ventes non payées)</span>
-                   <span className="font-extrabold">
-                      -{new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalUnpaidPeriod)} F CFA
-                   </span>
-                </div>
-                <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-emerald-600">
-                   <span className="font-medium">(+) Règlements reçus sur anciennes factures</span>
-                   <span className="font-extrabold">
-                      +{new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalPaidOlderInvoicesPeriod)} F CFA
-                   </span>
-                </div>
-                {data.summary.reconciliation.totalAdvancesPeriod > 0 && (
-                   <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-emerald-600">
-                      <span className="font-medium">(+) Avances clients perçues</span>
-                      <span className="font-extrabold">
-                         +{new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalAdvancesPeriod)} F CFA
-                      </span>
-                   </div>
-                )}
-                {data.summary.reconciliation.totalCementPeriod > 0 && (
-                   <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-emerald-600">
-                      <span className="font-medium">(+) Règlements Ciment perçus</span>
-                      <span className="font-extrabold">
-                         +{new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalCementPeriod)} F CFA
-                      </span>
-                   </div>
-                )}
-                <div className="flex justify-between items-center pt-4 border-t-2 border-slate-200">
-                   <span className="text-slate-800 font-bold uppercase tracking-wider text-sm">Total Recettes en Caisse (B)</span>
-                   <span className="text-xl font-black text-indigo-600 bg-indigo-50 px-4 py-2 rounded-xl">
-                      {new Intl.NumberFormat('fr-FR').format(data.summary.totalIncome)} F CFA
-                   </span>
-                </div>
-             </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            {/* Detailed math breakdown */}
+            <div className="space-y-3.5 bg-slate-50/70 p-5 rounded-2xl border border-slate-100">
+              <div className="flex justify-between items-center py-2 border-b border-slate-200/80">
+                <span className="text-xs font-bold text-slate-700">
+                  {locale === "ar" ? "إجمالي مبيعات الفترة (الفواتير الصادرة)" : "Chiffre d'Affaires de la période (A)"}
+                </span>
+                <span className="font-black text-slate-900 text-sm">
+                  {formatCurrencyAmount(data.summary.reconciliation.totalInvoiced)}
+                </span>
+              </div>
 
-             {/* Explanatory text */}
-             <div className="bg-slate-50 p-6 rounded-[24px] border border-slate-100/50 space-y-4">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                   <div className="w-1.5 h-4 bg-indigo-600 rounded-full"></div>
-                   Pourquoi y a-t-il une différence ?
-                </h3>
-                <p className="text-xs text-slate-500 leading-relaxed font-outfit">
-                   La <strong>Gestion des Factures</strong> affiche le Chiffre d'Affaires brut basé sur la date de facturation (comptabilité d'engagement).
-                </p>
-                <p className="text-xs text-slate-500 leading-relaxed font-outfit">
-                   Le <strong>Bilan de Caisse</strong> affiche uniquement les flux de trésorerie réels encaissés (comptabilité de caisse). Les crédits accordés sont donc exclus, tandis que les paiements reçus aujourd'hui pour des factures passées ainsi que les avances clients sont inclus.
-                </p>
-                <div className="flex flex-col gap-1.5 bg-white p-4 rounded-xl border border-slate-100 text-[10px] text-indigo-600 font-medium leading-relaxed font-outfit">
-                   <div className="flex items-center gap-2">
-                      <Info size={14} className="shrink-0" />
-                      <span className="font-bold">Formule de réconciliation :</span>
-                   </div>
-                   <span>
-                      CA ({new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalInvoiced)} F)
-                      - Crédits ({new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalUnpaidPeriod)} F)
-                      + Règlements Passés ({new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalPaidOlderInvoicesPeriod)} F)
-                      + Avances ({new Intl.NumberFormat('fr-FR').format(data.summary.reconciliation.totalAdvancesPeriod)} F)
-                      = Recettes ({new Intl.NumberFormat('fr-FR').format(data.summary.totalIncome)} F)
-                   </span>
+              <div className="flex justify-between items-center py-2 border-b border-slate-200/80 text-rose-600">
+                <span className="text-xs font-bold">
+                  {locale === "ar" ? "(-) المبيعات الآجلة (ديون غير مسددة)" : "(-) Crédits accordés (Ventes non payées)"}
+                </span>
+                <span className="font-black text-sm">
+                  -{formatCurrencyAmount(data.summary.reconciliation.totalUnpaidPeriod)}
+                </span>
+              </div>
+
+              {data.summary.reconciliation.totalAdvancesPeriod > 0 && (
+                <div className="flex justify-between items-center py-2 border-b border-slate-200/80 text-emerald-600">
+                  <span className="text-xs font-bold">
+                    {locale === "ar" ? "(+) الودائع والأرصدة المسبقة المقبوضة" : "(+) Avances clients perçues"}
+                  </span>
+                  <span className="font-black text-sm">
+                    +{formatCurrencyAmount(data.summary.reconciliation.totalAdvancesPeriod)}
+                  </span>
                 </div>
-             </div>
+              )}
+
+              {data.summary.reconciliation.totalCementPeriod > 0 && (
+                <div className="flex justify-between items-center py-2 border-b border-slate-200/80 text-emerald-600">
+                  <span className="text-xs font-bold">
+                    {locale === "ar" ? "(+) مقبوضات الأسمنت" : "(+) Règlements Ciment perçus"}
+                  </span>
+                  <span className="font-black text-sm">
+                    +{formatCurrencyAmount(data.summary.reconciliation.totalCementPeriod)}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center pt-3 border-t-2 border-slate-200">
+                <span className="text-slate-900 font-black uppercase text-xs">
+                  {locale === "ar" ? "إجمالي السيولة النقدية المقبوضة (B)" : "Total Recettes en Caisse (B)"}
+                </span>
+                <span className="text-base font-black text-indigo-700 bg-indigo-50 px-3.5 py-1.5 rounded-xl border border-indigo-200/50">
+                  {formatCurrencyAmount(data.summary.totalIncome)}
+                </span>
+              </div>
+            </div>
+
+            {/* Explanation card */}
+            <div className="bg-slate-900 text-white p-6 rounded-2xl border border-slate-800 space-y-3">
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <Info size={16} className="text-indigo-400" />
+                {locale === "ar" ? "كيفية قراءة ومطابقة الأرقام المالية؟" : "Principe de la Réconciliation Comptable"}
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {locale === "ar"
+                  ? "المبيعات الفاتورية تمثل الاستحقاق الكلي، بينما ميزانية الصندوق ترصد السيولة الحقيقية المقبوضة في يد الكاشير (المبيعات النقدية + ودائع العملاء - المبيعات الآجلة)."
+                  : "Le chiffre d'affaires correspond aux factures émises, tandis que le bilan de caisse retrace les encaissements réels en espèces."}
+              </p>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Transactions Table */}
-      <div className="bg-white rounded-[40px] border border-slate-100 shadow-2xl overflow-hidden relative">
-         <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
-            <div>
-               <h2 className="text-xl font-black text-slate-900">Mouvements de Trésorerie</h2>
-               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">Détail des entrées et sorties</p>
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 rounded-xl text-indigo-600 font-black text-xs">
-               <Database size={14} />
-               {data?.entries.length || 0} Transactions
-            </div>
-         </div>
+      {/* ── TRANSACTIONS LEDGER TABLE ── */}
+      <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 overflow-hidden">
+        <div className="flex items-center justify-between pb-5 border-b border-slate-100 mb-4">
+          <div>
+            <h2 className="text-base font-black text-slate-900">
+              {locale === "ar" ? "حركات وسجل العمليات المالية" : "Mouvements de Trésorerie"}
+            </h2>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+              {locale === "ar" ? "تفاصيل المقبوضات والمصروفات" : "Détail chronologique des encaissements et décaissements"}
+            </p>
+          </div>
 
-         <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-               <thead>
-                  <tr className="bg-white border-b border-slate-50">
-                     <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Opération</th>
-                     <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Référence</th>
-                     <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Type</th>
-                     <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Caissier / Lieu</th>
-                     <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Entrée</th>
-                     <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Sortie</th>
-                  </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-50">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={6} className="py-32 text-center">
-                         <div className="relative w-20 h-20 mx-auto mb-6">
-                            <div className="absolute inset-0 border-4 border-indigo-100 rounded-full"></div>
-                            <div className="absolute inset-0 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div>
-                            <Scale size={32} className="absolute inset-0 m-auto text-indigo-600 animate-pulse" />
-                         </div>
-                         <p className="font-black text-slate-400 animate-pulse">Calcul de la position financière...</p>
+          <span className="px-3 py-1 rounded-full text-xs font-black bg-indigo-50 text-indigo-700">
+            {data?.entries.length || 0} {locale === "ar" ? "حركة مسجلة" : "transactions"}
+          </span>
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-slate-200/80">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
+                <th className="py-3.5 px-4">{locale === "ar" ? "التاريخ والوقت" : "Date & Heure"}</th>
+                <th className="py-3.5 px-4">{locale === "ar" ? "رقم المرجع / الفاتورة" : "Référence Doc"}</th>
+                <th className="py-3.5 px-4 text-center">{locale === "ar" ? "نوع الحركة" : "Type de Flux"}</th>
+                <th className="py-3.5 px-4">{locale === "ar" ? "طريقة الدفع" : "Moyen Paiement"}</th>
+                <th className="py-3.5 px-4">{locale === "ar" ? "المسؤول / الكاشير" : "Caissier / Opérateur"}</th>
+                <th className="py-3.5 px-4 text-right">{locale === "ar" ? "مقبوضات (+)" : "Entrée (+)"}</th>
+                <th className="py-3.5 px-4 text-right">{locale === "ar" ? "مصروفات (-)" : "Sortie (-)"}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-16 text-center text-slate-400">
+                    <Loader2 size={32} className="animate-spin mx-auto text-indigo-600 mb-2" />
+                    <span>{locale === "ar" ? "جاري تحميل التدقيق المالي..." : "Calcul de la position financière..."}</span>
+                  </td>
+                </tr>
+              ) : (data?.entries || []).length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-16 text-center text-slate-400">
+                    <Receipt size={36} className="mx-auto text-slate-300 mb-2" />
+                    <span>{locale === "ar" ? "لا توجد حركات مالية مسجلة لهذه الفترة." : "Aucun mouvement financier trouvé."}</span>
+                  </td>
+                </tr>
+              ) : (
+                (data?.entries || []).map((entry: any, i: number) => {
+                  const isPositive = entry.entree > 0;
+                  const isExpense = entry.sortie > 0;
+
+                  return (
+                    <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 text-xs font-mono font-bold text-slate-500">
+                        {new Date(entry.date).toLocaleDateString('fr-FR')}
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        <div className="font-mono font-black text-indigo-600 text-xs">{entry.ref}</div>
+                        {entry.client && (
+                          <div className="text-[10px] text-slate-400 font-bold">{entry.client}</div>
+                        )}
+                      </td>
+
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-xs font-black inline-block ${
+                            entry.type.includes("Vente") || entry.type.includes("Paiement")
+                              ? "bg-emerald-100 text-emerald-700"
+                              : entry.type.includes("Dépôt") || entry.type.includes("Avance")
+                              ? "bg-indigo-100 text-indigo-700"
+                              : "bg-rose-100 text-rose-700"
+                          }`}
+                        >
+                          {entry.type}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-xs font-bold text-slate-700">
+                        {entry.moyen}
+                      </td>
+
+                      <td className="py-3.5 px-4 text-xs font-bold text-slate-800">
+                        <span className="font-black text-slate-900">{entry.user}</span>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-right">
+                        {isPositive ? (
+                          <span className="font-black text-emerald-600 text-sm">
+                            +{formatCurrencyAmount(entry.entree)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+
+                      <td className="py-3.5 px-4 text-right">
+                        {isExpense ? (
+                          <span className="font-black text-rose-600 text-sm">
+                            -{formatCurrencyAmount(entry.sortie)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
                       </td>
                     </tr>
-                  ) : (data?.entries || []).filter(e => filters.type === "Tous" || e.type === filters.type).length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-32 text-center opacity-30 grayscale">
-                         <Scale size={64} className="mx-auto mb-4" />
-                         <p className="font-black text-lg">Aucun mouvement financier trouvé.</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    (data?.entries || [])
-                    .filter(e => filters.type === "Tous" || e.type === filters.type)
-                    .map((entry, i) => (
-                      <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
-                        <td className="px-8 py-6">
-                           <div className="flex items-center gap-4">
-                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${entry.entree > 0 ? "bg-emerald-50 text-emerald-500" : "bg-rose-50 text-rose-500"}`}>
-                                 {entry.entree > 0 ? <ArrowUpRight size={18}/> : <ArrowDownRight size={18}/>}
-                              </div>
-                              <div>
-                                 <p className="font-black text-slate-800 text-sm tracking-tight italic">Transaction</p>
-                                 <p className="text-[10px] font-bold text-slate-400 uppercase">{new Date(entry.date).toLocaleDateString('fr-FR')} • {entry.moyen}</p>
-                              </div>
-                           </div>
-                        </td>
-                        <td className="px-8 py-6">
-                           <div className="flex items-center gap-2">
-                              <FileText size={14} className="text-slate-300" />
-                              <span className="font-black text-slate-600 text-[13px] tracking-tight">{entry.ref}</span>
-                           </div>
-                        </td>
-                        <td className="px-8 py-6 text-center">
-                           <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${
-                              entry.type.includes("Vente") || entry.type.includes("Paiement") ? "bg-emerald-100 text-emerald-700" :
-                              entry.type.includes("Dépense") || entry.type.includes("Retrait") ? "bg-rose-100 text-rose-700" :
-                              "bg-indigo-100 text-indigo-700"
-                           }`}>
-                              {entry.type}
-                           </span>
-                        </td>
-                        <td className="px-8 py-6">
-                           <div className="flex items-center gap-2 mb-1">
-                              <User size={14} className="text-slate-400" />
-                              <span className="font-extrabold text-slate-700 text-xs uppercase">{entry.user}</span>
-                           </div>
-                           <div className="flex items-center gap-2">
-                              <MapPin size={12} className="text-slate-300" />
-                              <span className="text-[10px] font-black text-slate-400 uppercase">{entry.emplacement || "Général"}</span>
-                           </div>
-                        </td>
-                        <td className="px-8 py-6 text-right font-black text-emerald-600 text-lg">
-                           {entry.entree > 0 ? `+${new Intl.NumberFormat('fr-FR').format(entry.entree)}` : "—"}
-                        </td>
-                        <td className="px-8 py-6 text-right font-black text-rose-600 text-lg">
-                           {entry.sortie > 0 ? `-${new Intl.NumberFormat('fr-FR').format(entry.sortie)}` : "—"}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-               </tbody>
-            </table>
-         </div>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

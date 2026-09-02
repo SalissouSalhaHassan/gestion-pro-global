@@ -1,19 +1,53 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileText, Search, Plus, ArrowUpDown, Banknote, Calendar, BadgeCheck, Loader2, Eye, Printer as PrintIcon, Edit3, Trash2, CreditCard, BarChart3, MapPin, Info } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { 
+  FileText, 
+  Search, 
+  Plus, 
+  ArrowUpDown, 
+  Banknote, 
+  Calendar, 
+  BadgeCheck, 
+  Loader2, 
+  Eye, 
+  Printer as PrintIcon, 
+  Edit3, 
+  Trash2, 
+  CreditCard, 
+  BarChart3, 
+  MapPin, 
+  Info,
+  Sparkles,
+  RefreshCw,
+  LayoutGrid,
+  List,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Share2,
+  User,
+  Filter,
+  ArrowUpRight,
+  TrendingUp,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import InvoiceModal from "./InvoiceModal";
 import EditInvoiceModal from "./EditInvoiceModal";
 import PaymentModal from "./PaymentModal";
-import { format } from "date-fns";
+import WhatsAppShareModal from "@/components/WhatsAppShareModal";
+import { useLanguage } from "@/lib/i18n/context";
+import { formatCurrencyAmount } from "@/lib/utils/currency";
 
 type Invoice = {
   id: string | number;
   bl_number: string;
   date_facture: string;
   client_nom: string;
+  client_tel?: string;
   total_ttc: number;
   montant_paye: number;
   moyen_reglement: string | null;
@@ -21,18 +55,12 @@ type Invoice = {
   client_id?: number | string | null;
   vendeur?: string;
   emplacement?: string;
+  statut?: string;
 };
-
-const supabase = createClient();
-
-function formatDate(iso: string) {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
 
 export default function InvoicesPage() {
   const router = useRouter();
+  const { t, locale } = useLanguage();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -41,10 +69,13 @@ export default function InvoicesPage() {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | number | null>(null);
   const [editInvoiceId, setEditInvoiceId] = useState<string | number | null>(null);
   const [paymentInvoice, setPaymentInvoice] = useState<any | null>(null);
+  const [selectedWhatsAppInvoice, setSelectedWhatsAppInvoice] = useState<any | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+  const [showReports, setShowReports] = useState(false);
 
   // Advanced Filters
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -52,7 +83,7 @@ export default function InvoicesPage() {
   const [filterDepot, setFilterDepot] = useState<string | null>(null);
   const [filterDateStart, setFilterDateStart] = useState<string>("");
   const [filterDateEnd, setFilterDateEnd] = useState<string>("");
-  const [filterStatus, setFilterStatus] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string>("all");
   const [vendorsList, setVendorsList] = useState<string[]>([]);
   const [depotsList, setDepotsList] = useState<string[]>([]);
 
@@ -67,7 +98,6 @@ export default function InvoicesPage() {
         setCurrentUsername(data.username || null);
         setCurrentUserId(Number(data.id) || null);
         
-        // Match isAdminOrManager logic from auth_helper.ts
         const isPrivileged = data.admin === 'Oui' || data.admin === 'oui' || data.admin === true || 
                             data.role === 1 || data.role === '1' || data.role === 'admin';
         setIsAdmin(isPrivileged);
@@ -79,11 +109,11 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     if (currentUsername !== null && typeof currentUsername !== 'undefined') {
-      loadInvoices(false); // First load is not silent
+      loadInvoices(false);
 
-      // Implement silent auto-refresh every 30 seconds
+      // Auto-refresh interval
       const intervalId = setInterval(() => {
-        loadInvoices(true); // Silent refresh
+        loadInvoices(true);
       }, 30000); 
 
       return () => clearInterval(intervalId);
@@ -102,20 +132,21 @@ export default function InvoicesPage() {
       if (data) {
         const mapped: Invoice[] = data.map((r: any) => ({
           id: r.id,
-          bl_number: r.bl_number || `F-${r.id}`,
+          bl_number: r.bl_number || `FA-${r.id}`,
           date_facture: r.date_facture,
           client_nom: r.clients?.nom || "Client Divers",
+          client_tel: r.clients?.tel || "",
           total_ttc: Number(r.total_ttc) || 0,
           montant_paye: Number(r.montant_paye) || 0,
-          moyen_reglement: r.mode_paiement || null,
+          moyen_reglement: r.moyen_reglement || r.mode_paiement || "Espèces",
           montant_restant: Math.max(0, (Number(r.total_ttc) || 0) - (Number(r.montant_paye) || 0)),
           client_id: r.client_id,
-          vendeur: r.vendeur || "N/A",
-          emplacement: r.emplacement || "N/A"
+          vendeur: r.vendeur || "Admin",
+          emplacement: r.emplacement || "BOUTIQUE",
+          statut: r.statut || (Number(r.montant_paye) >= Number(r.total_ttc) ? "Payée" : Number(r.montant_paye) > 0 ? "Partielle" : "Non Payée")
         }));
         setInvoices(mapped);
         
-        // Extract unique vendors and depots for filters
         const vendors = [...new Set(mapped.map(inv => inv.vendeur).filter(Boolean))] as string[];
         const depots = [...new Set(mapped.map(inv => inv.emplacement).filter(Boolean))] as string[];
         setVendorsList(vendors);
@@ -129,11 +160,10 @@ export default function InvoicesPage() {
   };
 
   const handleDeleteInvoice = async (invoiceId: string | number) => {
-    if (!confirm("🚨 ATTENTION: Supprimer cette facture ajustera AUTOMATIQUEMENT le stock. Voulez-vous continuer ?")) return;
+    if (!confirm(locale === "ar" ? "هل أنت متأكد من حذف هذه الفاتورة؟ سيتم إعادة الكميات إلى المخزون تلقائياً." : "🚨 Supprimer cette facture réajustera le stock. Continuer ?")) return;
     
     try {
       setLoading(true);
-      
       const response = await fetch(`/api/invoices/${invoiceId}`, {
         method: 'DELETE'
       });
@@ -144,29 +174,28 @@ export default function InvoicesPage() {
       }
       
       setRefreshKey(prev => prev + 1);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error deleting invoice:", err);
-      alert(err instanceof Error ? err.message : "Erreur lors de la suppression.");
+      alert(err.message || "Erreur lors de la suppression.");
     } finally {
       setLoading(false);
     }
   };
 
-  const { filteredInvoices, totalRevenue, pendingRevenue } = useMemo(() => {
+  const { filteredInvoices, totalRevenue, totalPaidRevenue, pendingRevenue } = useMemo(() => {
     let filtered = invoices;
     
-    // Text Search Filter
     if (query) {
       const q = query.toLowerCase();
       filtered = invoices.filter(
         (i) =>
           i.bl_number.toLowerCase().includes(q) ||
           i.client_nom.toLowerCase().includes(q) ||
+          (i.vendeur && i.vendeur.toLowerCase().includes(q)) ||
           (i.moyen_reglement && i.moyen_reglement.toLowerCase().includes(q))
       );
     }
     
-    // Advanced Filters
     if (filterVendor) {
       filtered = filtered.filter(i => i.vendeur === filterVendor);
     }
@@ -183,8 +212,7 @@ export default function InvoicesPage() {
       filtered = filtered.filter(i => new Date(i.date_facture) <= endDate);
     }
 
-    // Status Filter
-    if (filterStatus) {
+    if (filterStatus && filterStatus !== "all") {
       filtered = filtered.filter(i => {
         const restant = Number(i.montant_restant) || 0;
         const total = Number(i.total_ttc) || 0;
@@ -199,7 +227,6 @@ export default function InvoicesPage() {
       let aVal = a[sortField];
       let bVal = b[sortField];
       
-      // Handle Date sorting safely
       if (sortField === "date_facture") {
         const da = new Date(aVal as string).getTime();
         const db = new Date(bVal as string).getTime();
@@ -216,9 +243,15 @@ export default function InvoicesPage() {
     });
 
     const total = filtered.reduce((acc, curr) => acc + (Number(curr.total_ttc) || 0), 0);
+    const paid = filtered.reduce((acc, curr) => acc + (Number(curr.montant_paye) || 0), 0);
     const pending = filtered.reduce((acc, curr) => acc + (Number(curr.montant_restant) || 0), 0);
 
-    return { filteredInvoices: filtered, totalRevenue: total, pendingRevenue: pending };
+    return { 
+      filteredInvoices: filtered, 
+      totalRevenue: total, 
+      totalPaidRevenue: paid, 
+      pendingRevenue: pending 
+    };
   }, [invoices, query, sortField, sortAsc, filterVendor, filterDepot, filterDateStart, filterDateEnd, filterStatus]);
 
   const toggleSort = (field: keyof Invoice) => {
@@ -226,503 +259,690 @@ export default function InvoicesPage() {
       setSortAsc(!sortAsc);
     } else {
       setSortField(field);
-      setSortAsc(false); // when changing field, default to desc
+      setSortAsc(false);
     }
   };
 
+  const recoveryRate = totalRevenue > 0 ? ((totalPaidRevenue / totalRevenue) * 100).toFixed(1) : "100";
+
   return (
-    <div className="space-y-10 max-w-[1600px] mx-auto pb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900 flex items-center gap-4">
-            <div className="p-3 bg-white/50 backdrop-blur-md rounded-2xl border border-white/50 shadow-sm">
-              <FileText className="text-indigo-600" size={32} />
-            </div>
-            Gestion des Factures
-          </h1>
-          <p className="mt-2 text-slate-500 font-medium ml-1">
-            Historique complet des ventes, tickets de caisse et factures.
-          </p>
-        </div>
-        <button
-          onClick={() => router.push("/dashboard/pos")}
-          className="flex items-center gap-3 text-white px-8 py-4 rounded-[22px] font-black shadow-xl shadow-indigo-500/30 transition-all hover:scale-105 active:scale-95 group bg-indigo-600 whitespace-nowrap"
-        >
-          <Plus size={22} className="transition-transform group-hover:rotate-90" />
-          Nouvelle Facture
-        </button>
-      </div>
+    <div className="space-y-8 animate-in fade-in duration-300">
+      
+      {/* ── 4K EXECUTIVE HERO HEADER ── */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-950 text-white rounded-[32px] p-6 lg:p-8 shadow-2xl border border-white/10 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
 
-      {/* KPIs Cards */}
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
-        {[
-          { label: "Total Factures", value: invoices.length, bg: "linear-gradient(135deg, #4f46e5, #7c3aed)", icon: FileText, shadowColor: "rgba(79,70,229,0.3)" },
-          { label: "Chiffre d'Affaires Total", value: `${new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(totalRevenue)} F CFA`, bg: "linear-gradient(135deg, #f59e0b, #ef4444)", icon: Banknote, shadowColor: "rgba(245,158,11,0.3)" },
-          { label: "Montants en Attente", value: `${new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(pendingRevenue)} F CFA`, bg: "linear-gradient(135deg, #10b981, #34d399)", icon: Calendar, shadowColor: "rgba(16,185,129,0.3)" }
-        ].map((card, i) => (
-          <div
-            key={i}
-            className="relative overflow-hidden p-8 rounded-[32px] text-white transition-all hover:scale-[1.03] cursor-pointer group"
-            style={{ background: card.bg, boxShadow: `0 20px 40px ${card.shadowColor}` }}
-          >
-             <div className="absolute -right-4 -bottom-4 w-32 h-32 rounded-full blur-3xl group-hover:bg-white/20 transition-all bg-white/10"></div>
-             <div className="flex items-center justify-between mb-4">
-               <div className="flex items-center gap-3">
-                <div className="p-3 rounded-2xl bg-white/20 backdrop-blur-md">
-                   <card.icon size={22} />
-                </div>
-                <span className="text-sm font-black uppercase tracking-widest opacity-90">{card.label}</span>
-              </div>
-             </div>
-             <div className="text-2xl font-black mt-2 tracking-tight line-clamp-1">{card.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Info note */}
-      <div className="flex items-start gap-3 bg-slate-50 border border-slate-100 p-5 rounded-2xl text-xs text-slate-500 font-medium leading-relaxed font-outfit shadow-sm">
-        <Info size={18} className="text-indigo-500 shrink-0 mt-0.5" />
-        <span>
-          <strong>Note explicative :</strong> Le Chiffre d'Affaires correspond au montant total des factures générées (comptabilité d'engagement). Pour consulter les flux de trésorerie réels encaissés en caisse, rendez-vous dans le <a href="/dashboard/reports/cash-balance" className="text-indigo-600 font-extrabold underline hover:text-indigo-700">Bilan de Caisse Global</a>.
-        </span>
-      </div>
-
-      {/* Vendor Reports Section */}
-      {isAdmin && (
-        <div className="mt-12 p-8 rounded-[32px] border border-purple-200/40 bg-gradient-to-br from-purple-50/40 via-pink-50/20 to-transparent backdrop-blur-2xl">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 rounded-2xl bg-purple-600 text-white">
-              <BarChart3 size={24} />
-            </div>
-            <h2 className="text-2xl font-black text-slate-800">📊 Rapport par Vendeur</h2>
-          </div>
-
-          <div className="overflow-x-auto overflow-y-auto max-h-[400px] custom-scrollbar">
-            <table className="w-full text-sm relative">
-              <thead className="bg-purple-50/90 backdrop-blur-md border-b-2 border-purple-200 sticky top-0 z-10 shadow-sm">
-                <tr>
-                  <th className="px-6 py-3 text-left font-black text-slate-700">Vendeur</th>
-                  <th className="px-6 py-3 text-center font-black text-slate-700">Factures</th>
-                  <th className="px-6 py-3 text-right font-black text-slate-700">CA Total</th>
-                  <th className="px-6 py-3 text-right font-black text-slate-700">Collecté</th>
-                  <th className="px-6 py-3 text-right font-black text-slate-700">En Attente</th>
-                  <th className="px-6 py-3 text-center font-black text-slate-700">Taux %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vendorsList.map(vendor => {
-                  const vendorInvoices = invoices.filter(inv => inv.vendeur === vendor);
-                  const vendorTotal = vendorInvoices.reduce((sum, inv) => sum + inv.total_ttc, 0);
-                  const vendorPaid = vendorInvoices.reduce((sum, inv) => sum + inv.montant_paye, 0);
-                  const vendorPending = vendorInvoices.reduce((sum, inv) => sum + inv.montant_restant, 0);
-                  const collectionRate = vendorTotal > 0 ? ((vendorPaid / vendorTotal) * 100).toFixed(1) : 0;
-
-                  return (
-                    <tr key={vendor} className="border-b border-slate-100 hover:bg-purple-50/50 transition-colors">
-                      <td className="px-6 py-4 font-bold text-slate-800">{vendor}</td>
-                      <td className="px-6 py-4 text-center font-bold text-indigo-600 bg-indigo-50/50">{vendorInvoices.length}</td>
-                      <td className="px-6 py-4 text-right font-bold text-slate-700">
-                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0 }).format(vendorTotal)} F CFA
-                      </td>
-                      <td className="px-6 py-4 text-right font-bold text-green-600 bg-green-50/50">
-                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0 }).format(vendorPaid)} F CFA
-                      </td>
-                      <td className="px-6 py-4 text-right font-bold text-orange-600 bg-orange-50/50">
-                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0 }).format(vendorPending)} F CFA
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`px-3 py-1 rounded-full text-xs font-black text-white ${
-                          Number(collectionRate) >= 80 ? 'bg-green-500' : 
-                          Number(collectionRate) >= 50 ? 'bg-yellow-500' : 
-                          'bg-red-500'
-                        }`}>
-                          {collectionRate}%
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Depot Reports Section */}
-      {isAdmin && (
-        <div className="mt-8 p-8 rounded-[32px] border border-blue-200/40 bg-gradient-to-br from-blue-50/40 via-cyan-50/20 to-transparent backdrop-blur-2xl">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 rounded-2xl bg-blue-600 text-white">
-              <BarChart3 size={24} />
-            </div>
-            <h2 className="text-2xl font-black text-slate-800">📦 Rapport par Dépôt</h2>
-          </div>
-
-          <div className="overflow-x-auto overflow-y-auto max-h-[400px] custom-scrollbar">
-            <table className="w-full text-sm relative">
-              <thead className="bg-blue-50/90 backdrop-blur-md border-b-2 border-blue-200 sticky top-0 z-10 shadow-sm">
-                <tr>
-                  <th className="px-6 py-3 text-left font-black text-slate-700">Dépôt</th>
-                  <th className="px-6 py-3 text-center font-black text-slate-700">Factures</th>
-                  <th className="px-6 py-3 text-right font-black text-slate-700">CA Total</th>
-                  <th className="px-6 py-3 text-right font-black text-slate-700">Collecté</th>
-                  <th className="px-6 py-3 text-right font-black text-slate-700">En Attente</th>
-                  <th className="px-6 py-3 text-center font-black text-slate-700">Taux %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {depotsList.map(depot => {
-                  const depotInvoices = invoices.filter(inv => inv.emplacement === depot);
-                  const depotTotal = depotInvoices.reduce((sum, inv) => sum + inv.total_ttc, 0);
-                  const depotPaid = depotInvoices.reduce((sum, inv) => sum + inv.montant_paye, 0);
-                  const depotPending = depotInvoices.reduce((sum, inv) => sum + inv.montant_restant, 0);
-                  const depotCollectionRate = depotTotal > 0 ? ((depotPaid / depotTotal) * 100).toFixed(1) : 0;
-
-                  return (
-                    <tr key={depot} className="border-b border-slate-100 hover:bg-blue-50/50 transition-colors">
-                      <td className="px-6 py-4 font-bold text-slate-800">{depot}</td>
-                      <td className="px-6 py-4 text-center font-bold text-cyan-600 bg-cyan-50/50">{depotInvoices.length}</td>
-                      <td className="px-6 py-4 text-right font-bold text-slate-700">
-                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0 }).format(depotTotal)} F CFA
-                      </td>
-                      <td className="px-6 py-4 text-right font-bold text-green-600 bg-green-50/50">
-                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0 }).format(depotPaid)} F CFA
-                      </td>
-                      <td className="px-6 py-4 text-right font-bold text-orange-600 bg-orange-50/50">
-                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 0 }).format(depotPending)} F CFA
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`px-3 py-1 rounded-full text-xs font-black text-white ${
-                          Number(depotCollectionRate) >= 80 ? 'bg-green-500' : 
-                          Number(depotCollectionRate) >= 50 ? 'bg-yellow-500' : 
-                          'bg-red-500'
-                        }`}>
-                          {depotCollectionRate}%
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Toolbar (Search & Counters) */}
-      <div className="p-2 rounded-[28px] shadow-xl shadow-slate-200/50 flex flex-col sm:flex-row justify-between items-center gap-4 border border-white/60 bg-white/40 backdrop-blur-xl">
-        <div className="relative w-full">
-          <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-slate-400" />
-          </div>
-          <input
-            type="text"
-            placeholder="Rechercher ID, client, statut, etc..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="block w-full focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all font-bold text-slate-800 placeholder:text-slate-400 border border-slate-200/60 bg-slate-50/50 py-4 pl-14 pr-4 rounded-[22px]"
-          />
-        </div>
-        
-        <div className="hidden sm:flex items-center gap-2 px-6 flex-shrink-0 text-sm font-black text-indigo-600 bg-indigo-500/5 rounded-2xl py-4 border border-indigo-500/10 whitespace-nowrap">
-          <span>{filteredInvoices.length} facture(s) affichée(s)</span>
-          {!isAdmin && currentUsername && (
-            <span className="ml-2 text-xs font-medium text-slate-500">
-              • Vendeur: <span className="font-bold text-indigo-700">{currentUsername}</span>
-            </span>
-          )}
-          <button
-            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-            className="ml-4 px-4 py-1 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors border border-indigo-200"
-          >
-            {showAdvancedFilters ? "Masquer" : "Filtres avancés"}
-          </button>
-        </div>
-      </div>
-
-      {/* Advanced Filters */}
-      {showAdvancedFilters && (
-        <div className="p-4 rounded-[28px] shadow-xl shadow-slate-200/50 border border-indigo-200 bg-indigo-50/40 backdrop-blur-xl grid grid-cols-1 sm:grid-cols-4 gap-4">
-          {/* Vendor Filter */}
-          {isAdmin && (
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-2">Vendeur</label>
-              <select
-                value={filterVendor || ""}
-                onChange={(e) => setFilterVendor(e.target.value || null)}
-                className="w-full px-3 py-2 border border-indigo-200 rounded-xl bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
-              >
-                <option value="">Tous les vendeurs</option>
-                {vendorsList.map(vendor => (
-                  <option key={vendor} value={vendor}>{vendor}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          
-          {/* Depot Filter */}
-          {isAdmin && (
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-2">Dépôt</label>
-              <select
-                value={filterDepot || ""}
-                onChange={(e) => setFilterDepot(e.target.value || null)}
-                className="w-full px-3 py-2 border border-indigo-200 rounded-xl bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
-              >
-                <option value="">Tous les dépôts</option>
-                {depotsList.map(depot => (
-                  <option key={depot} value={depot}>{depot}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          
-          {/* Date Start Filter */}
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <label className="block text-xs font-bold text-slate-600 mb-2">Du</label>
-            <input
-              type="date"
-              value={filterDateStart}
-              onChange={(e) => setFilterDateStart(e.target.value)}
-              className="w-full px-3 py-2 border border-indigo-200 rounded-xl bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            />
-          </div>
-          
-          {/* Date End Filter */}
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-2">Au</label>
-            <input
-              type="date"
-              value={filterDateEnd}
-              onChange={(e) => setFilterDateEnd(e.target.value)}
-              className="w-full px-3 py-2 border border-indigo-200 rounded-xl bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            />
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-3 py-1 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-black tracking-wider flex items-center gap-1.5 shadow-md">
+                <FileText size={14} />
+                GLOBAL BILLING ENGINE 4K
+              </span>
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 bg-emerald-950/60 px-3 py-1 rounded-xl border border-emerald-500/30">
+                <Sparkles size={12} className="text-amber-400" />
+                {invoices.length} {locale === "ar" ? "فاتورة صادرة" : "Factures au total"}
+              </span>
+            </div>
+
+            <h1 className="text-2xl lg:text-3xl font-black text-white">
+              {locale === "ar" ? "إدارة فواتير المبيعات ونقاط البيع" : "Gestion des Factures & Ventes"}
+            </h1>
+            <p className="text-xs lg:text-sm text-slate-300 font-medium mt-1">
+              {locale === "ar"
+                ? "سجل وتتبع فواتير المبيعات، ومتابعة التحصيل الفوري، ومشاركة إيصالات الدفع عبر واتساب"
+                : "Suivi centralisé des factures, règlements clients, recouvrement et partage instantané WhatsApp"}
+            </p>
           </div>
 
-          {/* Status Filter */}
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-2">Statut</label>
-            <select
-              value={filterStatus || ""}
-              onChange={(e) => setFilterStatus(e.target.value || null)}
-              className="w-full px-3 py-2 border border-indigo-200 rounded-xl bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          <div className="flex flex-wrap items-center gap-3">
+            <button 
+              onClick={() => loadInvoices(false)}
+              className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+              title="Actualiser"
             >
-              <option value="">Tous les statuts</option>
-              <option value="soldee">✅ Soldée</option>
-              <option value="partielle">🟡 Paiement Partiel</option>
-              <option value="impayee">🔴 Impayée</option>
-            </select>
-          </div>
-          
-          {/* Clear Filters Button */}
-          <div className="flex items-end">
-            <button
-              onClick={() => {
-                setFilterVendor(null);
-                setFilterDepot(null);
-                setFilterDateStart("");
-                setFilterDateEnd("");
-                setFilterStatus(null);
-              }}
-              className="w-full px-4 py-2 bg-red-500 text-white text-xs font-bold rounded-xl hover:bg-red-600 transition-colors"
+              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+              <span>{locale === "ar" ? "تحديث" : "Actualiser"}</span>
+            </button>
+
+            {isAdmin && (
+              <button
+                onClick={() => setShowReports(!showReports)}
+                className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border border-white/10"
+              >
+                <BarChart3 size={15} className="text-indigo-400" />
+                <span>{showReports ? (locale === "ar" ? "إخفاء التقارير" : "Masquer Rapports") : (locale === "ar" ? "تقارير البائعين" : "Rapports d'Activité")}</span>
+                {showReports ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+            )}
+
+            <button 
+              onClick={() => router.push("/dashboard/pos")}
+              className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-2xl font-black text-xs shadow-xl shadow-indigo-600/25 transition-all flex items-center gap-2 cursor-pointer"
             >
-              Réinitialiser
+              <Plus size={16} />
+              <span>{locale === "ar" ? "+ فاتورة مبيعات جديدة" : "+ Nouvelle Facture POS"}</span>
             </button>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Main Table Card */}
-      <div className="rounded-[48px] border border-white/80 bg-white/60 backdrop-blur-3xl shadow-2xl shadow-indigo-100/40 flex flex-col overflow-hidden transition-all duration-300">
-        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] custom-scrollbar">
-          <table className="w-full text-left text-sm text-slate-600 relative">
-            <thead className="bg-slate-50/90 backdrop-blur-md text-slate-500 font-bold border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-              <tr>
-                <th 
-                  className="cursor-pointer px-6 py-5 hover:bg-slate-200/50 transition-colors whitespace-nowrap"
-                  onClick={() => toggleSort("bl_number")}
-                >
-                  <div className="flex items-center gap-2">
-                    N° Facture <ArrowUpDown size={14} className="text-slate-400" />
-                  </div>
-                </th>
-                <th 
-                  className="cursor-pointer px-6 py-5 hover:bg-slate-200/50 transition-colors whitespace-nowrap"
-                  onClick={() => toggleSort("date_facture")}
-                >
-                  <div className="flex items-center gap-2">
-                    Date <ArrowUpDown size={14} className="text-slate-400" />
-                  </div>
-                </th>
-                <th 
-                  className="cursor-pointer px-6 py-5 hover:bg-slate-200/50 transition-colors whitespace-nowrap"
-                  onClick={() => toggleSort("emplacement")}
-                >
-                  <div className="flex items-center gap-2">
-                    Emplacement <ArrowUpDown size={14} className="text-slate-400" />
-                  </div>
-                </th>
-                <th 
-                  className="cursor-pointer px-6 py-5 hover:bg-slate-200/50 transition-colors whitespace-nowrap"
-                  onClick={() => toggleSort("client_nom")}
-                >
-                  <div className="flex items-center gap-2">
-                    Client <ArrowUpDown size={14} className="text-slate-400" />
-                  </div>
-                </th>
-                <th className="px-6 py-5 text-center whitespace-nowrap">Paiement</th>
-                <th 
-                  className="cursor-pointer px-6 py-5 text-right hover:bg-slate-200/50 transition-colors whitespace-nowrap"
-                  onClick={() => toggleSort("total_ttc")}
-                >
-                  <div className="flex items-center justify-end gap-2">
-                    Total TTC <ArrowUpDown size={14} className="text-slate-400" />
-                  </div>
-                </th>
-                <th className="px-6 py-5 text-center whitespace-nowrap">Statut</th>
-                <th className="px-6 py-5 text-right whitespace-nowrap">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white">
-              {loading ? (
-                // Loading Skeleton
-                [...Array(5)].map((_, i) => (
-                  <tr key={i} className="border-b border-slate-100 animate-pulse">
-                    <td className="px-6 py-6"><div className="h-4 w-20 bg-slate-200 rounded"></div></td>
-                    <td className="px-6 py-6"><div className="h-4 w-24 bg-slate-200 rounded"></div></td>
-                    <td className="px-6 py-6"><div className="h-4 w-24 bg-slate-200 rounded"></div></td>
-                    <td className="px-6 py-6"><div className="h-4 w-32 bg-slate-200 rounded"></div></td>
-                    <td className="px-6 py-6"><div className="h-6 w-20 bg-slate-200 rounded-full mx-auto"></div></td>
-                    <td className="px-6 py-6"><div className="h-4 w-24 bg-slate-200 rounded ml-auto"></div></td>
-                    <td className="px-6 py-6"><div className="h-6 w-20 bg-slate-200 rounded-full mx-auto"></div></td>
-                    <td className="px-6 py-6"><div className="h-8 w-12 bg-slate-200 rounded-full ml-auto"></div></td>
-                  </tr>
-                ))
-              ) : filteredInvoices.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-24 text-center">
-                    <div className="flex flex-col items-center justify-center text-slate-400 max-w-sm mx-auto">
-                      <div className="h-16 w-16 bg-slate-50 flex items-center justify-center rounded-2xl border border-slate-100 mb-4">
-                        <FileText className="h-8 w-8 text-slate-400" />
-                      </div>
-                      <p className="text-lg font-bold text-slate-700">Aucune facture trouvée</p>
-                      <p className="mt-1 text-sm font-medium text-slate-500 mb-6">
-                        Commencez par créer votre première facture ou modifiez vos critères de recherche.
-                      </p>
-                      <button
-                        onClick={() => router.push("/dashboard/pos")}
-                        className="inline-flex items-center gap-2 font-bold shadow-sm hover:shadow-md transition-all active:translate-y-0"
-                        style={{ background: "#2563EB", color: "white", borderRadius: "10px", padding: "10px 20px" }}
-                      >
-                        <Plus size={16} strokeWidth={3} />
-                        Créer une facture
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                filteredInvoices.map((inv) => {
-                  const isFullyPaid = inv.montant_restant <= 0;
-                  const isPartiallyPaid = inv.montant_restant > 0 && inv.montant_paye > 0;
-                  const isUnpaid = inv.montant_paye <= 0;
+      {/* ── 4 EXECUTIVE FINANCIAL KPIS ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {/* Total Invoices */}
+        <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+              {locale === "ar" ? "إجمالي الفواتير" : "Total Factures"}
+            </span>
+            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+              <FileText size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-slate-900">
+            {invoices.length}
+          </div>
+          <div className="text-[11px] text-slate-400 font-bold mt-1.5">
+            {filteredInvoices.length} {locale === "ar" ? "معروضة حسب الفلترة" : "affichées"}
+          </div>
+        </div>
 
-                  return (
-                    <tr 
-                      key={inv.id} 
-                      className="group transition-colors duration-200 border-b border-slate-100 last:border-0 hover:bg-[#F3F4F6]"
-                    >
-                      <td className="px-6 py-5 whitespace-nowrap font-extrabold text-slate-900 tracking-tight">
-                        {inv.bl_number}
-                      </td>
-                      <td className="px-6 py-5 whitespace-nowrap text-slate-500 font-medium">
-                        {formatDate(inv.date_facture)}
-                      </td>
-                      <td className="px-6 py-5 whitespace-nowrap text-slate-600 font-bold">
-                        <div className="flex items-center gap-1.5">
-                          <MapPin size={14} className="text-slate-400" />
-                          {inv.emplacement || "N/A"}
-                        </div>
-                      </td>
-                      <td className="px-6 py-5 whitespace-nowrap font-bold text-slate-700">
-                        {inv.client_nom}
-                      </td>
-                      <td className="px-6 py-5 whitespace-nowrap text-center text-slate-600 font-medium text-sm">
-                        {inv.moyen_reglement ? (
-                          <span className="inline-block bg-white border border-slate-200 shadow-sm rounded-lg px-2.5 py-1">
-                            {inv.moyen_reglement}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-5 whitespace-nowrap text-right font-black text-slate-900">
-                        {new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2 }).format(inv.total_ttc)} F CFA
-                      </td>
-                      <td className="px-6 py-5 whitespace-nowrap text-center font-bold">
-                        {isFullyPaid ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-xs shadow-sm" style={{ background: "#10B981" }}>
-                            <BadgeCheck size={14} /> Payée
-                          </span>
-                        ) : isPartiallyPaid ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-xs shadow-sm" style={{ background: "#F59E0B" }}>
-                            Partielle
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-xs shadow-sm" style={{ background: "#EF4444" }}>
-                            Non Payée
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-5 whitespace-nowrap text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => setSelectedInvoiceId(inv.id)}
-                            className="p-2 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-xl transition-all"
-                            title="Visualiser"
-                          >
-                            <Eye size={18} />
-                          </button>
-                          <button 
-                             onClick={() => setSelectedInvoiceId(inv.id)}
-                             className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-xl transition-all"
-                             title="Imprimer"
-                          >
-                            <PrintIcon size={18} />
-                          </button>
-                          <button 
-                             onClick={() => router.push(`/dashboard/pos?invoiceId=${inv.id}`)}
-                             className="p-2 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl transition-all"
-                             title="Modifier dans POS"
-                          >
-                            <Edit3 size={18} />
-                          </button>
-                          <button 
-                             onClick={() => setPaymentInvoice(inv)}
-                             className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-xl transition-all border border-emerald-100"
-                             title="Règlement"
-                          >
-                            <CreditCard size={18} />
-                          </button>
-                          <button 
-                             onClick={() => handleDeleteInvoice(inv.id)}
-                             className="p-2 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-xl transition-all"
-                             title="Supprimer"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+        {/* Chiffre d'Affaires Total */}
+        <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+              {locale === "ar" ? "إجمالي رقم المعاملات (CA)" : "Chiffre d'Affaires"}
+            </span>
+            <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
+              <TrendingUp size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-amber-600">
+            {formatCurrencyAmount(totalRevenue)}
+          </div>
+          <div className="text-[11px] text-amber-600 font-bold mt-1.5 flex items-center gap-1">
+            <ArrowUpRight size={13} />
+            <span>{locale === "ar" ? "المبيعات الفاتورية المسجلة" : "Montant facturé global"}</span>
+          </div>
+        </div>
+
+        {/* Total Collecté (Encaissé) */}
+        <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+              {locale === "ar" ? "المبالغ المحصلة (المقبوضة)" : "Total Encaissé"}
+            </span>
+            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+              <CheckCircle2 size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-emerald-600">
+            {formatCurrencyAmount(totalPaidRevenue)}
+          </div>
+          <div className="text-[11px] text-emerald-600 font-bold mt-1.5">
+            {recoveryRate}% {locale === "ar" ? "نسبة التحصيل" : "recouvert"}
+          </div>
+        </div>
+
+        {/* Montants en Attente (Créances) */}
+        <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+              {locale === "ar" ? "المستحقات المعلقة (الديون)" : "Reste à Recouvrer"}
+            </span>
+            <div className="p-2 rounded-xl bg-rose-50 text-rose-600">
+              <Clock size={18} />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-rose-600">
+            {formatCurrencyAmount(pendingRevenue)}
+          </div>
+          <div className="text-[11px] text-rose-500 font-bold mt-1.5">
+            {pendingRevenue === 0 ? (locale === "ar" ? "جميع الفواتير مسددة بالكامل" : "Toutes factures soldées") : (locale === "ar" ? "مستحقات واجبة التحصيل" : "En attente de paiement")}
+          </div>
         </div>
       </div>
 
-      {/* Invoice Preview Modal */}
+      {/* ── CONSOLIDATED VENDOR & DEPOT REPORTS (COLLAPSIBLE) ── */}
+      {isAdmin && showReports && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-300">
+          {/* Vendor Report */}
+          <div className="bg-white rounded-3xl p-6 shadow-xs border border-purple-100 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-purple-50 text-purple-600">
+                <User size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  {locale === "ar" ? "أداء المبيعات حسب البائع" : "Rapport par Vendeur"}
+                </h3>
+                <p className="text-[11px] font-bold text-slate-400 uppercase">
+                  {locale === "ar" ? "معدل التحصيل والمبيعات لكل كاشير" : "Performance commerciale"}
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-slate-100">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black">
+                  <tr>
+                    <th className="py-2.5 px-3">Vendeur</th>
+                    <th className="py-2.5 px-3 text-center">Factures</th>
+                    <th className="py-2.5 px-3 text-right">CA Total</th>
+                    <th className="py-2.5 px-3 text-right">Encaissé</th>
+                    <th className="py-2.5 px-3 text-center">Taux</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-bold">
+                  {vendorsList.map(vendor => {
+                    const vendorInvoices = invoices.filter(inv => inv.vendeur === vendor);
+                    const vendorTotal = vendorInvoices.reduce((sum, inv) => sum + inv.total_ttc, 0);
+                    const vendorPaid = vendorInvoices.reduce((sum, inv) => sum + inv.montant_paye, 0);
+                    const rate = vendorTotal > 0 ? ((vendorPaid / vendorTotal) * 100).toFixed(0) : "100";
+
+                    return (
+                      <tr key={vendor} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-3 font-black text-slate-800">{vendor}</td>
+                        <td className="py-2.5 px-3 text-center text-indigo-600 font-black">{vendorInvoices.length}</td>
+                        <td className="py-2.5 px-3 text-right text-slate-800">{formatCurrencyAmount(vendorTotal)}</td>
+                        <td className="py-2.5 px-3 text-right text-emerald-600 font-black">{formatCurrencyAmount(vendorPaid)}</td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                            Number(rate) >= 80 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                          }`}>
+                            {rate}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Depot Report */}
+          <div className="bg-white rounded-3xl p-6 shadow-xs border border-blue-100 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-blue-50 text-blue-600">
+                <MapPin size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  {locale === "ar" ? "أداء المبيعات حسب الدكان / الفرع" : "Rapport par Dépôt"}
+                </h3>
+                <p className="text-[11px] font-bold text-slate-400 uppercase">
+                  {locale === "ar" ? "نشاط نقاط البيع المختلفة" : "Activité par point de vente"}
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-slate-100">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black">
+                  <tr>
+                    <th className="py-2.5 px-3">Dépôt</th>
+                    <th className="py-2.5 px-3 text-center">Factures</th>
+                    <th className="py-2.5 px-3 text-right">CA Total</th>
+                    <th className="py-2.5 px-3 text-right">Encaissé</th>
+                    <th className="py-2.5 px-3 text-center">Taux</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-bold">
+                  {depotsList.map(depot => {
+                    const depotInvoices = invoices.filter(inv => inv.emplacement === depot);
+                    const depotTotal = depotInvoices.reduce((sum, inv) => sum + inv.total_ttc, 0);
+                    const depotPaid = depotInvoices.reduce((sum, inv) => sum + inv.montant_paye, 0);
+                    const rate = depotTotal > 0 ? ((depotPaid / depotTotal) * 100).toFixed(0) : "100";
+
+                    return (
+                      <tr key={depot} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-3 font-black text-slate-800">{depot}</td>
+                        <td className="py-2.5 px-3 text-center text-blue-600 font-black">{depotInvoices.length}</td>
+                        <td className="py-2.5 px-3 text-right text-slate-800">{formatCurrencyAmount(depotTotal)}</td>
+                        <td className="py-2.5 px-3 text-right text-emerald-600 font-black">{formatCurrencyAmount(depotPaid)}</td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                            Number(rate) >= 80 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                          }`}>
+                            {rate}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TOOLBAR: SEARCH, STATUS QUICK CHIPS & VIEW SWITCHER ── */}
+      <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          
+          {/* Search Box */}
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder={locale === "ar" ? "بحث برقم الفاتورة، اسم العميل، البائع، طريقة الدفع..." : "Rechercher N° Facture, Client, Vendeur..."}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+
+          {/* Quick Actions & Filters */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                showAdvancedFilters ? "bg-indigo-50 text-indigo-600 border-indigo-200" : "bg-slate-50 text-slate-700 border-slate-200"
+              }`}
+            >
+              <SlidersHorizontal size={14} />
+              <span>{locale === "ar" ? "فلاتر متقدمة" : "Filtres"}</span>
+            </button>
+
+            {/* View Mode Toggle */}
+            <div className="bg-slate-100 p-1 rounded-2xl flex items-center gap-1">
+              <button
+                onClick={() => setViewMode("table")}
+                className={`p-2 rounded-xl transition-all ${
+                  viewMode === "table" ? "bg-white text-indigo-600 shadow-xs" : "text-slate-500 hover:text-slate-800"
+                }`}
+                title="Vue Tableau"
+              >
+                <List size={16} />
+              </button>
+              <button
+                onClick={() => setViewMode("grid")}
+                className={`p-2 rounded-xl transition-all ${
+                  viewMode === "grid" ? "bg-white text-indigo-600 shadow-xs" : "text-slate-500 hover:text-slate-800"
+                }`}
+                title="Vue Grille 4K"
+              >
+                <LayoutGrid size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Status Filter Chips */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+          {[
+            { id: "all", label: locale === "ar" ? "الكل" : "Tous", count: invoices.length },
+            { id: "soldee", label: locale === "ar" ? "✅ مسددة بالكامل" : "✅ Soldée (Payée)", count: invoices.filter(i => i.montant_restant <= 0).length },
+            { id: "partielle", label: locale === "ar" ? "🟡 مدفوعة جزئياً" : "🟡 Paiement Partiel", count: invoices.filter(i => i.montant_restant > 0 && i.montant_paye > 0).length },
+            { id: "impayee", label: locale === "ar" ? "🔴 آجلة / غير مسددة" : "🔴 Non Payée (Crédit)", count: invoices.filter(i => i.montant_paye <= 0).length },
+          ].map(chip => (
+            <button
+              key={chip.id}
+              onClick={() => setFilterStatus(chip.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                filterStatus === chip.id
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <span>{chip.label}</span>
+              <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
+                filterStatus === chip.id ? "bg-white/20 text-white" : "bg-slate-200/80 text-slate-700"
+              }`}>
+                {chip.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Advanced Filters Expandable Drawer */}
+        {showAdvancedFilters && (
+          <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 grid grid-cols-1 sm:grid-cols-4 gap-3 animate-in fade-in duration-200">
+            {isAdmin && (
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Vendeur</label>
+                <select
+                  value={filterVendor || ""}
+                  onChange={(e) => setFilterVendor(e.target.value || null)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs font-bold text-slate-800 outline-none"
+                >
+                  <option value="">Tous les vendeurs</option>
+                  {vendorsList.map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Date Début</label>
+              <input
+                type="date"
+                value={filterDateStart}
+                onChange={(e) => setFilterDateStart(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs font-bold text-slate-800 outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Date Fin</label>
+              <input
+                type="date"
+                value={filterDateEnd}
+                onChange={(e) => setFilterDateEnd(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white text-xs font-bold text-slate-800 outline-none"
+              />
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setFilterVendor(null);
+                  setFilterDepot(null);
+                  setFilterDateStart("");
+                  setFilterDateEnd("");
+                  setFilterStatus("all");
+                  setQuery("");
+                }}
+                className="w-full py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                {locale === "ar" ? "إلغاء الفلاتر" : "Réinitialiser"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── MAIN CONTENT: DENSE TABLE OR 4K CARDS GRID ── */}
+      {viewMode === "table" ? (
+        <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 overflow-hidden">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200/80">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
+                  <th 
+                    className="py-3.5 px-4 cursor-pointer hover:bg-slate-100"
+                    onClick={() => toggleSort("bl_number")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>N° Facture</span>
+                      <ArrowUpDown size={13} className="text-slate-400" />
+                    </div>
+                  </th>
+                  <th 
+                    className="py-3.5 px-4 cursor-pointer hover:bg-slate-100"
+                    onClick={() => toggleSort("date_facture")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Date</span>
+                      <ArrowUpDown size={13} className="text-slate-400" />
+                    </div>
+                  </th>
+                  <th 
+                    className="py-3.5 px-4 cursor-pointer hover:bg-slate-100"
+                    onClick={() => toggleSort("client_nom")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Client</span>
+                      <ArrowUpDown size={13} className="text-slate-400" />
+                    </div>
+                  </th>
+                  <th className="py-3.5 px-4">Mode / Caisse</th>
+                  <th 
+                    className="py-3.5 px-4 text-right cursor-pointer hover:bg-slate-100"
+                    onClick={() => toggleSort("total_ttc")}
+                  >
+                    <div className="flex items-center justify-end gap-1.5">
+                      <span>Total TTC</span>
+                      <ArrowUpDown size={13} className="text-slate-400" />
+                    </div>
+                  </th>
+                  <th className="py-3.5 px-4 text-right">Payé / Reste</th>
+                  <th className="py-3.5 px-4 text-center">Statut</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="py-16 text-center text-slate-400">
+                      <Loader2 size={32} className="animate-spin mx-auto text-indigo-600 mb-2" />
+                      <span>{locale === "ar" ? "جاري تحميل الفواتير..." : "Chargement des factures..."}</span>
+                    </td>
+                  </tr>
+                ) : filteredInvoices.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-16 text-center text-slate-400">
+                      <FileText size={36} className="mx-auto text-slate-300 mb-2" />
+                      <span>{locale === "ar" ? "لا توجد فواتير مطابقة للبحث." : "Aucune facture trouvée."}</span>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredInvoices.map((inv) => {
+                    const isFullyPaid = inv.montant_restant <= 0;
+                    const isPartiallyPaid = inv.montant_restant > 0 && inv.montant_paye > 0;
+
+                    return (
+                      <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <div className="font-mono font-black text-indigo-600 text-xs">{inv.bl_number}</div>
+                          <div className="text-[10px] text-slate-400 font-bold">Vendeur: {inv.vendeur}</div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-xs font-mono font-bold text-slate-500">
+                          {new Date(inv.date_facture).toLocaleDateString('fr-FR')}
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="font-black text-slate-800 text-xs">{inv.client_nom}</div>
+                          {inv.client_tel && (
+                            <div className="text-[10px] text-slate-400 font-bold">{inv.client_tel}</div>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">
+                            {inv.moyen_reglement}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right font-black text-slate-900 text-sm">
+                          {formatCurrencyAmount(inv.total_ttc)}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="text-xs font-black text-emerald-600">
+                            {formatCurrencyAmount(inv.montant_paye)}
+                          </div>
+                          {inv.montant_restant > 0 && (
+                            <div className="text-[10px] font-bold text-rose-500">
+                              Reste: {formatCurrencyAmount(inv.montant_restant)}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-black inline-block ${
+                            isFullyPaid 
+                              ? "bg-emerald-100 text-emerald-700" 
+                              : isPartiallyPaid 
+                              ? "bg-amber-100 text-amber-700" 
+                              : "bg-rose-100 text-rose-700"
+                          }`}>
+                            {isFullyPaid ? "Payée" : isPartiallyPaid ? "Partielle" : "Non Payée"}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setSelectedInvoiceId(inv.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all cursor-pointer"
+                              title="Aperçu / Imprimer Facture"
+                            >
+                              <Eye size={16} />
+                            </button>
+
+                            <button
+                              onClick={() => setSelectedWhatsAppInvoice({
+                                id: inv.id,
+                                reference: inv.bl_number,
+                                client: inv.client_nom,
+                                clientTel: inv.client_tel,
+                                totalTTC: inv.total_ttc,
+                                montantPaye: inv.montant_paye,
+                                reste: inv.montant_restant,
+                              })}
+                              className="p-1.5 rounded-lg text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 transition-all cursor-pointer"
+                              title="Partager par WhatsApp"
+                            >
+                              <Share2 size={16} />
+                            </button>
+
+                            <button
+                              onClick={() => setPaymentInvoice(inv)}
+                              className="p-1.5 rounded-lg text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 transition-all cursor-pointer"
+                              title="Encaisser un règlement"
+                            >
+                              <CreditCard size={16} />
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteInvoice(inv.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        /* ── 4K INVOICE CARDS GRID VIEW ── */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {loading ? (
+            <div className="col-span-full py-16 text-center text-slate-400">
+              <Loader2 size={32} className="animate-spin mx-auto text-indigo-600 mb-2" />
+              <span>{locale === "ar" ? "جاري تحميل الفواتير..." : "Chargement des factures..."}</span>
+            </div>
+          ) : filteredInvoices.length === 0 ? (
+            <div className="col-span-full py-16 text-center text-slate-400 bg-white rounded-3xl p-8 border border-slate-200/80">
+              <FileText size={36} className="mx-auto text-slate-300 mb-2" />
+              <span>{locale === "ar" ? "لا توجد فواتير مطابقة للبحث." : "Aucune facture trouvée."}</span>
+            </div>
+          ) : (
+            filteredInvoices.map((inv) => {
+              const isFullyPaid = inv.montant_restant <= 0;
+              const isPartiallyPaid = inv.montant_restant > 0 && inv.montant_paye > 0;
+              const payPercentage = inv.total_ttc > 0 ? Math.min(100, Math.round((inv.montant_paye / inv.total_ttc) * 100)) : 100;
+
+              return (
+                <div key={inv.id} className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 hover:shadow-md transition-all space-y-4">
+                  {/* Top Bar */}
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-black text-indigo-600 text-xs bg-indigo-50 px-2.5 py-1 rounded-xl">
+                      {inv.bl_number}
+                    </span>
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-black ${
+                      isFullyPaid 
+                        ? "bg-emerald-100 text-emerald-700" 
+                        : isPartiallyPaid 
+                        ? "bg-amber-100 text-amber-700" 
+                        : "bg-rose-100 text-rose-700"
+                    }`}>
+                      {isFullyPaid ? "Payée" : isPartiallyPaid ? "Partielle" : "Non Payée"}
+                    </span>
+                  </div>
+
+                  {/* Client & Date */}
+                  <div>
+                    <h3 className="font-black text-slate-900 text-base line-clamp-1">{inv.client_nom}</h3>
+                    <div className="text-[11px] font-bold text-slate-400 mt-0.5 flex items-center justify-between">
+                      <span>{new Date(inv.date_facture).toLocaleDateString('fr-FR')}</span>
+                      <span>Vendeur: {inv.vendeur}</span>
+                    </div>
+                  </div>
+
+                  {/* Payment Progress Bar */}
+                  <div className="space-y-1.5 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                    <div className="flex justify-between items-center text-xs font-bold">
+                      <span className="text-slate-500">Payé: {formatCurrencyAmount(inv.montant_paye)}</span>
+                      <span className="font-black text-slate-900">{formatCurrencyAmount(inv.total_ttc)}</span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 rounded-full ${
+                          isFullyPaid ? "bg-emerald-500" : isPartiallyPaid ? "bg-amber-500" : "bg-rose-500"
+                        }`}
+                        style={{ width: `${payPercentage}%` }}
+                      />
+                    </div>
+                    {inv.montant_restant > 0 && (
+                      <div className="text-[11px] font-bold text-rose-500 text-right">
+                        Reste dû: {formatCurrencyAmount(inv.montant_restant)}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card Actions */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    <button
+                      onClick={() => setSelectedInvoiceId(inv.id)}
+                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Eye size={14} />
+                      <span>Facture</span>
+                    </button>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setSelectedWhatsAppInvoice({
+                          id: inv.id,
+                          reference: inv.bl_number,
+                          client: inv.client_nom,
+                          clientTel: inv.client_tel,
+                          totalTTC: inv.total_ttc,
+                          montantPaye: inv.montant_paye,
+                          reste: inv.montant_restant,
+                        })}
+                        className="p-2 rounded-xl text-emerald-600 hover:bg-emerald-50 transition-all cursor-pointer"
+                        title="WhatsApp"
+                      >
+                        <Share2 size={16} />
+                      </button>
+
+                      <button
+                        onClick={() => setPaymentInvoice(inv)}
+                        className="p-2 rounded-xl text-indigo-600 hover:bg-indigo-50 transition-all cursor-pointer"
+                        title="Règlement"
+                      >
+                        <CreditCard size={16} />
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteInvoice(inv.id)}
+                        className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 transition-all cursor-pointer"
+                        title="Supprimer"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* ── MODALS ── */}
       {selectedInvoiceId && (
         <InvoiceModal 
           invoiceId={selectedInvoiceId} 
@@ -730,7 +950,6 @@ export default function InvoicesPage() {
         />
       )}
 
-      {/* Edit Invoice Modal */}
       {editInvoiceId && (
         <EditInvoiceModal
           invoiceId={editInvoiceId}
@@ -739,7 +958,6 @@ export default function InvoicesPage() {
         />
       )}
 
-      {/* Payment Modal */}
       {paymentInvoice && (
         <PaymentModal
           invoice={paymentInvoice}
@@ -748,13 +966,23 @@ export default function InvoicesPage() {
         />
       )}
 
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
-        
-        body {
-          font-family: 'Outfit', sans-serif;
-        }
-      `}</style>
+      {selectedWhatsAppInvoice && (
+        <WhatsAppShareModal
+          details={{
+            companyName: "GESTION PRO GLOBAL",
+            invoiceNumber: selectedWhatsAppInvoice.reference,
+            clientName: selectedWhatsAppInvoice.client,
+            totalTTC: selectedWhatsAppInvoice.totalTTC,
+            montantPaye: selectedWhatsAppInvoice.montantPaye,
+            resteAPayer: selectedWhatsAppInvoice.reste,
+            currency: "FCFA",
+            invoiceUrl: `https://gestion-pro-global-tege.vercel.app/invoice/${selectedWhatsAppInvoice.id}`,
+            locale,
+          }}
+          initialPhone={selectedWhatsAppInvoice.clientTel}
+          onClose={() => setSelectedWhatsAppInvoice(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState, useMemo } from "react";
 import { 
   X, 
@@ -12,9 +14,12 @@ import {
   ShieldCheck,
   CheckCircle,
   FileBadge,
-  Truck
+  Truck,
+  Receipt,
+  ListOrdered
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { formatCurrencyAmount } from "@/lib/utils/currency";
 
 const supabase = createClient();
 
@@ -30,7 +35,7 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
   const [allHistory, setAllHistory] = useState<any[]>([]);
   const [company, setCompany] = useState<any>(null);
   const [pageSize, setPageSize] = useState<'A4' | 'A5' | 'Ticket'>('A5');
-  const [docType, setDocType] = useState<'Facture' | 'Bon de Livraison'>('Facture');
+  const [receiptMode, setReceiptMode] = useState<'single' | 'statement'>('statement');
 
   const transactions = useMemo(() => {
     const list: any[] = [];
@@ -57,7 +62,7 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
           const yy = String(dateAction.getFullYear()).slice(-2);
           const mm = String(dateAction.getMonth() + 1).padStart(2, '0');
           const suffix = String(h.id).padStart(4, '0');
-          ref = `${yy}DRSNO-${mm}${suffix}`;
+          ref = `${yy}RET-${mm}${suffix}`;
         }
 
         list.push({
@@ -74,7 +79,7 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
           date: h.date_action,
           ref: `ANN-${h.advance_id}`,
           montant: -Number(h.amount),
-          operation: "RETRAIT",
+          operation: "ANNULATION",
           timestamp: new Date(h.date_action).getTime()
         });
       }
@@ -183,7 +188,7 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
         <div className="bg-white p-8 rounded-3xl shadow-xl flex flex-col items-center">
           <Loader2 className="animate-spin text-blue-600 mb-4" size={40} />
-          <p className="font-bold text-slate-600 font-outfit">Génération du reçu...</p>
+          <p className="font-bold text-slate-600 font-outfit">Génération du document...</p>
         </div>
       </div>
     );
@@ -195,17 +200,41 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 bg-slate-900/60 backdrop-blur-md overflow-hidden print:p-0 print:bg-white print:backdrop-blur-none">
       
       {/* Action Bar - Modernized Toggle Buttons */}
-      <div className="absolute top-6 right-6 flex flex-col items-end gap-6 print:hidden z-[110]">
+      <div className="absolute top-6 right-6 flex flex-col items-end gap-4 print:hidden z-[110]">
+          {/* Mode Toggle: Single Receipt vs Global Statement */}
+          <div className="bg-slate-900/80 backdrop-blur-md p-1.5 rounded-[22px] flex items-center shadow-2xl border border-white/20">
+             <button
+                onClick={() => setReceiptMode('statement')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                  receiptMode === 'statement' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'text-slate-300 hover:text-white'
+                }`}
+             >
+                <ListOrdered size={14} /> Situation Dépôts
+             </button>
+             <button
+                onClick={() => setReceiptMode('single')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                  receiptMode === 'single' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : 'text-slate-300 hover:text-white'
+                }`}
+             >
+                <Receipt size={14} /> Reçu Unitaire
+             </button>
+          </div>
+
           {/* Paper Size Toggle */}
-          <div className="bg-slate-200/80 backdrop-blur-md p-1.5 rounded-[24px] flex items-center shadow-lg border border-white/20">
+          <div className="bg-slate-900/80 backdrop-blur-md p-1.5 rounded-[22px] flex items-center shadow-2xl border border-white/20">
              {['A4', 'A5', 'Ticket'].map((size) => (
                <button
                  key={size}
                  onClick={() => setPageSize(size as any)}
-                 className={`px-6 py-2 rounded-2xl text-xs font-black transition-all ${
+                 className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${
                    pageSize === size 
-                   ? 'bg-indigo-600 text-white shadow-md scale-105' 
-                   : 'text-slate-500 hover:text-slate-800'
+                   ? 'bg-emerald-600 text-white shadow-md' 
+                   : 'text-slate-300 hover:text-white'
                  }`}
                >
                  {size}
@@ -213,153 +242,164 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
              ))}
           </div>
 
-          {/* Doc Type Toggle */}
-          <div className="bg-slate-200/80 backdrop-blur-md p-1.5 rounded-[24px] flex items-center shadow-lg border border-white/20">
-             <button
-                onClick={() => setDocType('Facture')}
-                className={`px-6 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                  docType === 'Facture' 
-                  ? 'bg-emerald-600 text-white shadow-md scale-105' 
-                  : 'text-slate-500 hover:text-slate-800'
-                }`}
-             >
-                <FileText size={14} /> Facture
-             </button>
-             <button
-                onClick={() => setDocType('Bon de Livraison')}
-                className={`px-6 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                  docType === 'Bon de Livraison' 
-                  ? 'bg-slate-300 text-slate-600 shadow-md scale-105' 
-                  : 'text-slate-500 hover:text-slate-800'
-                }`}
-             >
-                <Truck size={14} /> Bon de Livraison
-             </button>
-          </div>
-
           {/* Action Buttons */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <button 
               onClick={handlePrint}
-              className="bg-indigo-600 text-white px-10 py-5 rounded-[28px] font-black shadow-2xl shadow-indigo-500/40 flex items-center gap-3 hover:scale-105 active:scale-95 transition-all text-lg"
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-4 rounded-[24px] font-black shadow-2xl shadow-indigo-500/40 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all text-base cursor-pointer"
             >
-              <Printer size={24} />
+              <Printer size={20} />
               Imprimer
             </button>
             <button 
               onClick={onClose}
-              className="bg-white text-slate-400 p-5 rounded-[28px] shadow-xl border border-slate-100 hover:text-rose-500 hover:scale-110 transition-all active:scale-95"
+              className="bg-white text-slate-500 p-4 rounded-[24px] shadow-xl border border-slate-100 hover:text-rose-500 hover:scale-110 transition-all active:scale-95 cursor-pointer"
             >
-              <X size={28} />
+              <X size={24} />
             </button>
           </div>
       </div>
 
       {/* Main Container */}
-      <div className={`bg-white h-auto overflow-y-auto custom-scrollbar shadow-2xl print:shadow-none print:rounded-none print:w-full print:h-auto print:overflow-visible transition-all duration-500 ${
+      <div className={`bg-white h-auto max-h-[92vh] overflow-y-auto custom-scrollbar shadow-2xl print:shadow-none print:rounded-none print:w-full print:h-auto print:max-h-none print:overflow-visible transition-all duration-300 ${
         pageSize === 'A4' ? 'max-w-[210mm]' : pageSize === 'Ticket' ? 'max-w-[80mm]' : 'max-w-[148mm]'
-      } w-full rounded-[40px] border border-slate-100 print:border-none`}>
+      } w-full rounded-[36px] border border-slate-100 print:border-none`}>
         
-        <div id="printable-advance" className="p-8 text-slate-950 font-outfit leading-tight relative overflow-hidden print:p-4">
+        <div id="printable-advance" className="p-8 text-slate-950 font-sans leading-tight relative overflow-hidden print:p-4">
           
-          {/* Header Info like the photo */}
-          <div className="text-center w-full flex flex-col items-center mb-6 border-b border-dashed border-slate-300 pb-6">
-            <h1 className="text-xl font-black uppercase text-slate-900 tracking-tight leading-none">{company?.nom_entreprise || "ETSOUNO"}</h1>
-            <p className="text-xs font-bold text-slate-600 mt-1">Etablissement SOUNA</p>
-            <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">
+          {/* Company Header */}
+          <div className="text-center w-full flex flex-col items-center mb-5 border-b border-dashed border-slate-300 pb-5">
+            <h1 className="text-lg font-black uppercase text-slate-900 tracking-tight leading-none">
+              {company?.nom_entreprise || "GESTION PRO GLOBAL"}
+            </h1>
+            <p className="text-xs font-bold text-slate-600 mt-1">
+              {company?.activite || "Etablissement SOUNA"}
+            </p>
+            <p className="text-[9px] font-bold text-slate-500 uppercase mt-0.5">
                {company?.slogan || "Ventes de matériaux de construction"}
             </p>
-            <p className="text-[9px] text-slate-400 font-bold mt-1">
+            <p className="text-[9px] text-slate-400 font-bold mt-0.5">
                {company?.adresse || "sous la route PMI 17 Portes BP 281"}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 mt-1 text-[8px] font-black text-slate-400">
                <span>RCCM: {company?.rccm || 'NI-MAR-2007-A-93'}</span>
                <span>NIF: {company?.nif || '11835/R'}</span>
             </div>
-            <p className="text-[8px] font-bold text-slate-400 mt-1">
+            <p className="text-[8px] font-bold text-slate-400 mt-0.5">
                Tél: {company?.telephone || '96.29.77.03 - 96.97.01.57'}
             </p>
           </div>
 
           {/* Title Section */}
-          <div className="text-center mb-6 border-b-2 border-slate-900 pb-4">
-            <h2 className="text-md font-black uppercase tracking-wider text-slate-900">
-               SITUATION DEPOTS TIERS
+          <div className="text-center mb-5 border-b-2 border-slate-900 pb-3">
+            <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">
+               {receiptMode === 'statement' ? "SITUATION DEPOTS TIERS" : "REÇU D'ACOMPTE / DEPOT CLIENT"}
             </h2>
-            <p className="text-sm font-black text-slate-900 uppercase mt-2">
+            <p className="text-sm font-black text-slate-900 uppercase mt-1">
                {advance.clients?.tel ? `${advance.clients.tel} ` : ""}{advance.clients?.nom}
             </p>
-            <p className="text-xs font-black text-indigo-600 uppercase mt-1 tracking-widest">
-               {advance.emplacement || "SOUNO SIEGE"}
+            <p className="text-xs font-black text-indigo-600 uppercase mt-0.5 tracking-wider">
+               {advance.emplacement || "BOUTIQUE"}
             </p>
           </div>
 
-          {/* Transaction Ledger Table like the photo */}
-          <div className="mb-6 overflow-hidden">
-             <table className="w-full text-left border border-slate-950 border-collapse">
-                <thead>
-                   <tr className="text-[9px] font-black bg-slate-50 text-slate-900 uppercase border-b-2 border-slate-950">
-                      <th className="py-2.5 px-3 border-r border-slate-950">REF.</th>
-                      <th className="py-2.5 px-3 border-r border-slate-950 text-center">DATE</th>
-                      <th className="py-2.5 px-3 border-r border-slate-950 text-right">MONTANT</th>
-                      <th className="py-2.5 px-3 text-center">OPERATIONS</th>
-                   </tr>
-                </thead>
-                <tbody className="text-[11px] font-bold text-slate-900">
-                   {transactions.map((tx, idx) => (
-                     <tr key={tx.id} className="border-b border-slate-300 last:border-none">
-                        <td className="py-2.5 px-3 border-r border-slate-950 font-mono text-[10px]">{tx.ref}</td>
-                        <td className="py-2.5 px-3 border-r border-slate-950 text-center">
-                           {new Date(tx.date).toLocaleDateString('fr-FR')}
-                        </td>
-                        <td className="py-2.5 px-3 border-r border-slate-950 text-right font-black">
-                           {tx.montant < 0 ? '-' : ''}{new Intl.NumberFormat('fr-FR').format(Math.abs(tx.montant))}
-                        </td>
-                        <td className="py-2.5 px-3 text-center font-black text-[9px] uppercase tracking-wider">{tx.operation}</td>
+          {/* Content Mode 1: Situation Dépôts (Ledger Table) */}
+          {receiptMode === 'statement' ? (
+            <div className="mb-5 overflow-hidden">
+               <table className="w-full text-left border border-slate-950 border-collapse">
+                  <thead>
+                     <tr className="text-[9px] font-black bg-slate-50 text-slate-900 uppercase border-b-2 border-slate-950">
+                        <th className="py-2 px-2.5 border-r border-slate-950">REF.</th>
+                        <th className="py-2 px-2.5 border-r border-slate-950 text-center">DATE</th>
+                        <th className="py-2 px-2.5 border-r border-slate-950 text-right">MONTANT</th>
+                        <th className="py-2 px-2.5 text-center">OPERATIONS</th>
                      </tr>
-                   ))}
-                   {transactions.length === 0 && (
-                     <tr>
-                       <td colSpan={4} className="py-6 text-center text-slate-400 italic font-normal text-xs">
-                         Aucun mouvement de dépôt disponible.
-                       </td>
-                     </tr>
-                   )}
-                </tbody>
-             </table>
-          </div>
+                  </thead>
+                  <tbody className="text-[10px] font-bold text-slate-900">
+                     {transactions.map((tx) => (
+                       <tr key={tx.id} className="border-b border-slate-300 last:border-none">
+                          <td className="py-2 px-2.5 border-r border-slate-950 font-mono text-[9px]">{tx.ref}</td>
+                          <td className="py-2 px-2.5 border-r border-slate-950 text-center">
+                             {new Date(tx.date).toLocaleDateString('fr-FR')}
+                          </td>
+                          <td className="py-2 px-2.5 border-r border-slate-950 text-right font-black">
+                             {tx.montant < 0 ? '-' : ''}{new Intl.NumberFormat('fr-FR').format(Math.abs(tx.montant))}
+                          </td>
+                          <td className="py-2 px-2.5 text-center font-black text-[9px] uppercase tracking-wider">{tx.operation}</td>
+                       </tr>
+                     ))}
+                     {transactions.length === 0 && (
+                       <tr>
+                         <td colSpan={4} className="py-4 text-center text-slate-400 italic font-normal text-xs">
+                           Aucun mouvement disponible.
+                         </td>
+                       </tr>
+                     )}
+                  </tbody>
+               </table>
+            </div>
+          ) : (
+            /* Content Mode 2: Reçu Unitaire */
+            <div className="mb-5 space-y-3 border border-slate-950 p-4 rounded-xl">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-500 uppercase">Référence :</span>
+                <span className="font-mono font-black">{advance.reference_paiement || `DEP-${advance.id}`}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-500 uppercase">Date Opération :</span>
+                <span className="font-black">{new Date(advance.date_avance || advance.created_at).toLocaleDateString('fr-FR')}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-500 uppercase">Mode de Paiement :</span>
+                <span className="font-black uppercase">{advance.moyen_paiement || "Espèce"}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs border-t border-slate-200 pt-2">
+                <span className="font-bold text-slate-500 uppercase">Montant Initial Déposé :</span>
+                <span className="font-black text-emerald-600 text-sm">{formatCurrencyAmount(advance.montant_initial)}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-500 uppercase">Solde Restant Disponible :</span>
+                <span className="font-black text-indigo-600 text-sm">{formatCurrencyAmount(advance.montant_restant)}</span>
+              </div>
+              {advance.notes && (
+                <div className="text-[10px] text-slate-500 italic border-t border-slate-100 pt-1">
+                  Note : {advance.notes}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* TOTAL & CURRENCY */}
-          <div className="flex justify-between items-center py-2.5 border-t-2 border-slate-950 border-b-2 border-slate-950 font-black text-sm uppercase mb-3">
-             <span>TOTAL</span>
-             <span>{new Intl.NumberFormat('fr-FR').format(totalBalance)}</span>
+          <div className="flex justify-between items-center py-2 border-t-2 border-slate-950 border-b-2 border-slate-950 font-black text-sm uppercase mb-2">
+             <span>TOTAL SOLDE DISPONIBLE</span>
+             <span>{new Intl.NumberFormat('fr-FR').format(receiptMode === 'statement' ? totalBalance : advance.montant_restant)}</span>
           </div>
-          <div className="text-center font-extrabold text-[11px] italic uppercase tracking-wider mb-8 text-slate-800">
+          <div className="text-center font-extrabold text-[10px] italic uppercase tracking-wider mb-6 text-slate-800">
              Francs CFA
           </div>
 
           {/* SIGNATURES */}
-          <div className="grid grid-cols-2 gap-12 mt-6">
+          <div className="grid grid-cols-2 gap-8 mt-6">
              <div className="text-center">
-                <p className="text-[9px] font-black uppercase text-slate-900 mb-12">Signature Client</p>
+                <p className="text-[9px] font-black uppercase text-slate-900 mb-10">Signature Client</p>
                 <div className="h-px bg-slate-950 w-3/4 mx-auto"></div>
              </div>
              <div className="text-center">
-                <p className="text-[9px] font-black uppercase text-slate-900 mb-12">Signature Vendeur</p>
+                <p className="text-[9px] font-black uppercase text-slate-900 mb-10">Signature Vendeur</p>
                 <div className="h-px bg-slate-950 w-3/4 mx-auto"></div>
              </div>
           </div>
 
           {/* Date of Print & Page Footer */}
-          <div className="mt-12 flex justify-between items-center border-t border-slate-200 pt-4 text-[8px] font-bold text-slate-400">
+          <div className="mt-8 flex justify-between items-center border-t border-slate-200 pt-3 text-[8px] font-bold text-slate-400">
              <span>
                 {(() => {
                   const now = new Date();
-                  const mm = String(now.getMonth() + 1).padStart(2, '0');
                   const dd = String(now.getDate()).padStart(2, '0');
+                  const mm = String(now.getMonth() + 1).padStart(2, '0');
                   const yyyy = now.getFullYear();
                   const timeStr = now.toTimeString().split(' ')[0];
-                  return `${mm}-${dd}-${yyyy} ${timeStr}`;
+                  return `${dd}/${mm}/${yyyy} ${timeStr}`;
                 })()}
              </span>
              <span>Page 1</span>
@@ -369,8 +409,6 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
       </div>
 
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100;300;400;500;600;700;800;900&display=swap');
-        
         @media print {
           body * {
             visibility: hidden;
@@ -386,27 +424,13 @@ export default function AdvanceReceiptModal({ advanceId, onClose }: AdvanceRecei
             left: 0 !important;
             top: 0 !important;
             width: 100% !important;
-            padding: ${pageSize === 'Ticket' ? '4mm' : '10mm'} !important;
+            padding: ${pageSize === 'Ticket' ? '4mm' : '8mm'} !important;
             margin: 0 !important;
-            font-family: 'Outfit', sans-serif !important;
           }
           @page {
             size: ${pageSize === 'Ticket' ? '80mm 200mm' : pageSize === 'A4' ? 'A4 portrait' : 'A5 portrait'};
             margin: 0;
           }
-          .bg-slate-900 { background-color: #0f172a !important; color: #fff !important; }
-          .bg-indigo-600 { background-color: #4f46e5 !important; color: #fff !important; }
-          .bg-emerald-600 { background-color: #059669 !important; color: #fff !important; }
-          .bg-slate-50 { background-color: #f8fafc !important; }
-          .bg-indigo-50 { background-color: #eef2ff !important; }
-          .bg-slate-300 { background-color: #cbd5e1 !important; color: #475569 !important; }
-          .text-white { color: #fff !important; }
-          .text-indigo-600 { color: #4f46e5 !important; }
-          .text-emerald-600 { color: #059669 !important; }
-          .text-rose-500 { color: #f43f5e !important; }
-          .text-indigo-400 { color: #818cf8 !important; }
-          .border-indigo-100 { border-color: #e0e7ff !important; }
-          .border-slate-100 { border-color: #f1f5f9 !important; }
           .border-slate-950 { border-color: #000000 !important; }
           .border-slate-300 { border-color: #cbd5e1 !important; }
         }

@@ -1,16 +1,15 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { 
-  Users, 
-  UserPlus, 
-  Search, 
+import { useLanguage } from "@/lib/i18n/context";
+import {
+  Users,
+  UserPlus,
+  Search,
   RefreshCw,
   ShieldCheck,
   ShieldAlert,
-  Contact2,
   ChevronRight,
-  UserCircle2,
   Filter,
   MoreHorizontal,
   Plus,
@@ -23,18 +22,16 @@ import {
   Save,
   X,
   PlusCircle,
-  ShoppingCart
+  Building2,
+  Crown,
+  Key,
+  MessageSquare,
+  Lock,
+  Unlock,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-/* ═══════════════════════════════════════════════════════════════
-   UTILITIES
-   ═══════════════════════════════════════════════════════════════ */
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
 
 type UserRecord = {
   id: number;
@@ -48,20 +45,24 @@ type UserRecord = {
   depots: string;
   depot_ids: number[];
   created_at: string;
+  is_active?: boolean;
 };
 
 const supabase = createClient();
 
 export default function UserManagementPage() {
+  const { t, locale, dir } = useLanguage();
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [roles, setRoles] = useState<{ id: number; role_name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  
+
   // Modal & Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
   const [newUser, setNewUser] = useState({
     id: null as number | null,
     utilisateur: "",
@@ -72,42 +73,57 @@ export default function UserManagementPage() {
     admin: "Non",
     langue: "FR",
     ref_per: "",
-    depots: [] as number[]
+    depots: [] as number[],
   });
 
   const [availableDepotsData, setAvailableDepotsData] = useState<{ id: number; nom: string }[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [isDepotDropdownOpen, setIsDepotDropdownOpen] = useState(false);
 
-  /* ═══════════════════════════════════════════════════════════════
-     DATA FETCHING
-     ═══════════════════════════════════════════════════════════════ */
+  // Toast
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const loadData = async () => {
     setRefreshing(true);
     try {
-      // 1. Fetch Roles first (needed for the form)
-      const { data: rolesData, error: rolesErr } = await supabase
+      // 1. Fetch Roles
+      const { data: rolesData } = await supabase
         .from("roles")
         .select("id, role_name")
-        .order("role_name");
-      
-      if (!rolesErr && rolesData) {
+        .order("id");
+
+      const standardRoles = [
+        { id: 1, role_name: "Admin" },
+        { id: 2, role_name: "Manager" },
+        { id: 3, role_name: "Gérant de Dépôt" },
+        { id: 4, role_name: "Caissier" },
+        { id: 5, role_name: "Comptable" },
+        { id: 6, role_name: "Livreur" },
+      ];
+
+      if (rolesData && rolesData.length >= 2) {
         setRoles(rolesData);
+      } else {
+        setRoles(standardRoles);
       }
 
-      // 1.1 Fetch available depots with IDs
-      const { data: depotsData, error: depotsErr } = await supabase
+      // 2. Fetch available depots
+      const { data: depotsData } = await supabase
         .from("depots")
         .select("id, nom")
         .eq("is_deleted", false)
         .order("nom");
-      
-      if (!depotsErr && depotsData) {
-        setAvailableDepotsData(depotsData);
-      }
 
-      // 2. Fetch Users with their assigned warehouses
+      if (depotsData) setAvailableDepotsData(depotsData);
+
+      // 3. Fetch Users with assigned warehouses
       const { data, error } = await supabase
         .from("users")
         .select(`
@@ -149,18 +165,58 @@ export default function UserManagementPage() {
         }));
         setUsers(mappedData);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to load users:", err);
+      setToast({ message: "Erreur de chargement des utilisateurs", type: "error" });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const handleAddUser = async (e: React.FormEvent) => {
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleOpenAddModal = () => {
+    setIsEditing(false);
+    setNewUser({
+      id: null,
+      utilisateur: "",
+      nom_prenom: "",
+      mot_de_passe: "",
+      role_id: roles.length > 0 ? String(roles[0].id) : "",
+      emplacement: availableDepotsData.length > 0 ? availableDepotsData[0].nom : "BOUTIQUE",
+      admin: "Non",
+      langue: "FR",
+      ref_per: "",
+      depots: [],
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (u: UserRecord) => {
+    setIsEditing(true);
+    const matchedRole = roles.find((r) => r.role_name === u.role_name);
+    setNewUser({
+      id: u.id,
+      utilisateur: u.utilisateur,
+      nom_prenom: u.nom_prenom,
+      mot_de_passe: "",
+      role_id: matchedRole ? String(matchedRole.id) : "",
+      emplacement: u.emplacement,
+      admin: u.admin,
+      langue: u.langue,
+      ref_per: u.ref_per,
+      depots: u.depot_ids || [],
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUser.utilisateur || (!isEditing && !newUser.mot_de_passe)) {
-      alert("Veuillez remplir les champs obligatoires");
+      setToast({ message: "Veuillez remplir les champs obligatoires", type: "error" });
       return;
     }
 
@@ -173,10 +229,9 @@ export default function UserManagementPage() {
         emplacement: newUser.emplacement,
         admin: newUser.admin,
         langue: newUser.langue,
-        ref_per: newUser.ref_per
+        ref_per: newUser.ref_per,
       };
 
-      // Only update password if provided during edit, or required during create
       if (newUser.mot_de_passe) {
         userData.mot_de_passe = newUser.mot_de_passe;
       }
@@ -184,562 +239,438 @@ export default function UserManagementPage() {
       let userId = newUser.id;
 
       if (isEditing && userId) {
-        const { error } = await supabase
-          .from("users")
-          .update(userData)
-          .eq("id", userId);
+        const { error } = await supabase.from("users").update(userData).eq("id", userId);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase
-          .from("users")
-          .insert([userData])
-          .select("id")
-          .single();
+        const { data: created, error } = await supabase.from("users").insert([userData]).select().single();
         if (error) throw error;
-        userId = data.id;
+        userId = created.id;
       }
 
-      // --- Sync User Warehouses ---
+      // Update multi-warehouses
       if (userId) {
-        // 1. Clear existing
         await supabase.from("user_warehouses").delete().eq("user_id", userId);
-
-        // 2. Add new ones and get their names
-        let depotsString = "";
         if (newUser.depots.length > 0) {
-          const primaryDepotObj = availableDepotsData.find(d => d.nom.toLowerCase() === newUser.emplacement.toLowerCase().trim());
-          const primaryDepotId = primaryDepotObj ? primaryDepotObj.id : newUser.depots[0];
-
-          const warehouseEntries = newUser.depots.map(depotId => ({
+          const warehouseInserts = newUser.depots.map((depotId) => ({
             user_id: userId,
             depot_id: depotId,
-            is_primary: depotId === primaryDepotId
           }));
-          const { error: uwErr } = await supabase.from("user_warehouses").insert(warehouseEntries);
-          if (uwErr) {
-            console.warn("Failed to insert with is_primary, attempting fallback without it...", uwErr.message);
-            const fallbackEntries = newUser.depots.map(depotId => ({
-              user_id: userId,
-              depot_id: depotId
-            }));
-            const { error: fallbackErr } = await supabase.from("user_warehouses").insert(fallbackEntries);
-            if (fallbackErr) throw fallbackErr;
-          }
-
-          // Get names of selected depots to update users.depots
-          const selectedDepotNames = availableDepotsData
-            .filter(d => newUser.depots.includes(d.id))
-            .map(d => d.nom);
-          depotsString = selectedDepotNames.join(", ");
-        }
-
-        // Update depots column in users table
-        const { error: updateDepotsErr } = await supabase
-          .from("users")
-          .update({ depots: depotsString })
-          .eq("id", userId);
-        if (updateDepotsErr) {
-          console.warn("Failed to update depots column in users table:", updateDepotsErr);
+          await supabase.from("user_warehouses").insert(warehouseInserts);
         }
       }
 
-      // Reset form and reload
-      handleCloseModal();
+      setToast({
+        message: isEditing ? "Utilisateur modifié avec succès" : "Nouvel utilisateur créé avec succès",
+        type: "success",
+      });
+      setIsModalOpen(false);
       loadData();
     } catch (err: any) {
-      console.error("Error saving user:", err);
-      alert("Erreur lors de l'enregistrement : " + err.message);
+      setToast({ message: err.message || "Erreur de sauvegarde", type: "error" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleEditUser = (user: UserRecord) => {
-    const roleId = roles.find(r => r.role_name === user.role_name)?.id?.toString() || "";
-
-    setNewUser({
-      id: user.id,
-      utilisateur: user.utilisateur,
-      nom_prenom: user.nom_prenom !== "-" ? user.nom_prenom : "",
-      mot_de_passe: "", // Don't pre-fill password for security
-      role_id: roleId,
-      emplacement: user.emplacement !== "-" ? user.emplacement : "",
-      admin: user.admin,
-      langue: user.langue,
-      ref_per: user.ref_per !== "-" ? user.ref_per : "",
-      depots: user.depot_ids
-    });
-    setIsEditing(true);
-    setIsModalOpen(true);
-  };
-
-  const handleOpenAdd = () => {
-    setNewUser({
-      id: null,
-      utilisateur: "",
-      nom_prenom: "",
-      mot_de_passe: "",
-      role_id: "",
-      emplacement: "",
-      admin: "Non",
-      langue: "FR",
-      ref_per: "",
-      depots: []
-    });
-    setIsEditing(false);
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setIsDepotDropdownOpen(false);
-  };
-
-  const toggleDepot = (depotId: number) => {
-    setNewUser(prev => {
-      const exists = prev.depots.includes(depotId);
-      if (exists) {
-        return { ...prev, depots: prev.depots.filter(id => id !== depotId) };
-      } else {
-        return { ...prev, depots: [...prev.depots, depotId] };
-      }
-    });
-  };
-
-  const handleDeleteUser = async (id: number) => {
-    if (!confirm("Voulez-vous vraiment supprimer cet utilisateur ?")) return;
-    
+  const handleDeleteUser = async (id: number, name: string) => {
+    if (!confirm(`Voulez-vous vraiment supprimer l'utilisateur "${name}" ?`)) return;
     try {
       const { error } = await supabase.from("users").delete().eq("id", id);
       if (error) throw error;
+      setToast({ message: "Utilisateur supprimé", type: "success" });
       loadData();
     } catch (err: any) {
-      alert("Erreur lors de la suppression : " + err.message);
+      setToast({ message: err.message || "Erreur lors de la suppression", type: "error" });
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  /* ═══════════════════════════════════════════════════════════════
-     STATISTICS & FILTERING
-     ═══════════════════════════════════════════════════════════════ */
-
-  const stats = useMemo(() => {
-    const total = users.length;
-    const admins = users.filter((u) => u.admin === "Oui" || u.role_name.toLowerCase().includes("admin")).length;
-    const staff = total - admins;
-    const roles = Array.from(new Set(users.map((u) => u.role_name))).length;
-
-    return { total, admins, staff, roles };
-  }, [users]);
+  const handleShareCredentialsWhatsApp = (u: UserRecord) => {
+    const text = encodeURIComponent(
+      locale === "ar"
+        ? `🔐 بيانات الدخول لنظام GestionPro Global:\n👤 اسم المستخدم: ${u.utilisateur}\n🏢 الفرع: ${u.emplacement}\n🌐 رابط النظام: https://gestion-pro-global-tege.vercel.app/login`
+        : `🔐 Vos identifiants d'accès GestionPro Global:\n👤 Identifiant: ${u.utilisateur}\n🏢 Dépôt: ${u.emplacement}\n🌐 Connexion: https://gestion-pro-global-tege.vercel.app/login`
+    );
+    window.open(`https://wa.me/?text=${text}`, "_blank");
+  };
 
   const filteredUsers = useMemo(() => {
-    if (!searchQuery) return users;
+    if (!searchQuery.trim()) return users;
     const q = searchQuery.toLowerCase();
     return users.filter(
       (u) =>
         u.utilisateur.toLowerCase().includes(q) ||
         u.nom_prenom.toLowerCase().includes(q) ||
-        u.role_name.toLowerCase().includes(q)
+        u.role_name.toLowerCase().includes(q) ||
+        u.emplacement.toLowerCase().includes(q)
     );
   }, [users, searchQuery]);
 
   return (
-    <div className="min-h-screen text-slate-900 p-6 lg:p-10 -m-6 lg:-m-10">
-      
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+    <div className="space-y-8 animate-in fade-in duration-300">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed top-6 right-6 z-50 px-5 py-3.5 rounded-2xl shadow-2xl border text-white flex items-center gap-3 animate-in slide-in-from-top-3 ${
+            toast.type === "success"
+              ? "bg-slate-900 border-emerald-500/30"
+              : "bg-rose-950 border-rose-500/30"
+          }`}
+        >
+          {toast.type === "success" ? (
+            <ShieldCheck size={20} className="text-emerald-400" />
+          ) : (
+            <AlertCircle size={20} className="text-rose-400" />
+          )}
+          <span className="text-xs font-black">{toast.message}</span>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="p-2 rounded-lg" style={{ backgroundColor: "#f1f5f9" }}>
-               <Users className="text-slate-600" size={24} />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900" style={{ letterSpacing: "-0.025em" }}>
-              Gestion des Utilisateurs
-            </h1>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider">
+              ADMINISTRATION & CAISSIERS
+            </span>
+            <span className="text-xs font-bold text-slate-500">
+              {locale === "ar" ? "إدارة الموظفين، الكاشيرية وتعيين المستودعات" : "Comptes utilisateurs & affectation des dépôts"}
+            </span>
           </div>
-          <p className="text-slate-500 text-sm font-medium ml-11">
-            Contrôlez les accès et gérez les comptes de votre équipe
-          </p>
+          <h1 className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+            <Users className="text-indigo-600" size={32} />
+            {locale === "ar" ? "إدارة المستخدمين والموظفين" : "Gestion des Utilisateurs"}
+          </h1>
         </div>
 
-        <button 
-          onClick={handleOpenAdd}
-          className="flex items-center gap-2 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all active:scale-95 group bg-[#6366f1] shadow-indigo-100">
-          <Plus size={18} className="transition-transform group-hover:rotate-90" />
-          Nouvel Utilisateur
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={loadData}
+            className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+          >
+            <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+            <span>{locale === "ar" ? "تحديث" : "Actualiser"}</span>
+          </button>
+
+          <button
+            onClick={handleOpenAddModal}
+            className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-xs shadow-lg shadow-indigo-600/25 transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <UserPlus size={16} />
+            <span>{locale === "ar" ? "إضافة مستخدم جديد" : "Nouvel Utilisateur"}</span>
+          </button>
+        </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-        {[
-          { label: "Utilisateurs", value: stats.total, icon: Users, color: "text-[#6366f1]", bg: "bg-indigo-50" },
-          { label: "Administrateurs", value: stats.admins, icon: ShieldCheck, color: "text-rose-500", bg: "bg-rose-50" },
-          { label: "Vendeurs", value: stats.staff, icon: ShoppingCart, color: "text-emerald-500", bg: "bg-emerald-50" },
-          { label: "Rôles Actifs", value: stats.roles, icon: Contact2, color: "text-amber-500", bg: "bg-amber-50" },
-        ].map((stat, i) => (
-          <div key={i} className="bg-white p-6 rounded-[28px] border border-slate-100/50 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex items-center gap-5 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-all duration-300">
-            <div className={cn("p-4 rounded-2xl", stat.bg)}>
-               <stat.icon className={stat.color} size={24} />
-            </div>
-            <div>
-              <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.15em] mb-1">{stat.label}</p>
-              <p className="text-2xl font-black text-slate-800 tracking-tight">{stat.value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Search & Filter Bar Section */}
-      <div className="p-2 rounded-[28px] shadow-xl shadow-slate-200/50 mb-8 border border-white/60 bg-white/40 backdrop-blur-xl">
-        <div className="relative flex items-center rounded-[22px] border border-slate-200/60 bg-slate-50/50 pr-2">
-          <div className="pl-5 pr-3">
-            <Search className="text-slate-400" size={18} />
-          </div>
-          <input 
-            type="text" 
-            placeholder="Rechercher..." 
+      {/* Search & Filter Toolbar */}
+      <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder={locale === "ar" ? "بحث بالاسم، الكاشير، الدور أو المستودع..." : "Rechercher un utilisateur, rôle, dépôt..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 bg-transparent py-4 text-slate-800 font-medium focus:outline-none"
+            className="w-full pl-9 pr-4 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          <button 
-            onClick={loadData}
-            disabled={refreshing}
-            className="p-3 text-slate-400 hover:text-slate-600 transition-all rounded-xl disabled:opacity-50"
-            style={{ backgroundColor: "transparent" }}
-          >
-            <RefreshCw className={cn("transition-all", refreshing && "animate-spin")} size={18} />
-          </button>
         </div>
 
-        {/* Sub-Filters */}
-        <div className="flex items-center gap-4 mt-2 px-2 pb-1">
-          <button className="flex items-center gap-2 px-4 py-2 border rounded-xl text-slate-600 text-sm font-bold transition-all hover:bg-slate-50" style={{ backgroundColor: "#ffffff", borderColor: "#e2e8f0" }}>
-            <Filter size={14} />
-            Tous les rôles
-            <ChevronRight size={14} className="rotate-90 ml-1 text-slate-300" />
-          </button>
-          
-          <button className="flex items-center gap-2 px-4 py-2 border rounded-xl text-slate-600 text-sm font-bold transition-all hover:bg-slate-50" style={{ backgroundColor: "#ffffff", borderColor: "#e2e8f0" }}>
-            <MoreHorizontal size={14} />
-            Statut
-            <ChevronRight size={14} className="rotate-90 ml-1 text-slate-300" />
-          </button>
+        <div className="text-xs font-extrabold text-slate-500">
+          Total : <span className="text-indigo-600">{filteredUsers.length}</span> {locale === "ar" ? "حساب" : "comptes"}
         </div>
       </div>
 
-      {/* Data Container (Table or EmptyState) */}
-      <div className="rounded-[48px] border border-white/80 bg-white/60 backdrop-blur-3xl shadow-2xl shadow-indigo-100/40 flex flex-col overflow-hidden min-h-[400px] transition-all duration-300">
-        {loading ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-20">
-             <Loader2 size={40} className="animate-spin text-indigo-500 mb-4" />
-             <p className="text-slate-400 font-black tracking-tight">Chargement des utilisateurs...</p>
-          </div>
-        ) : filteredUsers.length === 0 ? (
-          /* Empty State Illustration */
-          <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
-            <div className="relative mb-8">
-              <div className="absolute inset-0 blur-3xl opacity-60 rounded-full scale-150 bg-indigo-100"></div>
-              <div className="relative w-32 h-32 rounded-[32px] flex items-center justify-center border-4 border-white shadow-xl bg-slate-50 overflow-hidden">
-                 <UserCircle2 size={128} className="-mb-8 text-slate-300" />
-              </div>
-              <div className="absolute -bottom-2 -right-2 p-3 rounded-2xl shadow-lg bg-white">
-                 <AlertCircle size={28} className="text-indigo-500" />
-              </div>
-            </div>
-            
-            <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Aucun utilisateur trouvé</h2>
-            <p className="text-slate-500 font-bold mb-8 max-w-sm">
-              Ajoutez un nouvel utilisateur pour commencer à gérer votre équipe.
-            </p>
-            
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-3 text-white px-8 py-4 rounded-[22px] font-black shadow-xl shadow-indigo-500/30 transition-all hover:scale-105 active:scale-95 group bg-indigo-600">
-              <Plus size={22} className="transition-transform group-hover:rotate-90" />
-              Créer utilisateur
-            </button>
-          </div>
-        ) : (
-          /* Modern Table */
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-slate-100 text-slate-400">
-                  <th className="px-8 py-6 text-[11px] font-black uppercase tracking-[2px]">ID</th>
-                  <th className="px-8 py-6 text-[11px] font-black uppercase tracking-[2px]">Identifiant</th>
-                  <th className="px-8 py-6 text-[11px] font-black uppercase tracking-[2px]">Nom Complet</th>
-                  <th className="px-8 py-6 text-[11px] font-black uppercase tracking-[2px]">Rôle</th>
-                  <th className="px-8 py-6 text-[11px] font-black uppercase tracking-[2px]">Dépôts Autorisés</th>
-                  <th className="px-8 py-6 text-[11px] font-black uppercase tracking-[2px] text-right">Actions</th>
+      {/* Users Data Table */}
+      <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 overflow-hidden">
+        <div className="overflow-x-auto rounded-2xl border border-slate-200/80">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
+                <th className="py-3.5 px-4">{locale === "ar" ? "المستخدم" : "Utilisateur"}</th>
+                <th className="py-3.5 px-4">{locale === "ar" ? "الاسم الكامل" : "Nom & Prénom"}</th>
+                <th className="py-3.5 px-4">{locale === "ar" ? "الدور والصلاحية" : "Rôle"}</th>
+                <th className="py-3.5 px-4">{locale === "ar" ? "المستودع الرئيسي" : "Dépôt Principal"}</th>
+                <th className="py-3.5 px-4">{locale === "ar" ? "المستودعات المصرح بها" : "Dépôts Autorisés"}</th>
+                <th className="py-3.5 px-4 text-center">{locale === "ar" ? "المدير" : "Admin"}</th>
+                <th className="py-3.5 px-4 text-right">{locale === "ar" ? "إجراءات" : "Actions"}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <Loader2 size={28} className="animate-spin mx-auto text-indigo-600 mb-2" />
+                    <span>{locale === "ar" ? "جاري تحميل المستخدمين..." : "Chargement..."}</span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="group hover:bg-slate-50/50 transition-colors">
-                    <td className="px-8 py-5">
-                      <span className="text-slate-400 font-mono text-xs">#{user.id.toString().padStart(4, '0')}</span>
-                    </td>
-                    <td className="px-8 py-5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center border border-slate-200">
-                           <UserCircle2 size={20} className="text-slate-500" />
+              ) : filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    {locale === "ar" ? "لا يوجد مستخدمين مطابقين للبحث." : "Aucun utilisateur trouvé."}
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((u) => {
+                  const isAdmin = u.admin === "Oui" || u.role_name.toLowerCase().includes("admin");
+
+                  return (
+                    <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-xs uppercase">
+                            {u.utilisateur.slice(0, 2)}
+                          </div>
+                          <span className="font-mono font-black text-slate-900">{u.utilisateur}</span>
                         </div>
-                        <span className="font-bold text-slate-800">{user.utilisateur}</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-5 text-sm font-bold text-slate-600">
-                      {user.nom_prenom}
-                    </td>
-                    <td className="px-8 py-5">
-                      <span className={cn(
-                        "px-3 py-1.5 rounded-lg text-xs font-black",
-                        user.role_name.toLowerCase().includes("admin") ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
-                      )}>
-                        {user.role_name}
-                      </span>
-                    </td>
-                    <td className="px-8 py-5">
-                      <div className="flex flex-wrap gap-1 max-w-[200px]">
-                        {user.depots ? user.depots.split(", ").map((d, i) => (
-                          <span key={i} className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-bold">
-                            {d}
-                          </span>
-                        )) : (
-                          <span className="text-slate-300 text-[10px] font-bold italic">Tous accès</span>
+                      </td>
+
+                      <td className="py-3.5 px-4 font-extrabold text-slate-800">
+                        {u.nom_prenom}
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-xs font-black inline-flex items-center gap-1 ${
+                            isAdmin
+                              ? "bg-amber-100 text-amber-800 border border-amber-300"
+                              : "bg-indigo-100 text-indigo-800"
+                          }`}
+                        >
+                          {isAdmin ? <Crown size={12} /> : <ShieldCheck size={12} />}
+                          {u.role_name}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-xs font-bold text-slate-700">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200">
+                          {u.emplacement}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-xs text-slate-600">
+                        {u.depots ? (
+                          <div className="flex flex-wrap gap-1">
+                            {u.depots.split(", ").map((d, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200">
+                                {d}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic">Tous (Admin)</span>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-8 py-5 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => handleEditUser(user)}
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                      </td>
+
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
+                            isAdmin ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                          }`}
                         >
-                          <Edit3 size={18} />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                          {isAdmin ? "OUI" : "NON"}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleShareCredentialsWhatsApp(u)}
+                            className="p-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer"
+                            title="Envoyer les accès via WhatsApp"
+                          >
+                            <MessageSquare size={14} />
+                          </button>
+
+                          <button
+                            onClick={() => handleOpenEditModal(u)}
+                            className="p-2 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
+                            title="Modifier"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteUser(u.id, u.utilisateur)}
+                            className="p-2 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer"
+                            title="Supprimer"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* --- ADD USER MODAL --- */}
+      {/* User Form Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div 
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-            onClick={() => setIsModalOpen(false)}
-          ></div>
-          
-          <div className="relative bg-white rounded-[32px] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
-            <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-[#f8fafc]">
-              <div>
-                <h2 className="text-xl font-black text-slate-800">{isEditing ? "Modifier l'utilisateur" : "Ajouter un utilisateur"}</h2>
-                <p className="text-slate-500 text-xs font-bold mt-1 uppercase tracking-wider">
-                  {isEditing ? `ID: #${newUser.id?.toString().padStart(4, '0')}` : "Informations du compte"}
-                </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold">
+                  <UserPlus size={16} />
+                </div>
+                <h3 className="text-base font-black text-slate-900">
+                  {isEditing
+                    ? locale === "ar"
+                      ? "تعديل بيانات المستخدم"
+                      : "Modifier l'Utilisateur"
+                    : locale === "ar"
+                    ? "إضافة مستخدم / كاشير جديد"
+                    : "Créer un Nouvel Utilisateur"}
+                </h3>
               </div>
-              <button 
-                onClick={handleCloseModal}
-                className="p-2 hover:bg-slate-200 rounded-xl transition-all"
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
               >
-                <X size={20} className="text-slate-400" />
+                <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={handleAddUser} className="p-8 overflow-y-auto space-y-6">
-              <div className="grid grid-cols-2 gap-5">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Identifiant (Unique)</label>
-                  <input 
-                    required
-                    type="text" 
-                    value={newUser.utilisateur}
-                    onChange={(e) => setNewUser({...newUser, utilisateur: e.target.value})}
-                    className="w-full bg-[#f8fafc] border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                    placeholder="e.g. jdoe"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                    {isEditing ? "Nouveau MDP (Optionnel)" : "Mot de passe"}
+            <form onSubmit={handleSaveUser} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {locale === "ar" ? "اسم المستخدم (Login)" : "Identifiant (Login)"} *
                   </label>
-                  <input 
-                    required={!isEditing}
-                    type="password" 
-                    value={newUser.mot_de_passe}
-                    onChange={(e) => setNewUser({...newUser, mot_de_passe: e.target.value})}
-                    className="w-full bg-[#f8fafc] border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                    placeholder="••••••••"
+                  <input
+                    type="text"
+                    required
+                    value={newUser.utilisateur}
+                    onChange={(e) => setNewUser({ ...newUser, utilisateur: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {locale === "ar" ? "الاسم واللقب" : "Nom & Prénom"}
+                  </label>
+                  <input
+                    type="text"
+                    value={newUser.nom_prenom}
+                    onChange={(e) => setNewUser({ ...newUser, nom_prenom: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Nom complet</label>
-                <input 
-                  type="text" 
-                  value={newUser.nom_prenom}
-                  onChange={(e) => setNewUser({...newUser, nom_prenom: e.target.value})}
-                  className="w-full bg-[#f8fafc] border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                  placeholder="John Doe"
-                />
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {locale === "ar" ? "كلمة المرور" : "Mot de passe"}{" "}
+                  {isEditing && <span className="text-slate-400 font-normal">(Laissez vide pour conserver)</span>} *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required={!isEditing}
+                    value={newUser.mot_de_passe}
+                    onChange={(e) => setNewUser({ ...newUser, mot_de_passe: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-5">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Rôle Système</label>
-                  <select 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {locale === "ar" ? "الدور والصلاحيات" : "Rôle"}
+                  </label>
+                  <select
                     value={newUser.role_id}
-                    onChange={(e) => setNewUser({...newUser, role_id: e.target.value})}
-                    className="w-full bg-[#f8fafc] border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none"
+                    onChange={(e) => setNewUser({ ...newUser, role_id: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
                   >
-                    <option value="">Sélectionner...</option>
-                    {roles.map(r => (
-                      <option key={r.id} value={r.id}>{r.role_name}</option>
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.role_name}
+                      </option>
                     ))}
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Administrateur ?</label>
-                  <select 
-                    value={newUser.admin}
-                    onChange={(e) => setNewUser({...newUser, admin: e.target.value})}
-                    className="w-full bg-[#f8fafc] border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none"
-                  >
-                    <option value="Non">Non</option>
-                    <option value="Oui">Oui (Accès complet)</option>
-                  </select>
-                </div>
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Dépôts Autorisés (Multi-sélection)</label>
-                <div className="relative">
-                  <button 
-                    type="button"
-                    onClick={() => setIsDepotDropdownOpen(!isDepotDropdownOpen)}
-                    className="w-full bg-[#f8fafc] border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold flex items-center justify-between transition-all hover:bg-slate-100/50"
-                  >
-                    <span className="truncate">
-                      {newUser.depots.length === 0 ? "Aucun (Accès à tous)" : `${newUser.depots.length} dépôt(s) sélectionné(s)`}
-                    </span>
-                    <ChevronDown size={16} className={cn("transition-transform", isDepotDropdownOpen && "rotate-180")} />
-                  </button>
-                  
-                  {isDepotDropdownOpen && (
-                    <div className="absolute z-10 mt-2 w-full bg-white border border-slate-200 rounded-xl shadow-xl p-2 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-2">
-                      {availableDepotsData.length === 0 ? (
-                        <p className="text-center py-4 text-xs font-bold text-slate-400 italic">Aucun dépôt trouvé</p>
-                      ) : (
-                        availableDepotsData.map(depot => (
-                          <div 
-                            key={depot.id}
-                            onClick={() => toggleDepot(depot.id)}
-                            className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
-                          >
-                            <span className="text-sm font-bold text-slate-700">{depot.nom}</span>
-                            {newUser.depots.includes(depot.id) && <Check size={16} className="text-blue-600" />}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-5">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Emplacement Principal</label>
-                  <input 
-                    type="text" 
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {locale === "ar" ? "المستودع الرئيسي" : "Dépôt Principal"}
+                  </label>
+                  <select
                     value={newUser.emplacement}
-                    onChange={(e) => setNewUser({...newUser, emplacement: e.target.value})}
-                    className="w-full bg-[#f8fafc] border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                    placeholder="Magasin Principal"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Langue</label>
-                  <select 
-                    value={newUser.langue}
-                    onChange={(e) => setNewUser({...newUser, langue: e.target.value})}
-                    className="w-full bg-[#f8fafc] border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all appearance-none"
+                    onChange={(e) => setNewUser({ ...newUser, emplacement: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
                   >
-                    <option value="FR">Français</option>
-                    <option value="AR">العربية</option>
+                    {availableDepotsData.map((d) => (
+                      <option key={d.id} value={d.nom}>
+                        {d.nom}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
 
-              <div className="pt-4 flex gap-4">
-                <button 
+              {/* Multi-Warehouse Assignment */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {locale === "ar" ? "المستودعات المصرح له بالبيع والاطلاع عليها" : "Dépôts Autorisés Multi-Agences"}
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  {availableDepotsData.map((d) => {
+                    const isChecked = newUser.depots.includes(d.id);
+                    return (
+                      <label key={d.id} className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewUser({ ...newUser, depots: [...newUser.depots, d.id] });
+                            } else {
+                              setNewUser({ ...newUser, depots: newUser.depots.filter((id) => id !== d.id) });
+                            }
+                          }}
+                          className="w-4 h-4 rounded text-indigo-600"
+                        />
+                        <span>{d.nom}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
                   type="button"
-                  onClick={handleCloseModal}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 px-6 py-4 rounded-[18px] font-black transition-all"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
                 >
-                  Annuler
+                  {locale === "ar" ? "إلغاء" : "Annuler"}
                 </button>
-                <button 
+
+                <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 text-white px-6 py-4 rounded-[18px] font-black shadow-lg shadow-indigo-100 transition-all active:scale-95 flex items-center justify-center gap-2 bg-[#6366f1] disabled:opacity-70"
+                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : (isEditing ? <Save size={20} /> : <UserPlus size={20} />)}
-                  {isEditing ? "Enregistrer" : "Créer"}
+                  {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  <span>{locale === "ar" ? "حفظ المستخدم" : "Enregistrer"}</span>
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
-        
-        body {
-          font-family: 'Outfit', sans-serif;
-        }
-      `}</style>
     </div>
-  );
-}
-
-// Minimal Store icon if Store from lucide-react is not available
-function Store({ size, className }: { size: number, className?: string }) {
-  return (
-    <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      width={size} 
-      height={size} 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round" 
-      className={className}
-    >
-      <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" />
-      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-      <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4" />
-      <path d="M2 7h20" />
-      <path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7" />
-    </svg>
   );
 }
