@@ -34,6 +34,7 @@ import {
   RefreshCw,
   Phone,
   Calendar,
+  Receipt,
 } from "lucide-react";
 import AdvanceReceiptModal from "./AdvanceReceiptModal";
 import DepositListModal from "./DepositListModal";
