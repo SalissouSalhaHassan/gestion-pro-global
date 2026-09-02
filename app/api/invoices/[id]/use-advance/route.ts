@@ -40,7 +40,7 @@ export async function POST(
   // 1. Verify Advance availability
   const { data: advance, error: advError } = await supabase
     .from("avances_clients")
-    .select("montant_restant")
+    .select("id, montant_initial, montant_restant")
     .eq("id", advance_id)
     .single();
 
