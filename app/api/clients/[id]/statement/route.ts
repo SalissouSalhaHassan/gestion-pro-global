@@ -31,6 +31,13 @@ export async function GET(
       return NextResponse.json({ error: "Client introuvable" }, { status: 404 });
     }
 
+    // 1.1 Fetch Company Details
+    const { data: company } = await supabase
+      .from("informations_entreprise")
+      .select("*")
+      .limit(1)
+      .single();
+
     // 2. Fetch Client Advances
     const { data: advances, error: advErr } = await supabase
       .from("avances_clients")
@@ -83,9 +90,11 @@ export async function GET(
         date: adv.date_avance || adv.created_at || new Date().toISOString(),
         type: "Dépôt d'avance",
         reference: adv.reference_paiement || `DEP-${adv.id}`,
+        moyen_paiement: adv.moyen_paiement || "Espèce",
+        emplacement: adv.emplacement || "BOUTIQUE",
         debit: 0,
         credit: Number(adv.montant_initial),
-        notes: adv.notes || `Dépôt initial via ${adv.moyen_paiement}`,
+        notes: adv.notes || `Dépôt initial via ${adv.moyen_paiement || 'Espèce'}`,
         utilisateur: adv.utilisateur
       });
     });
@@ -98,6 +107,8 @@ export async function GET(
           date: h.date_action || new Date().toISOString(),
           type: "Retrait d'avance",
           reference: `ADV-${h.advance_id}`,
+          moyen_paiement: "Espèce",
+          emplacement: "BOUTIQUE",
           debit: Number(h.amount),
           credit: 0,
           notes: h.notes || "Retrait de fonds",
@@ -109,6 +120,8 @@ export async function GET(
           date: h.date_action || new Date().toISOString(),
           type: "Annulation d'avance",
           reference: `ADV-${h.advance_id}`,
+          moyen_paiement: "—",
+          emplacement: "BOUTIQUE",
           debit: Number(h.amount),
           credit: 0,
           notes: h.notes || "Annulation du dépôt",
@@ -123,10 +136,12 @@ export async function GET(
         id: `inv-${inv.id}`,
         date: inv.date_facture || inv.created_at || new Date().toISOString(),
         type: "Facture",
-        reference: inv.num_facture || `FAC-${inv.id}`,
+        reference: inv.bl_number || inv.num_facture || `FAC-${inv.id}`,
+        moyen_paiement: inv.mode_paiement || "Facturation",
+        emplacement: inv.depot || "BOUTIQUE",
         debit: Number(inv.total_ttc),
         credit: 0,
-        notes: `Achat de marchandises ${inv.bl_number ? `(BL: ${inv.bl_number})` : ""}`,
+        notes: `Facturation vente ${inv.bl_number ? `(BL: ${inv.bl_number})` : ""}`,
         utilisateur: inv.vendeur
       });
     });
@@ -139,10 +154,12 @@ export async function GET(
           id: `pay-${p.id}`,
           date: p.date_operation || p.created_at || new Date().toISOString(),
           type: "Règlement Facture",
-          reference: p.factures?.num_facture || `FAC-${p.facture_id}`,
+          reference: p.factures?.bl_number || p.factures?.num_facture || `FAC-${p.facture_id}`,
+          moyen_paiement: p.moyen_reglement || "Espèce",
+          emplacement: "BOUTIQUE",
           debit: 0,
           credit: Number(p.montant_regle),
-          notes: `Règlement via ${p.moyen_reglement}`,
+          notes: `Règlement facture via ${p.moyen_reglement}`,
           utilisateur: p.utilisateur
         });
       } else {
@@ -152,10 +169,12 @@ export async function GET(
           id: `pay-adv-ded-${p.id}`,
           date: p.date_operation || p.created_at || new Date().toISOString(),
           type: "Utilisation d'avance",
-          reference: p.factures?.num_facture || `FAC-${p.facture_id}`,
+          reference: p.factures?.bl_number || p.factures?.num_facture || `FAC-${p.facture_id}`,
+          moyen_paiement: "Imputation Avance",
+          emplacement: "BOUTIQUE",
           debit: Number(p.montant_regle),
           credit: 0,
-          notes: `Déduction de l'avance pour régler la facture`,
+          notes: `Imputation sur Facture ${p.factures?.bl_number || p.factures?.num_facture || p.facture_id}`,
           utilisateur: p.utilisateur
         });
 
@@ -164,10 +183,12 @@ export async function GET(
           id: `pay-adv-rec-${p.id}`,
           date: p.date_operation || p.created_at || new Date().toISOString(),
           type: "Règlement par Avance",
-          reference: p.factures?.num_facture || `FAC-${p.facture_id}`,
+          reference: p.factures?.bl_number || p.factures?.num_facture || `FAC-${p.facture_id}`,
+          moyen_paiement: "Imputation Avance",
+          emplacement: "BOUTIQUE",
           debit: 0,
           credit: Number(p.montant_regle),
-          notes: `Paiement réglé par le solde d'avance`,
+          notes: `Facture acquittée par solde d'avance`,
           utilisateur: p.utilisateur
         });
       }
@@ -193,6 +214,7 @@ export async function GET(
     const netPosition = unusedAdvances - totalDebt;
 
     return NextResponse.json({
+      company: company || null,
       client: {
         id: client.id,
         nom: client.nom,

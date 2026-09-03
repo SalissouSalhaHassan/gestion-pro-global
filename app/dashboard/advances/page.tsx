@@ -838,10 +838,11 @@ export default function AdvancesPage() {
                               setSelectedClientIdForStatement(c.id);
                               setSelectedClientNomForStatement(c.nom);
                             }}
-                            className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl text-xs font-black transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                            className="px-3.5 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-xl text-xs font-black transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs border border-blue-200/60 active:scale-95"
+                            title={locale === "ar" ? "عرض وطباعة كشف الحساب المالي المفصل" : "Afficher l'extrait de compte officiel"}
                           >
                             <FileSpreadsheet size={13} />
-                            <span>{locale === "ar" ? "الكشف" : "Relevé"}</span>
+                            <span>{locale === "ar" ? "كشف الحساب" : "Relevé"}</span>
                           </button>
                         </td>
                       </tr>
