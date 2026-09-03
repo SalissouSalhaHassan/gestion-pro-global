@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Users, Search, Plus, UserCircle2, ArrowUpDown, Banknote, ShieldAlert, Loader2, X, Save, FileText, Printer, MessageCircle } from "lucide-react";
 import ClientListModal from "./ClientListModal";
+import WhatsAppDebtModal from "@/components/WhatsAppDebtModal";
 import { createClient } from "@/lib/supabase/client";
 import { getClientSessionFromCookie, isAdminOrManagerSession, DEFAULT_CLIENT_ID } from "@/lib/client_helpers";
 
@@ -42,23 +43,13 @@ export default function ClientsPage() {
   
   // Debt Details State
   const [selectedClientForDebt, setSelectedClientForDebt] = useState<Client | null>(null);
+  const [whatsAppDebtClient, setWhatsAppDebtClient] = useState<Client | null>(null);
   const [clientInvoices, setClientInvoices] = useState<any[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const sendWhatsAppReminder = (client: Client) => {
-    if (!client.tel) {
-      alert("Ce client n'a pas de numéro de téléphone enregistré.");
-      return;
-    }
-    
-    const cleanTel = client.tel.replace(/\D/g, '');
-    const debt = Number(client.credit_facture || 0) + Number(client.credit_bl || 0);
-    
-    const message = `*ETS SALISSOU SALHA*\n\nBonjour ${client.nom},\n\nNous vous contactons pour un rappel concernant votre solde débiteur qui s'élève à *${debt.toLocaleString()} F CFA*.\n\nNous vous prions de bien vouloir régulariser votre situation dès que possible.\n\nMerci de votre confiance !`;
-    const encodedMsg = encodeURIComponent(message);
-    
-    window.open(`https://wa.me/${cleanTel}?text=${encodedMsg}`, '_blank');
+    setWhatsAppDebtClient(client);
   };
 
   const handleAddClient = async (e: React.FormEvent) => {
@@ -648,6 +639,14 @@ export default function ClientsPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* WhatsApp Debt Reminder Modal */}
+      {whatsAppDebtClient && (
+        <WhatsAppDebtModal
+          client={whatsAppDebtClient}
+          onClose={() => setWhatsAppDebtClient(null)}
+        />
       )}
 
       <style jsx global>{`

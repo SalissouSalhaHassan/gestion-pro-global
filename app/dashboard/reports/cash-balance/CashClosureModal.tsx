@@ -21,10 +21,12 @@ import {
   Sparkles,
   ArrowRight,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  MessageSquare
 } from "lucide-react";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
 import { createClient } from "@/lib/supabase/client";
+import { generateCashClosureWhatsAppMessage, openWhatsAppDirect } from "@/lib/utils/whatsapp";
 
 const supabase = createClient();
 
@@ -102,6 +104,21 @@ export default function CashClosureModal({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleSendWhatsApp = () => {
+    const text = generateCashClosureWhatsAppMessage({
+      companyName: company?.nom_entreprise || "GESTION PRO GLOBAL",
+      dateClosure: new Date(closureDate).toLocaleDateString("fr-FR"),
+      cashierName: filters.cashier === "Tous" ? userSession?.username || "Caisse" : filters.cashier,
+      fondDeCaisse,
+      encaissements: summary.totalIncome,
+      decaissements: summary.totalExpenses,
+      soldeTheorique,
+      soldeReel: Number(especesComptees) || 0,
+      ecart,
+    });
+    openWhatsAppDirect("", text);
   };
 
   return (
@@ -348,13 +365,22 @@ export default function CashClosureModal({
               >
                 ← Modifier le comptage
               </button>
-              <button
-                onClick={handlePrint}
-                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-2"
-              >
-                <Printer size={15} />
-                <span>Imprimer le Rapport Z</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSendWhatsApp}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-2"
+                >
+                  <MessageSquare size={15} />
+                  <span>Envoyer Rapport Z (WhatsApp)</span>
+                </button>
+                <button
+                  onClick={handlePrint}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-2"
+                >
+                  <Printer size={15} />
+                  <span>Imprimer le Rapport Z</span>
+                </button>
+              </div>
             </div>
 
             {/* PRINT AREA: THERMAL 80MM TICKET OR FORMAL A4 */}

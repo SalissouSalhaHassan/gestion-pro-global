@@ -94,3 +94,149 @@ export function openWhatsAppDirect(phone: string, message: string) {
     window.open(url, "_blank");
   }
 }
+
+/**
+ * Generates an Enterprise Customer Debt Reminder WhatsApp Message
+ */
+export function generateDebtReminderWhatsAppMessage(params: {
+  companyName: string;
+  clientName: string;
+  totalDebt: number;
+  invoiceDebt?: number;
+  blDebt?: number;
+  tone?: "friendly" | "formal";
+  currency?: string;
+  locale?: Locale;
+}): string {
+  const {
+    companyName,
+    clientName,
+    totalDebt,
+    invoiceDebt = 0,
+    blDebt = 0,
+    tone = "friendly",
+    currency = "FCFA",
+    locale = "fr",
+  } = params;
+
+  const fmtTotal = formatCurrencyAmount(totalDebt, currency, locale);
+  const fmtInv = formatCurrencyAmount(invoiceDebt, currency, locale);
+  const fmtBl = formatCurrencyAmount(blDebt, currency, locale);
+
+  if (locale === "ar") {
+    if (tone === "formal") {
+      return (
+        `*⚠️ إشعار تسوية رصيد مستحق - ${companyName}*\n\n` +
+        `عناية السيد/المؤسسة: *${clientName}*\n\n` +
+        `نحيطكم علماً بأن ذمتكم المالية لدى شركتنا تسجل رصيداً مستحق السداد قدره: *${fmtTotal}*.\n` +
+        (invoiceDebt > 0 ? `• فواتير مستحقة: ${fmtInv}\n` : "") +
+        (blDebt > 0 ? `• سندات تسليم معلقة: ${fmtBl}\n` : "") +
+        `\nنرجو منكم التكرم باتخاذ الإجراءات اللازمة لتحويل أو تسديد المبلغ في أقرب الآجال.\n\n` +
+        `شاكرين لكم حسن تعاونكم وتفضلوا بقبول فائق الاحترام والتقدير.\n` +
+        `*الإدارة المالية - ${companyName}*`
+      );
+    }
+    return (
+      `*🌸 تذكير لطيف من ${companyName}*\n\n` +
+      `أهلاً بك عزيزنا *${clientName}*،\n` +
+      `نتمنى أن تكون بخير وعافية. نود تذكيركم بلطف بأن رصيدكم الحالي المستحق هو: *${fmtTotal}*.\n\n` +
+      `نسعد دائماً بخدمتكم وشكراً لثقتكم المستمرة بنا! ✨🙏\n` +
+      `*${companyName}*`
+    );
+  }
+
+  // French (default)
+  if (tone === "formal") {
+    return (
+      `*⚠️ AVIS DE RÈGLEMENT - ${companyName}*\n\n` +
+      `À l'attention de : *${clientName}*\n\n` +
+      `Sauf erreur ou omission de notre part, votre compte présente un solde débiteur en notre faveur de : *${fmtTotal}*.\n` +
+      (invoiceDebt > 0 ? `• Factures échues : ${fmtInv}\n` : "") +
+      (blDebt > 0 ? `• Bons de livraison : ${fmtBl}\n` : "") +
+      `\nNous vous prions de bien vouloir procéder à la régularisation de cette situation dans les meilleurs délais.\n\n` +
+      `Restant à votre disposition, veuillez agréer nos salutations distinguées.\n` +
+      `*Service Comptabilité - ${companyName}*`
+    );
+  }
+
+  return (
+    `*🌸 Rappel Confraternel - ${companyName}*\n\n` +
+    `Bonjour *${clientName}*,\n` +
+    `Nous espérons que vous allez bien. Sauf erreur de notre part, votre encours actuel s'élève à *${fmtTotal}*.\n\n` +
+    `Merci de bien vouloir prévoir son règlement lors de votre prochain passage.\n` +
+    `Au plaisir de vous servir à nouveau ! ✨🙏\n` +
+    `*${companyName}*`
+  );
+}
+
+/**
+ * Generates an Executive Daily Cash Register Closure (Rapport Z) WhatsApp Message
+ */
+export function generateCashClosureWhatsAppMessage(params: {
+  companyName: string;
+  dateClosure: string;
+  cashierName: string;
+  fondDeCaisse: number;
+  encaissements: number;
+  decaissements: number;
+  soldeTheorique: number;
+  soldeReel: number;
+  ecart: number;
+  currency?: string;
+  locale?: Locale;
+}): string {
+  const {
+    companyName,
+    dateClosure,
+    cashierName,
+    fondDeCaisse,
+    encaissements,
+    decaissements,
+    soldeTheorique,
+    soldeReel,
+    ecart,
+    currency = "FCFA",
+    locale = "fr",
+  } = params;
+
+  const fmt = (n: number) => formatCurrencyAmount(n, currency, locale);
+
+  const ecartText =
+    ecart === 0
+      ? (locale === "ar" ? "✅ الصندوق متطابق بدقة (0 FCFA)" : "✅ Caisse parfaitement équilibrée (0 FCFA)")
+      : ecart > 0
+      ? (locale === "ar" ? `🟢 فائض نقدي: +${fmt(ecart)}` : `🟢 Excédent de caisse : +${fmt(ecart)}`)
+      : (locale === "ar" ? `🔴 عجز في الصندوق: ${fmt(ecart)}` : `🔴 Déficit de caisse : ${fmt(ecart)}`);
+
+  if (locale === "ar") {
+    return (
+      `*📊 تقرير إغلاق الصندوق اليومي (Rapport Z)*\n` +
+      `🏢 *المؤسسة:* ${companyName}\n` +
+      `📅 *التاريخ:* ${dateClosure}\n` +
+      `👤 *مسؤول الصندوق:* ${cashierName}\n\n` +
+      `💵 *رصيد البداية (Fond de Caisse):* ${fmt(fondDeCaisse)}\n` +
+      `📥 *إجمالي المقبوضات (Ventes):* ${fmt(encaissements)}\n` +
+      `📤 *إجمالي المدفوعات (Dépenses):* ${fmt(decaissements)}\n` +
+      `──────────────────\n` +
+      `📈 *الرصيد الدفتري المحاسبي:* ${fmt(soldeTheorique)}\n` +
+      `💰 *الرصيد الفعلي المعدود:* ${fmt(soldeReel)}\n` +
+      `⚖️ *نتيجة المطابقة:* ${ecartText}\n\n` +
+      `*تم إنشاء هذا التقرير آلياً عبر Gestion Pro Global*`
+    );
+  }
+
+  return (
+    `*📊 RAPPORT DE CLÔTURE DE CAISSE (RAPPORT Z)*\n` +
+    `🏢 *Entreprise :* ${companyName}\n` +
+    `📅 *Date :* ${dateClosure}\n` +
+    `👤 *Caissier :* ${cashierName}\n\n` +
+    `💵 *Fond de Caisse :* ${fmt(fondDeCaisse)}\n` +
+    `📥 *Encaissements (Ventes) :* ${fmt(encaissements)}\n` +
+    `📤 *Décaissements (Dépenses) :* ${fmt(decaissements)}\n` +
+    `──────────────────\n` +
+    `📈 *Solde Théorique :* ${fmt(soldeTheorique)}\n` +
+    `💰 *Espèces Réelles Comptées :* ${fmt(soldeReel)}\n` +
+    `⚖️ *Bilan & Écart :* ${ecartText}\n\n` +
+    `*Généré automatiquement par Gestion Pro Global 4K*`
+  );
+}
