@@ -184,49 +184,54 @@ export default function AdvanceReceiptModal({
       });
     });
 
-    // 3. Linked Payments for target advances
+    // 3. Linked Payments for target advances (Real Invoices & Operations)
     advancePayments.forEach(p => {
-      if (targetIds.includes(Number(p.avance_client_id))) {
-        const pRef = p.factures?.bl_number || p.reference_paiement || `REG-${p.id}`;
-        const alreadyIn = list.some(item => item.ref === pRef);
-        if (!alreadyIn) {
-          list.push({
-            id: `p-${p.id}`,
-            date: p.date_operation || p.created_at,
-            type: locale === "ar" ? "تسوية فاتورة" : "Règlement Facture",
-            ref: pRef,
-            mode: p.moyen_reglement || "Avance",
-            debit: Number(p.montant_regle) || 0,
-            credit: 0,
-            notes: `${locale === "ar" ? "فاتورة" : "Facture"} ${p.factures?.bl_number || ""}`,
-            timestamp: new Date(p.date_operation || p.created_at).getTime()
-          });
-        }
+      const advId = Number(p.avance_client_id);
+      if (targetIds.includes(advId)) {
+        const invNumber = p.factures?.bl_number || p.factures?.num_facture || `FAC-${p.facture_id}`;
+        list.push({
+          id: `pay-${p.id}`,
+          date: p.date_operation || p.created_at,
+          type: locale === "ar" 
+            ? (viewScope === 'all' ? `تسوية فاتورة (DEP-${advId})` : "تسوية فاتورة مبيعات")
+            : (viewScope === 'all' ? `Règlement Facture (DEP-${advId})` : "Règlement Facture"),
+          ref: invNumber,
+          mode: p.moyen_reglement || "Avance",
+          debit: Number(p.montant_regle) || 0,
+          credit: 0,
+          notes: `${locale === "ar" ? "تسوية الفاتورة" : "Règlement Facture"} ${invNumber}`,
+          timestamp: new Date(p.date_operation || p.created_at).getTime()
+        });
       }
     });
 
-    // 4. Per-advance reconciliation: If remaining < initial and not explained by explicit history
+    // 4. Per-advance reconciliation: If remaining < initial and debits don't equal difference
     targetAdvances.forEach(advItem => {
-      const explicitDebitsForAdv = relevantHistory
+      const histDebits = relevantHistory
         .filter(h => Number(h.advance_id) === Number(advItem.id))
         .reduce((sum, h) => sum + Number(h.amount || 0), 0);
 
+      const payDebits = advancePayments
+        .filter(p => Number(p.avance_client_id) === Number(advItem.id))
+        .reduce((sum, p) => sum + Number(p.montant_regle || 0), 0);
+
+      const totalAccounted = histDebits + payDebits;
       const expectedConsumed = Math.max(0, (Number(advItem.montant_initial) || 0) - (Number(advItem.montant_restant) || 0));
 
-      if (expectedConsumed > explicitDebitsForAdv) {
-        const diff = expectedConsumed - explicitDebitsForAdv;
+      if (expectedConsumed > totalAccounted) {
+        const diff = expectedConsumed - totalAccounted;
         list.push({
           id: `auto-diff-${advItem.id}`,
           date: advItem.updated_at || advItem.date_avance || advItem.created_at,
           type: locale === "ar" 
-            ? (viewScope === 'all' ? `استخدام في فواتير / سحب (DEP-${advItem.id})` : "استخدام في فواتير / سحب")
-            : (viewScope === 'all' ? `Utilisation Facture / Retrait (DEP-${advItem.id})` : "Utilisation Facture / Retrait"),
+            ? (viewScope === 'all' ? `حركة سحب / استهلاك (DEP-${advItem.id})` : "حركة سحب / استهلاك")
+            : (viewScope === 'all' ? `Retrait / Déduction (DEP-${advItem.id})` : "Retrait / Déduction"),
           ref: `IMP-00${advItem.id}`,
           mode: "Avance",
           debit: diff,
           credit: 0,
-          notes: locale === "ar" ? "تسوية مشتريات أو سحب نقدية" : "Imputation sur vente ou retrait de fonds",
-          timestamp: new Date(advItem.updated_at || advItem.date_avance || advItem.created_at).getTime() + 500
+          notes: locale === "ar" ? "استهلاك أو سحب سابق" : "Déduction antérieure",
+          timestamp: new Date(advItem.date_avance || advItem.created_at).getTime() + 1000
         });
       }
     });
@@ -280,19 +285,6 @@ export default function AdvanceReceiptModal({
         setAdvance(adv);
 
         if (adv) {
-          // Fetch linked payments for this advance
-          try {
-            const { data: payData } = await supabase
-              .from("paiements")
-              .select("*, factures(id, bl_number, num_facture, total_ttc)")
-              .eq("avance_client_id", adv.id);
-            if (payData) {
-              setAdvancePayments(payData);
-            }
-          } catch (pErr) {
-            console.warn("Notice: paiements query in AdvanceReceiptModal:", pErr);
-          }
-
           const { data: allAdvs } = await supabase
             .from("avances_clients")
             .select("*")
@@ -304,6 +296,20 @@ export default function AdvanceReceiptModal({
 
           if (advancesList.length > 0) {
             const advIds = advancesList.map(a => a.id);
+
+            // Fetch ALL linked payments for all client advances
+            try {
+              const { data: payData, error: pErr } = await supabase
+                .from("paiements")
+                .select("*, factures(id, bl_number, num_facture, total_ttc, date_facture)")
+                .in("avance_client_id", advIds);
+              if (!pErr && payData) {
+                setAdvancePayments(payData);
+              }
+            } catch (pErr) {
+              console.warn("Notice: paiements query in AdvanceReceiptModal:", pErr);
+            }
+
             try {
               const { data: allHist, error: hErr } = await supabase
                 .from("avances_history")
