@@ -32,18 +32,20 @@ export async function GET() {
     // 4. Group permissions by category (same logic as Python)
     const categoryMap: Record<string, string> = {
       sale: "Ventes & Facturation",
+      pos: "Point de Vente (POS)",
       stock: "Gestion de Stock",
       client: "Clients & Crédits",
+      deposit: "Acomptes & Avances",
       supplier: "Fournisseurs & Achats",
+      purchase: "Fournisseurs & Achats",
       expense: "Dépenses & Caisse",
       report: "Rapports & Statistiques",
-      admin: "Administration & Paramètres",
-      user: "Utilisateurs & Profils",
-      pos: "Point de Vente (POS)",
-      deposit: "Acomptes & Avances",
+      cement: "Gestion du Ciment",
       vehicles: "Gestion Parc & Véhicules",
       rent: "Gestion des Loyers",
-      cement: "Gestion du Ciment",
+      copilot: "Intelligence Artificielle Copilot",
+      admin: "Administration & Paramètres",
+      user: "Utilisateurs & Profils",
     };
 
     const grouped: Record<string, typeof permissions> = {};
@@ -76,9 +78,12 @@ export async function GET() {
 
     return NextResponse.json({
       roles: roles || [],
+      grouped: grouped,
       groupedPermissions: grouped,
+      role_permissions: rolePermMap,
       rolePermissions: rolePermMap,
-      roleCounts,
+      role_counts: roleCounts,
+      roleCounts: roleCounts,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -125,3 +130,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+// POST alias to PUT
+export const POST = PUT;
+
