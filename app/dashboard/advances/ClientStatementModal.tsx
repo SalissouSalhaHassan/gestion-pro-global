@@ -223,11 +223,46 @@ export default function ClientStatementModal({ clientId, clientNom, onClose }: C
     window.open(url, "_blank");
   };
 
+  const handleOpenPDF = () => {
+    const url = `/api/clients/${clientId}/statement/pdf?start=${startDate}&end=${endDate}&lang=${locale}`;
+    window.open(url, "_blank");
+  };
+
   const company = data?.company;
   const client = data?.client;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 print:p-0 print:static print:inset-auto animate-in fade-in duration-200">
+      {/* Strict Print CSS Isolation: Hides Entire Dashboard During Print */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-statement, #printable-statement * {
+            visibility: visible !important;
+          }
+          #printable-statement {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 8mm 6mm !important;
+            background: white !important;
+            z-index: 9999999 !important;
+            overflow: visible !important;
+          }
+          .print\\:hidden, .no-print {
+            display: none !important;
+          }
+          @page {
+            size: A4 portrait;
+            margin: 6mm;
+          }
+        }
+      `}</style>
+
       {/* Modal Backdrop (hidden in print) */}
       <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm print:hidden" onClick={onClose}></div>
 
@@ -278,12 +313,22 @@ export default function ClientStatementModal({ clientId, clientNom, onClose }: C
             </button>
 
             <button 
+              onClick={handleOpenPDF}
+              disabled={loading || !data}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60 rounded-xl font-black text-xs transition-all active:scale-95 shadow-xs cursor-pointer"
+              title={locale === "ar" ? "فتح وتصدير مستند PDF رسمي" : "Ouvrir et exporter en PDF officiel"}
+            >
+              <Download size={15} /> 
+              <span>{locale === "ar" ? "تصدير PDF" : "Exporter PDF"}</span>
+            </button>
+
+            <button 
               onClick={handlePrint}
               disabled={loading || !data}
               className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs transition-all active:scale-95 shadow-md shadow-blue-600/20 cursor-pointer"
             >
               <Printer size={15} /> 
-              <span>{locale === "ar" ? "طباعة A4 / PDF" : "Imprimer A4"}</span>
+              <span>{locale === "ar" ? "طباعة A4" : "Imprimer A4"}</span>
             </button>
 
             <button 
