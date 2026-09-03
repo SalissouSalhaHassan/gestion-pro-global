@@ -1,17 +1,19 @@
 {
-  "name": "LOGICIEL EASY",
-  "short_name": "EasyPOS",
-  "description": "Application de gestion commerciale et point de vente professionnelle",
+  "name": "Gestion Pro Global - ERP & POS",
+  "short_name": "GestionPro",
+  "description": "Système de Gestion Commerciale, Point de Vente (POS) et Facturation Multi-Entreprises",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "orientation": "any",
+  "background_color": "#0f172a",
   "theme_color": "#4f46e5",
   "icons": [
     {
       "src": "/icon.svg",
-      "sizes": "any",
+      "sizes": "192x192 512x512",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
-  ]
+  ],
+  "categories": ["business", "finance", "productivity"]
 }

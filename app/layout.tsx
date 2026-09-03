@@ -1,14 +1,22 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { LanguageProvider } from "@/lib/i18n/context";
+import { PWAProvider } from "@/components/PWAProvider";
+import PWAInstallBanner from "@/components/PWAInstallBanner";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#4f46e5",
+};
 
 export const metadata: Metadata = {
-  title: "GestionPro Global | Système de Gestion Commerciale",
-  description: "Plateforme SaaS globale de gestion commerciale, POS et facturation multi-entreprises",
+  title: "GestionPro Global | Système ERP & POS d'Entreprise",
+  description: "Plateforme SaaS globale de gestion commerciale, POS, multi-devises et facturation",
   manifest: "/manifest.json",
-  themeColor: "#4f46e5",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -25,10 +33,12 @@ export default function RootLayout({
     <html lang="fr" dir="ltr">
       <body className="min-h-screen bg-background text-foreground antialiased">
         <LanguageProvider>
-          {children}
+          <PWAProvider>
+            {children}
+            <PWAInstallBanner />
+          </PWAProvider>
         </LanguageProvider>
       </body>
     </html>
   );
 }
-
