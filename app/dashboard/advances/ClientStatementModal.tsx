@@ -154,10 +154,7 @@ export default function ClientStatementModal({ clientId, clientNom, onClose }: C
     };
   }, [data, startDate, endDate, typeFilter, searchTerm]);
 
-  // Actions: Print, CSV, WhatsApp
-  const handlePrint = () => {
-    window.print();
-  };
+  // Actions: CSV, WhatsApp, PDF, Print
 
   const handleExportCSV = () => {
     if (!data || !data.events) return;
