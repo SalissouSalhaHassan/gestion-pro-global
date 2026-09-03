@@ -156,7 +156,8 @@ export default function DepositListModal({ onClose }: DepositListModalProps) {
                                 </span>
                             </td>
                         </tr>
-                    ))}
+                      );
+                    })}
                 </tbody>
                 <tfoot>
                     <tr className="bg-slate-900 text-white font-black uppercase text-[10px]">
