@@ -13,6 +13,7 @@ export async function GET(
     const startDate = searchParams.get("start") || "";
     const endDate = searchParams.get("end") || "";
     const lang = searchParams.get("lang") || "fr";
+    const autoPrint = searchParams.get("autoPrint") === "true";
 
     if (isNaN(clientId)) {
       return NextResponse.json({ error: "Invalid client ID" }, { status: 400 });
@@ -617,6 +618,16 @@ export async function GET(
               : "Extrait de compte certifié conforme aux écritures du système GESTION PRO GLOBAL. Document officiel faisant foi pour rapprochement financier."}
         </div>
     </div>
+
+    <script>
+        ${autoPrint ? `
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                window.print();
+            }, 500);
+        });
+        ` : ''}
+    </script>
 </body>
 </html>`;
 

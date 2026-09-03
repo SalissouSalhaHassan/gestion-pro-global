@@ -225,7 +225,14 @@ export default function ClientStatementModal({ clientId, clientNom, onClose }: C
 
   const handleOpenPDF = () => {
     const url = `/api/clients/${clientId}/statement/pdf?start=${startDate}&end=${endDate}&lang=${locale}`;
-    window.open(url, "_blank");
+    const w = window.open(url, "_blank");
+    if (w) w.focus();
+  };
+
+  const handlePrint = () => {
+    const url = `/api/clients/${clientId}/statement/pdf?start=${startDate}&end=${endDate}&lang=${locale}&autoPrint=true`;
+    const w = window.open(url, "_blank");
+    if (w) w.focus();
   };
 
   const company = data?.company;
@@ -233,35 +240,6 @@ export default function ClientStatementModal({ clientId, clientNom, onClose }: C
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 print:p-0 print:static print:inset-auto animate-in fade-in duration-200">
-      {/* Strict Print CSS Isolation: Hides Entire Dashboard During Print */}
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          #printable-statement, #printable-statement * {
-            visibility: visible !important;
-          }
-          #printable-statement {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 8mm 6mm !important;
-            background: white !important;
-            z-index: 9999999 !important;
-            overflow: visible !important;
-          }
-          .print\\:hidden, .no-print {
-            display: none !important;
-          }
-          @page {
-            size: A4 portrait;
-            margin: 6mm;
-          }
-        }
-      `}</style>
 
       {/* Modal Backdrop (hidden in print) */}
       <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm print:hidden" onClick={onClose}></div>
