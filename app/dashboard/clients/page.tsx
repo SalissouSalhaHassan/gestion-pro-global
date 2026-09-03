@@ -100,7 +100,7 @@ export default function ClientsPage() {
       
       setToast({ message: "Client ajouté avec succès !", type: "success" });
       setIsModalOpen(false);
-      setFormData({ nom: "", tel: "", ref_client: "" });
+      setFormData({ nom: "", tel: "", ref_client: "", type_client: "Détail" });
     } catch (err: any) {
       console.error(err);
       setToast({ message: err.message || "Erreur lors de l'ajout.", type: "error" });
