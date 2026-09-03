@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, Search, Plus, Edit3, Trash2, X, Save, Phone, Mail, Globe, MapPin, CreditCard, Loader2 } from "lucide-react";
+import { Users, Search, Plus, Edit3, Trash2, X, Save, Phone, Mail, Globe, MapPin, CreditCard, Loader2, FileText } from "lucide-react";
+import SupplierStatementModal from "./SupplierStatementModal";
 
 type Supplier = {
   id: number;
@@ -21,6 +22,7 @@ export default function SuppliersPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [statementSupplierId, setStatementSupplierId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<Partial<Supplier>>({
     nom: "", ref_fournisseur: "", contact: "", tel: "", gsm: "", adresse: "", email: "", site: ""
@@ -155,10 +157,17 @@ export default function SuppliersPage() {
                   <h3 className="text-xl font-black text-slate-900 leading-tight">{supplier.nom}</h3>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => { setFormData(supplier); setIsModalOpen(true); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
+                  <button 
+                    onClick={() => setStatementSupplierId(supplier.id)} 
+                    title="Relevé de Compte Fournisseur (A4)" 
+                    className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all cursor-pointer"
+                  >
+                    <FileText size={18} />
+                  </button>
+                  <button onClick={() => { setFormData(supplier); setIsModalOpen(true); }} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all cursor-pointer">
                     <Edit3 size={18} />
                   </button>
-                  <button onClick={() => handleDelete(supplier.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
+                  <button onClick={() => handleDelete(supplier.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all cursor-pointer">
                     <Trash2 size={18} />
                   </button>
                 </div>
@@ -298,6 +307,14 @@ export default function SuppliersPage() {
           </div>
         </div>
       )}
+
+      {statementSupplierId && (
+        <SupplierStatementModal
+          supplierId={statementSupplierId}
+          onClose={() => setStatementSupplierId(null)}
+        />
+      )}
     </div>
   );
 }
+
