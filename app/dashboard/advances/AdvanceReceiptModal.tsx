@@ -58,6 +58,7 @@ export default function AdvanceReceiptModal({
   const [company, setCompany] = useState<any>(null);
   const [pageSize, setPageSize] = useState<'A4' | 'A5' | 'Ticket'>('A5');
   const [receiptMode, setReceiptMode] = useState<ReceiptType>(initialMode);
+  const [viewScope, setViewScope] = useState<'all' | 'single'>('all');
 
   const transactions = useMemo(() => {
     const list: any[] = [];
@@ -129,26 +130,37 @@ export default function AdvanceReceiptModal({
     return transactions.reduce((sum, tx) => sum + tx.montant, 0);
   }, [transactions]);
 
-  const singleAdvanceMovements = useMemo(() => {
+  const targetAdvances = useMemo(() => {
     if (!advance) return [];
+    if (viewScope === 'single') return [advance];
+    return allAdvances.length > 0 ? allAdvances : [advance];
+  }, [advance, allAdvances, viewScope]);
+
+  const singleAdvanceMovements = useMemo(() => {
+    if (!targetAdvances || targetAdvances.length === 0) return [];
     const list: any[] = [];
-    
-    // 1. Initial Deposit (Credit)
-    list.push({
-      id: `dep-${advance.id}`,
-      date: advance.date_avance || advance.created_at,
-      type: locale === "ar" ? "إيداع أمانة مبدئي" : "Dépôt initial",
-      ref: advance.reference_paiement || `DEP-${advance.id}`,
-      mode: advance.moyen_paiement || "Espèce",
-      debit: 0,
-      credit: Number(advance.montant_initial) || 0,
-      notes: advance.notes || (locale === "ar" ? "إيداع أمانة" : "Constitution d'acompte"),
-      timestamp: new Date(advance.date_avance || advance.created_at).getTime()
+    const targetIds = targetAdvances.map(a => Number(a.id));
+
+    // 1. Initial Deposits (Credits) for all target advances
+    targetAdvances.forEach(advItem => {
+      list.push({
+        id: `dep-${advItem.id}`,
+        date: advItem.date_avance || advItem.created_at,
+        type: locale === "ar" 
+          ? (viewScope === 'all' ? `إيداع أمانة (DEP-${advItem.id})` : "إيداع أمانة مبدئي")
+          : (viewScope === 'all' ? `Dépôt initial (DEP-${advItem.id})` : "Dépôt initial"),
+        ref: advItem.reference_paiement || `DEP-${advItem.id}`,
+        mode: advItem.moyen_paiement || "Espèce",
+        debit: 0,
+        credit: Number(advItem.montant_initial) || 0,
+        notes: advItem.notes || (locale === "ar" ? "إيداع أمانة نقدي" : "Constitution d'acompte"),
+        timestamp: new Date(advItem.date_avance || advItem.created_at).getTime()
+      });
     });
 
-    // 2. Withdrawals or Imputations from history
-    const thisHist = allHistory.filter(h => Number(h.advance_id) === Number(advance.id));
-    thisHist.forEach(h => {
+    // 2. Withdrawals and History for target advances
+    const relevantHistory = allHistory.filter(h => targetIds.includes(Number(h.advance_id)));
+    relevantHistory.forEach(h => {
       const isWithdraw = h.action === "WITHDRAW";
       const isInvoice = h.action === "INVOICE_PAYMENT";
       const isCancel = h.action === "CANCEL";
@@ -172,48 +184,57 @@ export default function AdvanceReceiptModal({
       });
     });
 
-    // 3. Linked Payments in database
+    // 3. Linked Payments for target advances
     advancePayments.forEach(p => {
-      const pRef = p.factures?.bl_number || p.reference_paiement || `REG-${p.id}`;
-      const alreadyIn = list.some(item => item.ref === pRef);
-      if (!alreadyIn) {
+      if (targetIds.includes(Number(p.avance_client_id))) {
+        const pRef = p.factures?.bl_number || p.reference_paiement || `REG-${p.id}`;
+        const alreadyIn = list.some(item => item.ref === pRef);
+        if (!alreadyIn) {
+          list.push({
+            id: `p-${p.id}`,
+            date: p.date_operation || p.created_at,
+            type: locale === "ar" ? "تسوية فاتورة" : "Règlement Facture",
+            ref: pRef,
+            mode: p.moyen_reglement || "Avance",
+            debit: Number(p.montant_regle) || 0,
+            credit: 0,
+            notes: `${locale === "ar" ? "فاتورة" : "Facture"} ${p.factures?.bl_number || ""}`,
+            timestamp: new Date(p.date_operation || p.created_at).getTime()
+          });
+        }
+      }
+    });
+
+    // 4. Per-advance reconciliation: If remaining < initial and not explained by explicit history
+    targetAdvances.forEach(advItem => {
+      const explicitDebitsForAdv = relevantHistory
+        .filter(h => Number(h.advance_id) === Number(advItem.id))
+        .reduce((sum, h) => sum + Number(h.amount || 0), 0);
+
+      const expectedConsumed = Math.max(0, (Number(advItem.montant_initial) || 0) - (Number(advItem.montant_restant) || 0));
+
+      if (expectedConsumed > explicitDebitsForAdv) {
+        const diff = expectedConsumed - explicitDebitsForAdv;
         list.push({
-          id: `p-${p.id}`,
-          date: p.date_operation || p.created_at,
-          type: locale === "ar" ? "تسوية فاتورة" : "Règlement Facture",
-          ref: pRef,
-          mode: p.moyen_reglement || "Avance",
-          debit: Number(p.montant_regle) || 0,
+          id: `auto-diff-${advItem.id}`,
+          date: advItem.updated_at || advItem.date_avance || advItem.created_at,
+          type: locale === "ar" 
+            ? (viewScope === 'all' ? `استخدام في فواتير / سحب (DEP-${advItem.id})` : "استخدام في فواتير / سحب")
+            : (viewScope === 'all' ? `Utilisation Facture / Retrait (DEP-${advItem.id})` : "Utilisation Facture / Retrait"),
+          ref: `IMP-00${advItem.id}`,
+          mode: "Avance",
+          debit: diff,
           credit: 0,
-          notes: `${locale === "ar" ? "فاتورة" : "Facture"} ${p.factures?.bl_number || ""}`,
-          timestamp: new Date(p.date_operation || p.created_at).getTime()
+          notes: locale === "ar" ? "تسوية مشتريات أو سحب نقدية" : "Imputation sur vente ou retrait de fonds",
+          timestamp: new Date(advItem.updated_at || advItem.date_avance || advItem.created_at).getTime() + 500
         });
       }
     });
 
-    // 4. Reconciliation difference: If remaining < initial and debit movements don't equal difference
-    const totalDebitsSoFar = list.reduce((sum, item) => sum + item.debit, 0);
-    const expectedConsumed = Math.max(0, (Number(advance.montant_initial) || 0) - (Number(advance.montant_restant) || 0));
-    
-    if (expectedConsumed > totalDebitsSoFar) {
-      const remainingDiff = expectedConsumed - totalDebitsSoFar;
-      list.push({
-        id: `auto-diff-${advance.id}`,
-        date: advance.updated_at || advance.date_avance || advance.created_at,
-        type: locale === "ar" ? "استخدام في فواتير / سحب" : "Utilisation Facture / Retrait",
-        ref: `IMP-00${advance.id}`,
-        mode: "Avance",
-        debit: remainingDiff,
-        credit: 0,
-        notes: locale === "ar" ? "تسوية مشتريات أو سحب نقدية" : "Imputation sur vente ou retrait de fonds",
-        timestamp: new Date(advance.updated_at || advance.date_avance || advance.created_at).getTime()
-      });
-    }
-
     // Sort chronologically
     list.sort((a, b) => a.timestamp - b.timestamp);
 
-    // Compute running balance
+    // Compute continuous running balance
     let running = 0;
     return list.map(item => {
       running += (item.credit - item.debit);
@@ -222,7 +243,7 @@ export default function AdvanceReceiptModal({
         solde_courant: running
       };
     });
-  }, [advance, allHistory, advancePayments, locale]);
+  }, [targetAdvances, allHistory, advancePayments, viewScope, locale]);
 
   const singleTotals = useMemo(() => {
     let deb = 0;
@@ -534,23 +555,72 @@ export default function AdvanceReceiptModal({
           {/* 2. Mode Single Deposit: Comprehensive Accounting Movements Table */}
           {receiptMode === 'single' && (
             <div className="mb-4 space-y-3">
+              {/* Scope Switcher (Hidden in Print) */}
+              {allAdvances.length > 1 && (
+                <div className="flex items-center justify-between gap-2 print:hidden bg-slate-100 p-1.5 rounded-xl text-xs font-black">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setViewScope('all')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        viewScope === 'all' 
+                          ? 'bg-blue-600 text-white shadow-xs' 
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {locale === "ar" ? `جميع الإيداعات والحركات (${allAdvances.length})` : `Tous les dépôts & mouvements (${allAdvances.length})`}
+                    </button>
+                    <button
+                      onClick={() => setViewScope('single')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        viewScope === 'single' 
+                          ? 'bg-blue-600 text-white shadow-xs' 
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {locale === "ar" ? `هذا الإيداع فقط (${advance.reference_paiement || `DEP-${advance.id}`})` : `Ce dépôt seul (${advance.reference_paiement || `DEP-${advance.id}`})`}
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-slate-400 hidden sm:inline">
+                    {locale === "ar" ? "سجل تدقيق الأمانات المحاسبي" : "Grand livre auxiliaire"}
+                  </span>
+                </div>
+              )}
+
               {/* Deposit Metadata Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border border-slate-900 rounded-xl p-3 bg-slate-50/70 text-xs">
                 <div>
-                  <span className="text-[9px] font-black uppercase text-slate-400 block">{locale === "ar" ? "المرجع:" : "RÉFÉRENCE :"}</span>
-                  <span className="font-mono font-black text-slate-900">{advance.reference_paiement || `DEP-${advance.id}`}</span>
+                  <span className="text-[9px] font-black uppercase text-slate-400 block">
+                    {locale === "ar" ? "النطاق المحاسبي:" : "PORTÉE DU REÇU :"}
+                  </span>
+                  <span className="font-mono font-black text-slate-900">
+                    {viewScope === 'all' 
+                      ? (locale === "ar" ? `كامل الأمانات (${allAdvances.length})` : `Global (${allAdvances.length} dépôts)`)
+                      : (advance.reference_paiement || `DEP-${advance.id}`)}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-black uppercase text-slate-400 block">{locale === "ar" ? "تاريخ الإيداع:" : "DATE DÉPÔT :"}</span>
-                  <span className="font-bold text-slate-900">{new Date(advance.date_avance || advance.created_at).toLocaleDateString(locale === "ar" ? 'ar-SA' : 'fr-FR')}</span>
+                  <span className="text-[9px] font-black uppercase text-slate-400 block">
+                    {locale === "ar" ? "إجمالي الإيداعات (+):" : "TOTAL DÉPOSÉ (+) :"}
+                  </span>
+                  <span className="font-black text-emerald-600 font-mono">
+                    +{formatCurrencyAmount(singleTotals.totalCredit)}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-black uppercase text-slate-400 block">{locale === "ar" ? "طريقة الدفع:" : "MODE DE PAIEMENT :"}</span>
-                  <span className="font-bold uppercase text-slate-900">{advance.moyen_paiement || "Espèce"}</span>
+                  <span className="text-[9px] font-black uppercase text-slate-400 block">
+                    {locale === "ar" ? "إجمالي المستهلك (-):" : "TOTAL DÉBITÉ (-) :"}
+                  </span>
+                  <span className="font-black text-rose-600 font-mono">
+                    -{formatCurrencyAmount(singleTotals.totalDebit)}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-black uppercase text-slate-400 block">{locale === "ar" ? "المبلغ الأولي:" : "MONTANT INITIAL :"}</span>
-                  <span className="font-black text-emerald-600">{formatCurrencyAmount(Number(advance.montant_initial))}</span>
+                  <span className="text-[9px] font-black uppercase text-slate-400 block">
+                    {locale === "ar" ? "الرصيد الصافي المتاح:" : "SOLDE DISPONIBLE :"}
+                  </span>
+                  <span className="font-black text-blue-700 font-mono">
+                    {formatCurrencyAmount(singleTotals.finalBalance)}
+                  </span>
                 </div>
               </div>
 
