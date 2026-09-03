@@ -47,6 +47,7 @@ export const translations: TranslationDict = {
   nav_advances: { fr: "Dépôts & Avances", ar: "الودائع والدفعات المقدمة", en: "Deposits & Advances" },
   nav_loyers: { fr: "Gestion des Loyers", ar: "إدارة الإيجارات والعقارات", en: "Rent & Real Estate" },
   nav_vehicles: { fr: "Gestion des Véhicules", ar: "إدارة المركبات والأسطول", en: "Fleet & Vehicles" },
+  nav_deliveries: { fr: "Tournées & Livraisons", ar: "دورات التوصيل والشحن", en: "Delivery & Dispatch" },
   nav_depots: { fr: "Gestion des Dépôts", ar: "إدارة المستودعات والفروع", en: "Warehouses & Branches" },
   nav_users: { fr: "Utilisateurs", ar: "المستخدمين والموظفين", en: "Users & Staff" },
   nav_permissions: { fr: "Permissions", ar: "الصلاحيات والأدوار", en: "Roles & Permissions" },

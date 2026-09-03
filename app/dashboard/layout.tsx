@@ -97,6 +97,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/advances", label: t("nav_advances", "Dépôts & Avances"), icon: Wallet, perm: "deposit.access" },
     { href: "/dashboard/loyers", label: t("nav_loyers", "Gestion des Loyers"), icon: Home, perm: "rent.access" },
     { href: "/dashboard/vehicles", label: t("nav_vehicles", "Gestion des Véhicules"), icon: Car, perm: "vehicles.access" },
+    { href: "/dashboard/deliveries", label: t("nav_deliveries", "Tournées & Livraisons"), icon: Truck, perm: "vehicles.access" },
     { href: "/dashboard/depots", label: t("nav_depots", "Gestion des Dépôts"), icon: Warehouse, adminOnly: true },
     { href: "/dashboard/users", label: t("nav_users", "Utilisateurs"), icon: Users, adminOnly: true },
     { href: "/dashboard/permissions", label: t("nav_permissions", "Permissions"), icon: Shield, adminOnly: true },
