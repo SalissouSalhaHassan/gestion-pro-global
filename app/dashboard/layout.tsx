@@ -83,6 +83,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/purchases", label: t("nav_purchases", "Achats"), icon: ShoppingCart, perm: "purchase.access" },
     { href: "/dashboard/expenses", label: t("nav_expenses", "Dépenses"), icon: TrendingDown, perm: "expense.access" },
     { href: "/dashboard/reports/cash-balance", label: t("nav_cash_balance", "Bilan de Caisse"), icon: Scale, perm: "expense.cash_balance" },
+    { href: "/dashboard/reports/profit-loss", label: t("nav_profit_loss", "Pertes & Profits (P&L)"), icon: BarChart3, perm: "report.finance" },
     { href: "/dashboard/finance", label: t("nav_finance", "Gestion Financière"), icon: Landmark, perm: "report.finance" },
     { href: "/dashboard/advances", label: t("nav_advances", "Dépôts & Avances"), icon: Wallet, perm: "deposit.access" },
     { href: "/dashboard/loyers", label: t("nav_loyers", "Gestion des Loyers"), icon: Home, perm: "rent.access" },

@@ -36,6 +36,7 @@ export const translations: TranslationDict = {
   nav_purchases: { fr: "Achats", ar: "فواتير المشتريات", en: "Purchases" },
   nav_expenses: { fr: "Dépenses", ar: "المصروفات اليومية", en: "Expenses" },
   nav_cash_balance: { fr: "Bilan de Caisse", ar: "ميزان الصندوق والخزينة", en: "Cash Balance" },
+  nav_profit_loss: { fr: "Pertes & Profits (P&L)", ar: "الأرباح والخسائر (P&L)", en: "Profit & Loss (P&L)" },
   nav_finance: { fr: "Gestion Financière", ar: "الإدارة المالية والتقارير", en: "Financial Reports" },
   nav_advances: { fr: "Dépôts & Avances", ar: "الودائع والدفعات المقدمة", en: "Deposits & Advances" },
   nav_loyers: { fr: "Gestion des Loyers", ar: "إدارة الإيجارات والعقارات", en: "Rent & Real Estate" },
