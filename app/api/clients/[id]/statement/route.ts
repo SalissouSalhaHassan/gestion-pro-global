@@ -139,23 +139,47 @@ export async function GET(
 
     // Add Invoices (debits)
     invoices?.forEach(inv => {
+      // Check if this invoice was paid via customer advance
+      const invPayments = payments?.filter(p => Number(p.facture_id) === Number(inv.id)) || [];
+      const advancePaidAmount = invPayments
+        .filter(p => p.moyen_reglement === "Avance")
+        .reduce((sum, p) => sum + Number(p.montant_regle || 0), 0);
+      const hasAdvancePayment = advancePaidAmount > 0;
+
+      let typeLabel = "Facture";
+      let modeLabel = inv.mode_paiement || "Facturation";
+      let notesLabel = `Facturation vente ${inv.bl_number ? `(BL: ${inv.bl_number})` : ""}`;
+
+      if (hasAdvancePayment) {
+        if (advancePaidAmount >= Number(inv.total_ttc)) {
+          typeLabel = "Règlement Facture (par Avance)";
+          modeLabel = "Imputation Avance";
+          notesLabel = `Facture acquittée par acompte client ${inv.bl_number ? `(BL: ${inv.bl_number})` : ""}`;
+        } else {
+          typeLabel = "Facture / Règlement partiel Avance";
+          modeLabel = "Mixte / Avance";
+          notesLabel = `Facture acquittée partiellement par acompte (${advancePaidAmount.toLocaleString()} FCFA) ${inv.bl_number ? `(BL: ${inv.bl_number})` : ""}`;
+        }
+      }
+
       ledgerEvents.push({
         id: `inv-${inv.id}`,
         date: inv.date_facture || inv.created_at || new Date().toISOString(),
-        type: "Facture",
+        type: typeLabel,
         reference: inv.bl_number || inv.num_facture || `FAC-${inv.id}`,
-        moyen_paiement: inv.mode_paiement || "Facturation",
+        moyen_paiement: modeLabel,
         emplacement: inv.depot || "BOUTIQUE",
         debit: Number(inv.total_ttc),
         credit: 0,
-        notes: `Facturation vente ${inv.bl_number ? `(BL: ${inv.bl_number})` : ""}`,
+        notes: notesLabel,
         utilisateur: inv.vendeur
       });
     });
 
-    // Add Payments (credits)
+    // Add External Payments (Cash, Cheque, Virement)
+    // Non-advance payments represent fresh funds collected, which offset the invoice debit.
+    // Advance payments do NOT add fresh funds (they were already credited at deposit), so they are not added as credits.
     payments?.forEach(p => {
-      // Direct Cash/Cheque/Virement payments
       if (p.moyen_reglement !== "Avance") {
         ledgerEvents.push({
           id: `pay-${p.id}`,
@@ -167,35 +191,6 @@ export async function GET(
           debit: 0,
           credit: Number(p.montant_regle),
           notes: `Règlement facture via ${p.moyen_reglement}`,
-          utilisateur: p.utilisateur
-        });
-      } else {
-        // If payment is via Advance, we log two entries to balance it:
-        // 1. Deduction from the advance balance (debit side of advance usage)
-        ledgerEvents.push({
-          id: `pay-adv-ded-${p.id}`,
-          date: p.date_operation || p.created_at || new Date().toISOString(),
-          type: "Utilisation d'avance",
-          reference: p.factures?.bl_number || p.factures?.num_facture || `FAC-${p.facture_id}`,
-          moyen_paiement: "Imputation Avance",
-          emplacement: "BOUTIQUE",
-          debit: Number(p.montant_regle),
-          credit: 0,
-          notes: `Imputation sur Facture ${p.factures?.bl_number || p.factures?.num_facture || p.facture_id}`,
-          utilisateur: p.utilisateur
-        });
-
-        // 2. Receipt on the invoice (credit side of advance usage)
-        ledgerEvents.push({
-          id: `pay-adv-rec-${p.id}`,
-          date: p.date_operation || p.created_at || new Date().toISOString(),
-          type: "Règlement par Avance",
-          reference: p.factures?.bl_number || p.factures?.num_facture || `FAC-${p.facture_id}`,
-          moyen_paiement: "Imputation Avance",
-          emplacement: "BOUTIQUE",
-          debit: 0,
-          credit: Number(p.montant_regle),
-          notes: `Facture acquittée par solde d'avance`,
           utilisateur: p.utilisateur
         });
       }

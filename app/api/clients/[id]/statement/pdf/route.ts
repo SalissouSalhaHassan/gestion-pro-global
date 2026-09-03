@@ -76,14 +76,36 @@ export async function GET(
     });
 
     invoices?.forEach((inv) => {
+      const invPayments = payments?.filter(p => Number(p.facture_id) === Number(inv.id)) || [];
+      const advancePaidAmount = invPayments
+        .filter(p => p.moyen_reglement === "Avance")
+        .reduce((sum, p) => sum + Number(p.montant_regle || 0), 0);
+      const hasAdvancePayment = advancePaidAmount > 0;
+
+      let typeLabel = lang === "ar" ? "فاتورة مبيعات" : "Facture Vente";
+      let modeLabel = inv.mode_paiement || (lang === "ar" ? "فاتورة" : "Facturation");
+      let notesLabel = `${lang === "ar" ? "مبيعات بضاعة" : "Vente marchandises"} ${inv.bl_number ? `(BL: ${inv.bl_number})` : ""}`;
+
+      if (hasAdvancePayment) {
+        if (advancePaidAmount >= Number(inv.total_ttc)) {
+          typeLabel = lang === "ar" ? "تسوية فاتورة بالأمانة" : "Règlement Facture (par Avance)";
+          modeLabel = "Imputation Avance";
+          notesLabel = `${lang === "ar" ? "فاتورة مسددة من رصيد الأمانة" : "Facture acquittée par acompte"} ${inv.bl_number ? `(BL: ${inv.bl_number})` : ""}`;
+        } else {
+          typeLabel = lang === "ar" ? "فاتورة / تسوية جزئية بأمانة" : "Facture / Règlement partiel Avance";
+          modeLabel = "Mixte / Avance";
+          notesLabel = `${lang === "ar" ? `مسدد منها ${advancePaidAmount.toLocaleString()} بالأمانة` : `Réglée à hauteur de ${advancePaidAmount.toLocaleString()} FCFA par acompte`} ${inv.bl_number ? `(BL: ${inv.bl_number})` : ""}`;
+        }
+      }
+
       rawEvents.push({
         date: inv.date_facture || inv.created_at,
-        type: lang === "ar" ? "فاتورة مبيعات" : "Facture Vente",
+        type: typeLabel,
         reference: inv.bl_number || inv.num_facture || `FAC-${inv.id}`,
-        mode: inv.mode_paiement || (lang === "ar" ? "فاتورة" : "Facturation"),
+        mode: modeLabel,
         debit: Number(inv.total_ttc) || 0,
         credit: 0,
-        notes: `${lang === "ar" ? "مبيعات بضاعة" : "Vente marchandises"} ${inv.bl_number ? `(BL: ${inv.bl_number})` : ""}`,
+        notes: notesLabel,
         user: inv.vendeur || "Admin",
       });
     });
@@ -98,28 +120,6 @@ export async function GET(
           debit: 0,
           credit: Number(p.montant_regle) || 0,
           notes: `${lang === "ar" ? "سداد عبر" : "Règlement via"} ${p.moyen_reglement || "Espèce"}`,
-          user: p.utilisateur || "Admin",
-        });
-      } else {
-        // Imputation
-        rawEvents.push({
-          date: p.date_operation || p.created_at,
-          type: lang === "ar" ? "استخدام أمانة" : "Utilisation Avance",
-          reference: p.factures?.bl_number || p.factures?.num_facture || `IMP-${p.id}`,
-          mode: "Avance",
-          debit: Number(p.montant_regle) || 0,
-          credit: 0,
-          notes: `${lang === "ar" ? "اقتطاع من الأمانة للفاتورة" : "Déduction de l'avance pour facture"}`,
-          user: p.utilisateur || "Admin",
-        });
-        rawEvents.push({
-          date: p.date_operation || p.created_at,
-          type: lang === "ar" ? "تسوية بالأمانة" : "Règlement par Avance",
-          reference: p.factures?.bl_number || p.factures?.num_facture || `IMP-${p.id}`,
-          mode: "Avance",
-          debit: 0,
-          credit: Number(p.montant_regle) || 0,
-          notes: `${lang === "ar" ? "تسوية الفاتورة برصيد الأمانة" : "Facture acquittée par acompte"}`,
           user: p.utilisateur || "Admin",
         });
       }
