@@ -19,17 +19,11 @@ export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, a
   session: CustomSession,
   entityType: 'factures' | 'mouvements' | 'stocks' | 'clients' | 'fournisseurs' | 'expenses' | 'articles' | 'loyers' | 'avances'
 ): T {
-  // 0. Enforce Organization / Tenant Isolation (Multi-Tenancy)
-  let scopedQuery = query;
-  if (session.organization_id) {
-    scopedQuery = (scopedQuery as any).eq('organization_id', session.organization_id);
-  }
-
-  // 1. Admin/Manager: sees everything within their own organization.
+  // 1. Admin/Manager: sees everything.
   const isAdmin = (session.admin === "Oui" || session.admin === "oui" || session.admin === "true" || (session as any).admin === true) || 
                   (session.role === 1 || session.role === "1" || session.role === "admin");
   
-  if (isAdmin) return scopedQuery;
+  if (isAdmin) return query;
 
   // 2. Scoping by Warehouse (for Inventory/Stock related tables)
   if (['mouvements', 'stocks', 'expenses'].includes(entityType)) {
