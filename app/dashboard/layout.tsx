@@ -83,6 +83,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/invoices", label: t("nav_invoices", "Factures"), icon: FileText, perm: "sale.invoices_view" },
     { href: "/dashboard/devis", label: t("nav_devis", "Devis & Proforma"), icon: FileText, perm: "sale.proforma_create" },
     { href: "/dashboard/purchases", label: t("nav_purchases", "Achats"), icon: ShoppingCart, perm: "purchase.access" },
+    { href: "/dashboard/bons-commande", label: t("nav_bons_commande", "Bons de Commande"), icon: Truck, perm: "purchase.access" },
     { href: "/dashboard/expenses", label: t("nav_expenses", "Dépenses"), icon: TrendingDown, perm: "expense.access" },
     { href: "/dashboard/reports/cash-balance", label: t("nav_cash_balance", "Bilan de Caisse"), icon: Scale, perm: "expense.cash_balance" },
     { href: "/dashboard/reports/profit-loss", label: t("nav_profit_loss", "Pertes & Profits (P&L)"), icon: BarChart3, perm: "report.finance" },

@@ -35,6 +35,7 @@ export const translations: TranslationDict = {
   nav_invoices: { fr: "Factures", ar: "فواتير المبيعات", en: "Invoices" },
   nav_devis: { fr: "Devis & Proforma", ar: "عروض الأسعار (Devis)", en: "Quotations & Proforma" },
   nav_purchases: { fr: "Achats", ar: "فواتير المشتريات", en: "Purchases" },
+  nav_bons_commande: { fr: "Bons de Commande", ar: "أوامر الشراء (PO)", en: "Purchase Orders" },
   nav_expenses: { fr: "Dépenses", ar: "المصروفات اليومية", en: "Expenses" },
   nav_cash_balance: { fr: "Bilan de Caisse", ar: "ميزان الصندوق والخزينة", en: "Cash Balance" },
   nav_profit_loss: { fr: "Pertes & Profits (P&L)", ar: "الأرباح والخسائر (P&L)", en: "Profit & Loss (P&L)" },
