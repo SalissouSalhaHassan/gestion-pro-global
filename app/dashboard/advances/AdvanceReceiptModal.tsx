@@ -188,18 +188,20 @@ export default function AdvanceReceiptModal({
     advancePayments.forEach(p => {
       const advId = Number(p.avance_client_id);
       if (targetIds.includes(advId)) {
-        const invNumber = p.factures?.bl_number || p.factures?.num_facture || `FAC-${p.facture_id}`;
+        const invNumber = p.factures?.bl_number || p.reference_paiement || `FA-${p.facture_id}`;
         list.push({
           id: `pay-${p.id}`,
           date: p.date_operation || p.created_at,
           type: locale === "ar" 
-            ? (viewScope === 'all' ? `تسوية فاتورة (DEP-${advId})` : "تسوية فاتورة مبيعات")
-            : (viewScope === 'all' ? `Règlement Facture (DEP-${advId})` : "Règlement Facture"),
+            ? (viewScope === 'all' ? `تسوية فاتورة ${invNumber} (DEP-${advId})` : `تسوية فاتورة ${invNumber}`)
+            : (viewScope === 'all' ? `Règlement Facture ${invNumber} (DEP-${advId})` : `Règlement Facture ${invNumber}`),
           ref: invNumber,
           mode: p.moyen_reglement || "Avance",
           debit: Number(p.montant_regle) || 0,
           credit: 0,
-          notes: `${locale === "ar" ? "تسوية الفاتورة" : "Règlement Facture"} ${invNumber}`,
+          notes: locale === "ar" 
+            ? `خصم من الأمانة DEP-${advId} لسداد مبيعات الفاتورة ${invNumber}` 
+            : `Imputation sur acompte DEP-${advId} pour facture ${invNumber}`,
           timestamp: new Date(p.date_operation || p.created_at).getTime()
         });
       }
@@ -224,13 +226,13 @@ export default function AdvanceReceiptModal({
           id: `auto-diff-${advItem.id}`,
           date: advItem.updated_at || advItem.date_avance || advItem.created_at,
           type: locale === "ar" 
-            ? (viewScope === 'all' ? `حركة سحب / استهلاك (DEP-${advItem.id})` : "حركة سحب / استهلاك")
-            : (viewScope === 'all' ? `Retrait / Déduction (DEP-${advItem.id})` : "Retrait / Déduction"),
+            ? (viewScope === 'all' ? `حركة سحب / استهلاك سابقة (DEP-${advItem.id})` : "حركة سحب / استهلاك سابقة")
+            : (viewScope === 'all' ? `Retrait / Déduction antérieure (DEP-${advItem.id})` : "Retrait / Déduction antérieure"),
           ref: `IMP-00${advItem.id}`,
           mode: "Avance",
           debit: diff,
           credit: 0,
-          notes: locale === "ar" ? "استهلاك أو سحب سابق" : "Déduction antérieure",
+          notes: locale === "ar" ? "استهلاك برسم مبيعات أو سحب سابق" : "Mouvement antérieur déduit",
           timestamp: new Date(advItem.date_avance || advItem.created_at).getTime() + 1000
         });
       }
@@ -301,10 +303,12 @@ export default function AdvanceReceiptModal({
             try {
               const { data: payData, error: pErr } = await supabase
                 .from("paiements")
-                .select("*, factures(id, bl_number, num_facture, total_ttc, date_facture)")
+                .select("*, factures(id, bl_number, total_ttc, date_facture)")
                 .in("avance_client_id", advIds);
               if (!pErr && payData) {
                 setAdvancePayments(payData);
+              } else if (pErr) {
+                console.error("Notice: error querying paiements:", pErr);
               }
             } catch (pErr) {
               console.warn("Notice: paiements query in AdvanceReceiptModal:", pErr);
