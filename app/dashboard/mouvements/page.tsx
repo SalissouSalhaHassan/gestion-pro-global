@@ -24,7 +24,13 @@ import {
   Layers,
   List,
   LayoutGrid,
-  ChevronDown
+  ChevronDown,
+  Eye,
+  ExternalLink,
+  Building2,
+  User,
+  Clock,
+  Check
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useLanguage } from "@/lib/i18n/context";
@@ -44,18 +50,21 @@ type MouvementRecord = {
   nr_doc: string;
   fournisseur_client: string;
   depot_id: number | null;
-  depot?: string; // For display
+  depot?: string;
   utilisateur: string;
   stock_avant: number;
   quantite: number;
   stock_apres: number;
+  variation?: number;
   entree?: number;
   sortie?: number;
   articles?: {
+    id?: string | number;
     reference: string;
     designation: string;
     p_achat_ht?: number;
     p_vente_ttc?: number;
+    unite?: string;
   } | null;
 };
 
@@ -69,14 +78,19 @@ const supabase = createClient();
 export default function MouvementsPage() {
   const { locale, dir } = useLanguage();
   const [data, setData] = useState<MouvementRecord[]>([]);
+  const [currentStocks, setCurrentStocks] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stockValuation, setStockValuation] = useState<number | null>(null);
   const [stockValuationLoading, setStockValuationLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Modals
   const [printTransferRef, setPrintTransferRef] = useState<string | null>(null);
   const [showPrintJournal, setShowPrintJournal] = useState(false);
+  const [selectedMovementForDetail, setSelectedMovementForDetail] = useState<MouvementRecord | null>(null);
+  const [movementToPrint, setMovementToPrint] = useState<MouvementRecord | null>(null);
   const [groupByProduct, setGroupByProduct] = useState(false);
 
   // Advanced Filters
@@ -98,8 +112,8 @@ export default function MouvementsPage() {
   const fetchDepots = async () => {
     try {
       const res = await fetch("/api/stock/depots");
-      const data = await res.json();
-      if (Array.isArray(data)) setDepots(data);
+      const dData = await res.json();
+      if (Array.isArray(dData)) setDepots(dData);
     } catch (err) {
       console.warn("Failed to fetch depots:", err);
     }
@@ -152,13 +166,27 @@ export default function MouvementsPage() {
       if (selectedDepotName) url.searchParams.set("depot", selectedDepotName);
       if (generalSearch) url.searchParams.set("search", generalSearch);
 
-      const res = await fetch(url.toString());
+      const [res, stocksRes] = await Promise.all([
+        fetch(url.toString()),
+        supabase.from("stocks").select("article_id, depot_nom, quantite")
+      ]);
+
       const records = await res.json();
 
       if (records && !Array.isArray(records)) {
         throw new Error(records.error || "Erreur de format API");
       }
 
+      // Map current physical stocks per article & depot
+      const sMap: Record<string, number> = {};
+      if (stocksRes.data) {
+        stocksRes.data.forEach((st: any) => {
+          const key = `${st.article_id}-${st.depot_nom || "default"}`;
+          sMap[key] = Number(st.quantite || 0);
+          sMap[`${st.article_id}`] = (sMap[`${st.article_id}`] || 0) + Number(st.quantite || 0);
+        });
+      }
+      setCurrentStocks(sMap);
       setData(records || []);
     } catch (err: any) {
       console.error("Failed to fetch movements:", err);
@@ -178,89 +206,131 @@ export default function MouvementsPage() {
     fetchStockValuation();
   }, [fetchStockValuation]);
 
-  // ─── RUNNING BALANCE & FILTERING LOGIC ───
+  // ─── MATHEMATICALLY RIGOROUS BALANCE & RECONCILIATION ───
   const { filteredData, stats, groupedData } = useMemo(() => {
-    // 1. Initial filter
     let raw = Array.isArray(data) ? [...data] : [];
 
     if (typeFilter !== "Tous") {
       raw = raw.filter((item) => item.type === typeFilter);
     }
 
-    // 2. Sort for running balance calculation (Earliest first)
-    raw.sort((a, b) => {
+    // 1. Group movements by article_id and depot
+    const byArticleDepot: Record<string, any[]> = {};
+    raw.forEach((m) => {
+      const artId = m.article_id || (m.articles as any)?.id || "1";
+      const dep = m.depot || "default";
+      const key = `${artId}-${dep}`;
+      if (!byArticleDepot[key]) byArticleDepot[key] = [];
+      byArticleDepot[key].push(m);
+    });
+
+    const processedList: any[] = [];
+
+    // 2. Process each article & depot stream
+    Object.entries(byArticleDepot).forEach(([key, list]) => {
+      // Sort chronologically ascending (Earliest first)
+      list.sort((a, b) => {
+        const dateA = new Date(a.date_mouvement).getTime();
+        const dateB = new Date(b.date_mouvement).getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        return Number(a.id) - Number(b.id);
+      });
+
+      const artId = key.split("-")[0];
+      const curStock = currentStocks[key] ?? currentStocks[artId] ?? 0;
+
+      // Extract variations
+      const variations = list.map((m) => {
+        const inQty = Number(m.entree || 0);
+        const outQty = Number(m.sortie || 0);
+        let v = inQty > 0 ? inQty : (outQty > 0 ? -outQty : Number(m.quantite || 0));
+        const tLower = (m.type || "").toLowerCase();
+        if ((tLower.includes("vente") || tLower.includes("sortie")) && v > 0) {
+          v = -v;
+        } else if ((tLower.includes("achat") || tLower.includes("initiale")) && v < 0) {
+          v = Math.abs(v);
+        }
+        return v;
+      });
+
+      // Check if DB already has non-zero valid stock_avant & stock_apres
+      const hasValidDbStock = list.every(
+        (m) =>
+          m.stock_apres !== null &&
+          m.stock_avant !== null &&
+          (Number(m.stock_apres) !== 0 || Number(m.stock_avant) !== 0)
+      );
+
+      if (hasValidDbStock) {
+        list.forEach((m, idx) => {
+          const v = variations[idx] !== 0 ? variations[idx] : Number(m.stock_apres) - Number(m.stock_avant);
+          processedList.push({
+            ...m,
+            variation: v,
+            stock_avant: Number(m.stock_avant),
+            stock_apres: Number(m.stock_apres),
+            entree: v > 0 ? v : 0,
+            sortie: v < 0 ? Math.abs(v) : 0,
+          });
+        });
+      } else {
+        // Calculate backward from current physical stock
+        let runningStock = curStock;
+        const reconstructed = [];
+
+        for (let i = list.length - 1; i >= 0; i--) {
+          const m = list[i];
+          const v = variations[i];
+          const apres = runningStock;
+          const avant = runningStock - v;
+          runningStock = avant;
+
+          reconstructed.unshift({
+            ...m,
+            variation: v,
+            stock_avant: avant,
+            stock_apres: apres,
+            entree: v > 0 ? v : 0,
+            sortie: v < 0 ? Math.abs(v) : 0,
+          });
+        }
+        reconstructed.forEach((item) => processedList.push(item));
+      }
+    });
+
+    // Sort latest first for visual display
+    processedList.sort((a, b) => {
       const dateA = new Date(a.date_mouvement).getTime();
       const dateB = new Date(b.date_mouvement).getTime();
-      if (dateA !== dateB) return dateA - dateB;
-
-      // Priority to ENTRÉE INITIALE and achat if timestamps are same
-      const getPriority = (t: string) => {
-        if (t === "ENTRÉE INITIALE") return 1;
-        if (t.toLowerCase().includes("achat")) return 2;
-        if (t.toLowerCase().includes("vente")) return 10;
-        return 5;
-      };
-
-      const prioA = getPriority(a.type);
-      const prioB = getPriority(b.type);
-      if (prioA !== prioB) return prioA - prioB;
-
-      return Number(a.id) - Number(b.id);
+      if (dateA !== dateB) return dateB - dateA;
+      return Number(b.id) - Number(a.id);
     });
 
-    // 3. Use Database Stock Balance directly
-    const contextMap: Record<string, number> = {};
-    const processed = raw.map((m) => {
-      const key = `${m.article_id}-${m.depot || "default"}`;
+    // Stats calculations
+    const totalIn = processedList.reduce((s, m) => s + Number(m.entree || 0), 0);
+    const totalOut = processedList.reduce((s, m) => s + Number(m.sortie || 0), 0);
 
-      const refined = {
-        ...m,
-        stock_avant: Number(m.stock_avant || 0),
-        stock_apres: Number(m.stock_apres || 0),
-      };
-
-      contextMap[key] = refined.stock_apres;
-      return refined;
-    });
-
-    // 4. Calculate Stats (Sync with filtered UI View)
-    const totalIn = processed.reduce((s, m) => s + Number(m.entree || 0), 0);
-    const totalOut = processed.reduce((s, m) => s + Number(m.sortie || 0), 0);
-
-    // Estimate selling value of filtered stock
-    const articlesMap: Record<string, number> = {};
-    processed.forEach((m) => {
-      const key = `${m.article_id}`;
-      articlesMap[key] = Number(m.articles?.p_vente_ttc || 0);
-    });
-
-    const valuationVal = Object.entries(contextMap).reduce((sum, [key, stock]) => {
-      const artId = key.split("-")[0];
-      return sum + stock * (articlesMap[artId] || 0);
-    }, 0);
-
-    // 5. Final Display Order (Latest First for the Table)
-    const visualOrder = [...processed].reverse();
-
-    // 6. Optional Grouping
-    const groups: Record<string, { items: MouvementRecord[]; in: number; out: number; current: number }> = {};
+    // Grouping
+    const groups: Record<string, { items: any[]; in: number; out: number; current: number }> = {};
     if (groupByProduct) {
-      processed.forEach((m) => {
+      processedList.forEach((m) => {
         const name = m.articles?.designation || (locale === "ar" ? "صنف غير محدد" : "Inconnu");
         if (!groups[name]) groups[name] = { items: [], in: 0, out: 0, current: 0 };
-        groups[name].items.unshift(m); // Latest first in each group
+        groups[name].items.push(m);
         groups[name].in += Number(m.entree || 0);
         groups[name].out += Number(m.sortie || 0);
-        groups[name].current = (m as any).stock_apres; // Last processed is current
+        if (groups[name].items.length === 1) {
+          groups[name].current = Number(m.stock_apres || 0);
+        }
       });
     }
 
     return {
-      filteredData: visualOrder,
-      stats: { stockIn: totalIn, stockOut: totalOut, balance: totalIn - totalOut, valuation: valuationVal },
+      filteredData: processedList,
+      stats: { stockIn: totalIn, stockOut: totalOut, balance: totalIn - totalOut, valuation: 0 },
       groupedData: groups,
     };
-  }, [data, typeFilter, groupByProduct, locale]);
+  }, [data, currentStocks, typeFilter, groupByProduct, locale]);
 
   const handleRefresh = () => {
     fetchData();
@@ -268,6 +338,15 @@ export default function MouvementsPage() {
   };
 
   const handlePrint = () => setShowPrintJournal(true);
+
+  const handlePrintAction = (item: MouvementRecord) => {
+    const isTransfer = item.type?.toLowerCase().includes("transfert") || (item.nr_doc || "").startsWith("TR-");
+    if (isTransfer) {
+      setPrintTransferRef(item.nr_doc);
+    } else {
+      setMovementToPrint(item);
+    }
+  };
 
   const isFiltered = !!(startDate || endDate || generalSearch || typeFilter !== "Tous" || selectedDepotName);
   const stockValuationValue = isFiltered ? stats.valuation : (stockValuation ?? stats.valuation);
@@ -594,7 +673,8 @@ export default function MouvementsPage() {
                 <AuditTableView
                   items={g.items}
                   locale={locale}
-                  onPrintTransfer={setPrintTransferRef}
+                  onViewDetails={setSelectedMovementForDetail}
+                  onPrintMovement={handlePrintAction}
                 />
               </div>
             </div>
@@ -608,7 +688,8 @@ export default function MouvementsPage() {
               loading={loading}
               locale={locale}
               onRetry={fetchData}
-              onPrintTransfer={setPrintTransferRef}
+              onViewDetails={setSelectedMovementForDetail}
+              onPrintMovement={handlePrintAction}
             />
           </div>
 
@@ -636,6 +717,7 @@ export default function MouvementsPage() {
           onClose={() => setPrintTransferRef(null)}
         />
       )}
+
       {showPrintJournal && (
         <StockJournalModal
           filters={{
@@ -648,15 +730,46 @@ export default function MouvementsPage() {
           onClose={() => setShowPrintJournal(false)}
         />
       )}
+
+      {/* Movement Detail Inspection Modal */}
+      {selectedMovementForDetail && (
+        <MovementDetailModal
+          movement={selectedMovementForDetail}
+          locale={locale}
+          onClose={() => setSelectedMovementForDetail(null)}
+          onPrint={() => {
+            const m = selectedMovementForDetail;
+            setSelectedMovementForDetail(null);
+            handlePrintAction(m);
+          }}
+        />
+      )}
+
+      {/* Movement Print Voucher / Slip Modal */}
+      {movementToPrint && (
+        <MovementReceiptModal
+          movement={movementToPrint}
+          company={companyInfo}
+          locale={locale}
+          onClose={() => setMovementToPrint(null)}
+        />
+      )}
     </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   TABLE VIEW COMPONENT (Exact Design of Catalogue & Gestion des Articles)
+   TABLE VIEW COMPONENT
    ═══════════════════════════════════════════════════════════════════ */
 
-function AuditTableView({ items, loading, locale, onRetry, onPrintTransfer }: any) {
+function AuditTableView({
+  items,
+  loading,
+  locale,
+  onRetry,
+  onViewDetails,
+  onPrintMovement,
+}: any) {
   if (loading) {
     return (
       <div className="py-20 text-center text-slate-400">
@@ -701,14 +814,14 @@ function AuditTableView({ items, loading, locale, onRetry, onPrintTransfer }: an
           <th className="py-3.5 px-4 text-right">{locale === "ar" ? "الرصيد السابق" : "Avant"}</th>
           <th className="py-3.5 px-4 text-right">{locale === "ar" ? "التغيير" : "Variation"}</th>
           <th className="py-3.5 px-4 text-right">{locale === "ar" ? "الرصيد بعد" : "Après"}</th>
-          <th className="py-3.5 px-3 text-right">{locale === "ar" ? "إجراءات" : "Actions"}</th>
+          <th className="py-3.5 px-4 text-center">{locale === "ar" ? "إجراءات" : "Actions"}</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
         {items.map((item: any) => {
-          const delta = Number(item.stock_apres) - Number(item.stock_avant);
+          const delta = Number(item.variation !== undefined ? item.variation : (Number(item.stock_apres) - Number(item.stock_avant)));
           const isIncoming = delta >= 0;
-          const isTransfer = item.type?.toLowerCase().includes("transfert");
+          const isTransfer = item.type?.toLowerCase().includes("transfert") || (item.nr_doc || "").startsWith("TR-");
           const isNegative = Number(item.stock_apres) < 0;
 
           // Nature badge formatting
@@ -783,19 +896,18 @@ function AuditTableView({ items, loading, locale, onRetry, onPrintTransfer }: an
               </td>
 
               {/* Stock Avant */}
-              <td className="py-3.5 px-4 text-right font-mono text-xs text-slate-400 font-bold">
-                {Number(item.stock_avant).toFixed(2)}
+              <td className="py-3.5 px-4 text-right font-mono text-xs text-slate-600 font-bold">
+                {Number(item.stock_avant || 0).toFixed(2)}
               </td>
 
               {/* Variation */}
               <td className="py-3.5 px-4 text-right">
                 <span
                   className={`font-mono text-xs font-black ${
-                    isIncoming ? "text-emerald-600" : "text-rose-600"
+                    delta > 0 ? "text-emerald-600" : delta < 0 ? "text-rose-600" : "text-slate-500"
                   }`}
                 >
-                  {isIncoming ? "+" : ""}
-                  {delta.toFixed(2)}
+                  {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}
                 </span>
               </td>
 
@@ -809,28 +921,343 @@ function AuditTableView({ items, loading, locale, onRetry, onPrintTransfer }: an
                   }`}
                 >
                   {isNegative && <AlertCircle size={12} className="animate-pulse" />}
-                  {Number(item.stock_apres).toFixed(2)}
+                  {Number(item.stock_apres || 0).toFixed(2)}
                 </span>
               </td>
 
-              {/* Actions */}
-              <td className="py-3.5 px-3 text-right">
-                {isTransfer ? (
+              {/* Active Actions Column */}
+              <td className="py-3.5 px-4 text-center">
+                <div className="flex items-center justify-center gap-1">
+                  {/* Action 1: View Details */}
                   <button
-                    onClick={() => onPrintTransfer(item.nr_doc)}
-                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
-                    title={locale === "ar" ? "طباعة سند التحويل" : "Imprimer bordereau transfert"}
+                    onClick={() => onViewDetails(item)}
+                    className="p-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all cursor-pointer"
+                    title={locale === "ar" ? "معاينة تفاصيل ومطابقة الحركة" : "Détails & Inspection"}
                   >
-                    <Printer size={15} />
+                    <Eye size={16} />
                   </button>
-                ) : (
-                  <span className="text-slate-300 text-xs">—</span>
-                )}
+
+                  {/* Action 2: Print Voucher / Transfer */}
+                  <button
+                    onClick={() => onPrintMovement(item)}
+                    className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                    title={
+                      isTransfer
+                        ? (locale === "ar" ? "طباعة سند التحويل" : "Imprimer Bon de Transfert")
+                        : (locale === "ar" ? "طباعة وصل / سند الحركة" : "Imprimer Justificatif")
+                    }
+                  >
+                    <Printer size={16} />
+                  </button>
+
+                  {/* Action 3: Document Link */}
+                  {item.nr_doc && (
+                    <a
+                      href={
+                        item.nr_doc.startsWith("FA-") ||
+                        item.nr_doc.startsWith("FAC-") ||
+                        item.nr_doc.startsWith("BL-")
+                          ? `/invoice/${item.nr_doc}`
+                          : "#"
+                      }
+                      target={
+                        item.nr_doc.startsWith("FA-") ||
+                        item.nr_doc.startsWith("FAC-") ||
+                        item.nr_doc.startsWith("BL-")
+                          ? "_blank"
+                          : "_self"
+                      }
+                      onClick={(e) => {
+                        if (
+                          !item.nr_doc.startsWith("FA-") &&
+                          !item.nr_doc.startsWith("FAC-") &&
+                          !item.nr_doc.startsWith("BL-")
+                        ) {
+                          e.preventDefault();
+                          onViewDetails(item);
+                        }
+                      }}
+                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                      title={locale === "ar" ? "فتح الوثيقة الأصلية" : "Voir le document original"}
+                    >
+                      <FileText size={16} />
+                    </a>
+                  )}
+                </div>
               </td>
             </tr>
           );
         })}
       </tbody>
     </table>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MOVEMENT DETAIL INSPECTION MODAL
+   ═══════════════════════════════════════════════════════════════════ */
+
+function MovementDetailModal({ movement, locale, onClose, onPrint }: any) {
+  const delta = Number(movement.variation !== undefined ? movement.variation : (Number(movement.stock_apres) - Number(movement.stock_avant)));
+  const isIncoming = delta >= 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-[32px] max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 animate-in zoom-in-95 duration-200 relative">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black">
+              <ShieldCheck size={22} />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-900">
+                {locale === "ar" ? "تفاصيل حركة المخزون" : "Détails du Mouvement d'Audit"}
+              </h2>
+              <span className="font-mono text-xs font-bold text-slate-400">
+                MVT #{movement.id} • {movement.nr_doc || "SANS-DOC"}
+              </span>
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-all cursor-pointer"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* 3-Step Stock Flow Progression Card */}
+        <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-2xl p-5 text-white shadow-xl">
+          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+            <span>{locale === "ar" ? "مسار تطور الرصيد اللوجستي" : "Évolution Logistique du Stock"}</span>
+            <span className="px-2 py-0.5 rounded bg-white/10 text-white font-mono text-[10px]">
+              {movement.type}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 text-center items-center">
+            {/* Avant */}
+            <div className="bg-white/5 rounded-xl p-3 border border-white/10">
+              <span className="block text-[9px] font-extrabold uppercase text-slate-400">
+                {locale === "ar" ? "الرصيد السابق" : "Stock Avant"}
+              </span>
+              <span className="text-lg font-black font-mono text-slate-200">
+                {Number(movement.stock_avant || 0).toFixed(2)}
+              </span>
+            </div>
+
+            {/* Variation */}
+            <div className="flex flex-col items-center justify-center">
+              <span className={`text-base font-black font-mono ${isIncoming ? "text-emerald-400" : "text-rose-400"}`}>
+                {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}
+              </span>
+              <span className="text-[9px] font-bold text-slate-400 mt-0.5">
+                {isIncoming ? (locale === "ar" ? "وارد (+)" : "Entrée (+)") : (locale === "ar" ? "منصرف (-)" : "Sortie (-)")}
+              </span>
+            </div>
+
+            {/* Après */}
+            <div className="bg-white/10 rounded-xl p-3 border border-white/20">
+              <span className="block text-[9px] font-extrabold uppercase text-emerald-400">
+                {locale === "ar" ? "الرصيد بعد" : "Stock Après"}
+              </span>
+              <span className="text-lg font-black font-mono text-white">
+                {Number(movement.stock_apres || 0).toFixed(2)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed Metadata Grid */}
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">
+              {locale === "ar" ? "اسم الصنف" : "Article & Produit"}
+            </span>
+            <span className="font-black text-slate-800 block truncate">
+              {movement.articles?.designation || "Sans nom"}
+            </span>
+            <span className="font-mono text-[10px] text-indigo-600 font-bold">
+              {movement.articles?.reference || `ART-${movement.article_id}`}
+            </span>
+          </div>
+
+          <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">
+              {locale === "ar" ? "المستودع والموقع" : "Dépôt / Magasin"}
+            </span>
+            <span className="font-black text-slate-800 flex items-center gap-1">
+              <MapPin size={13} className="text-indigo-500" />
+              {movement.depot || "BOUTIQUE"}
+            </span>
+          </div>
+
+          <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">
+              {locale === "ar" ? "التاريخ والوقت" : "Date & Horodatage"}
+            </span>
+            <span className="font-black text-slate-800 flex items-center gap-1">
+              <Clock size={13} className="text-slate-400" />
+              {new Date(movement.date_mouvement).toLocaleDateString("fr-FR")}
+            </span>
+          </div>
+
+          <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+            <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">
+              {locale === "ar" ? "المدقق / المستخدم" : "Opérateur / Auditeur"}
+            </span>
+            <span className="font-black text-slate-800 flex items-center gap-1">
+              <User size={13} className="text-slate-400" />
+              {movement.utilisateur || "Admin"}
+            </span>
+          </div>
+
+          {movement.fournisseur_client && (
+            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 col-span-2">
+              <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">
+                {locale === "ar" ? "العميل / المورد المرتبط" : "Tiers Associé"}
+              </span>
+              <span className="font-black text-slate-800">
+                {movement.fournisseur_client}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="flex items-center justify-between gap-3 pt-2">
+          <button
+            onClick={onPrint}
+            className="flex-1 py-3 px-4 rounded-2xl bg-slate-900 text-white font-black text-xs flex items-center justify-center gap-2 hover:bg-indigo-600 transition-all cursor-pointer shadow-md"
+          >
+            <Printer size={16} />
+            <span>{locale === "ar" ? "طباعة السند / الوصل" : "Imprimer Justificatif"}</span>
+          </button>
+
+          <button
+            onClick={onClose}
+            className="py-3 px-6 rounded-2xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all cursor-pointer"
+          >
+            {locale === "ar" ? "إغلاق" : "Fermer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MOVEMENT RECEIPT PRINT VOUCHER MODAL
+   ═══════════════════════════════════════════════════════════════════ */
+
+function MovementReceiptModal({ movement, company, locale, onClose }: any) {
+  const delta = Number(movement.variation !== undefined ? movement.variation : (Number(movement.stock_apres) - Number(movement.stock_avant)));
+  const isIncoming = delta >= 0;
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+      <div className="bg-white rounded-[32px] max-w-lg w-full p-8 shadow-2xl border border-slate-100 space-y-6">
+        {/* Printable Area */}
+        <div className="space-y-6 text-slate-800">
+          {/* Company Header */}
+          <div className="flex items-start justify-between border-b pb-4">
+            <div>
+              <h1 className="text-xl font-black text-slate-900 uppercase">
+                {company?.nom || "GESTION PRO GLOBAL"}
+              </h1>
+              <p className="text-xs text-slate-500 font-medium">
+                {company?.adresse || "Siège Social - Boutique Centrale"}
+              </p>
+              <p className="text-xs text-slate-500 font-medium">
+                Tél: {company?.telephone || "+227 00 00 00 00"}
+              </p>
+            </div>
+            <div className="text-right">
+              <span className="px-3 py-1 bg-slate-100 rounded-lg text-xs font-black uppercase block">
+                {movement.type}
+              </span>
+              <span className="font-mono text-xs text-slate-400 block mt-1">
+                REF: {movement.nr_doc || `MVT-${movement.id}`}
+              </span>
+            </div>
+          </div>
+
+          <div className="text-center py-2 bg-slate-50 rounded-xl border border-slate-100">
+            <h2 className="text-sm font-black tracking-wider uppercase text-slate-900">
+              JUSTIFICATIF D&apos;AUDIT & MOUVEMENT DE STOCK
+            </h2>
+            <p className="text-[10px] text-slate-400 font-mono">
+              Date: {new Date(movement.date_mouvement).toLocaleString("fr-FR")} • Opérateur: {movement.utilisateur || "Admin"}
+            </p>
+          </div>
+
+          {/* Table */}
+          <table className="w-full text-xs text-left border border-slate-200 rounded-xl overflow-hidden">
+            <thead className="bg-slate-100 text-[10px] font-black uppercase text-slate-600">
+              <tr>
+                <th className="p-2.5">Désignation</th>
+                <th className="p-2.5 text-right">Avant</th>
+                <th className="p-2.5 text-right">Variation</th>
+                <th className="p-2.5 text-right">Après</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-bold">
+              <tr>
+                <td className="p-2.5">
+                  <div className="font-black text-slate-900">{movement.articles?.designation || "Article"}</div>
+                  <div className="font-mono text-[10px] text-indigo-600">{movement.articles?.reference}</div>
+                </td>
+                <td className="p-2.5 text-right font-mono">{Number(movement.stock_avant || 0).toFixed(2)}</td>
+                <td className={`p-2.5 text-right font-mono font-black ${isIncoming ? "text-emerald-600" : "text-rose-600"}`}>
+                  {delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2)}
+                </td>
+                <td className="p-2.5 text-right font-mono font-black text-slate-900">
+                  {Number(movement.stock_apres || 0).toFixed(2)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Signatures */}
+          <div className="grid grid-cols-2 gap-8 pt-8 border-t border-slate-100 text-center text-xs">
+            <div>
+              <span className="text-[10px] font-black uppercase text-slate-400 block mb-8">
+                Visa de l&apos;Opérateur / Magasinier
+              </span>
+              <div className="h-0.5 bg-slate-200 w-3/4 mx-auto" />
+            </div>
+            <div>
+              <span className="text-[10px] font-black uppercase text-slate-400 block mb-8">
+                Visa Responsable Logistique
+              </span>
+              <div className="h-0.5 bg-slate-200 w-3/4 mx-auto" />
+            </div>
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div className="flex items-center gap-3 pt-4 border-t border-slate-100 print:hidden">
+          <button
+            onClick={handlePrint}
+            className="flex-1 py-3 rounded-2xl bg-slate-900 text-white font-black text-xs flex items-center justify-center gap-2 hover:bg-indigo-600 transition-all cursor-pointer shadow-md"
+          >
+            <Printer size={16} />
+            <span>Imprimer le Justificatif</span>
+          </button>
+          <button
+            onClick={onClose}
+            className="py-3 px-6 rounded-2xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all cursor-pointer"
+          >
+            Fermer
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
