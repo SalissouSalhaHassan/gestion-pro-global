@@ -40,6 +40,7 @@ export const translations: TranslationDict = {
   nav_cash_balance: { fr: "Bilan de Caisse", ar: "ميزان الصندوق والخزينة", en: "Cash Balance" },
   nav_profit_loss: { fr: "Pertes & Profits (P&L)", ar: "الأرباح والخسائر (P&L)", en: "Profit & Loss (P&L)" },
   nav_finance: { fr: "Gestion Financière", ar: "الإدارة المالية والتقارير", en: "Financial Reports" },
+  nav_forex: { fr: "Forex & Devises", ar: "العملات والضرائب (Forex)", en: "Forex & Currencies" },
   nav_data_hub: { fr: "Export & Sauvegarde", ar: "التصدير والنسخ الاحتياطي", en: "Export & Backup" },
   nav_audit: { fr: "Radar Anti-Fraude", ar: "رادار الأمان ومكافحة التلاعب", en: "Anti-Fraud Radar" },
   nav_advances: { fr: "Dépôts & Avances", ar: "الودائع والدفعات المقدمة", en: "Deposits & Advances" },
