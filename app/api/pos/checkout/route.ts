@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getServerSession, isAdminOrManager } from "@/lib/auth_helper";
 import { AdvanceService } from "@/lib/services/advance.service";
 import { isGreaterOrEqual, round } from "@/lib/utils/finance";
+import { awardLoyaltyPoints } from "@/lib/services/loyalty.service";
 
 type CheckoutItem = {
   id: number | string;
@@ -932,6 +933,11 @@ export async function POST(request: Request) {
         depotId: effectiveDepotId,
         depotName: canonicalDepotName,
       });
+    }
+
+    // Award loyalty points to client if registered
+    if (clientId && Number(clientId) > 1 && finalTotalTTC > 0) {
+      await awardLoyaltyPoints(clientId, extractedId, finalTotalTTC);
     }
 
     return NextResponse.json({

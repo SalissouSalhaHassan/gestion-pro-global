@@ -74,6 +74,9 @@ type Client = {
   tel: string | null;
   type_client?: string | null;
   credit_facture: number;
+  points_fidelite?: number;
+  niveau_fidelite?: string;
+  carte_fidelite_numero?: string;
 };
 
 type Depot = {
@@ -1264,7 +1267,7 @@ function PosPage() {
         /* ── 2. Clients ── */
         let clientQueryBuilder = supabase
           .from("clients")
-          .select("id, ref_client, nom, tel, credit_facture, is_deleted")
+          .select("id, ref_client, nom, tel, credit_facture, is_deleted, type_client, points_fidelite, niveau_fidelite, carte_fidelite_numero")
           .eq("is_deleted", false)
           .order("nom", { ascending: true });
 
@@ -2677,6 +2680,25 @@ function PosPage() {
                     <UserPlus size={20} />
                   </button>
                 </div>
+
+                {/* VIP Loyalty Badge if client has points */}
+                {(() => {
+                  const currentClient = clients.find((c) => String(c.id) === String(selectedClientId));
+                  if (!currentClient || !(Number(currentClient.points_fidelite) > 0)) return null;
+                  const pts = Number(currentClient.points_fidelite);
+                  const valCFA = pts * 10;
+                  const tier = currentClient.niveau_fidelite || "BRONZE";
+                  return (
+                    <div style={{ marginTop: 6, display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(135deg, #fef3c7, #fde68a)", border: "1px solid #f59e0b", padding: "6px 10px", borderRadius: 10 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: "#78350f", display: "flex", alignItems: "center", gap: 4 }}>
+                        ⭐ VIP [{tier}]: {pts.toLocaleString()} pts ({valCFA.toLocaleString()} F CFA)
+                      </span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "#92400e", background: "#fff", padding: "2px 6px", borderRadius: 6 }}>
+                        Cashback Actif
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Multi-Tier Pricing Mode Switcher */}

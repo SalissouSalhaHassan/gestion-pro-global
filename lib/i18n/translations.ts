@@ -31,6 +31,7 @@ export const translations: TranslationDict = {
   nav_ciment: { fr: "Gestion Ciment", ar: "إدارة الأسمنت", en: "Cement Management" },
   nav_audit: { fr: "Journal d'Audit", ar: "سجل التدقيق والحركات", en: "Audit & Movements" },
   nav_clients: { fr: "Clients", ar: "العملاء", en: "Customers" },
+  nav_loyalty: { fr: "Club Fidélité VIP", ar: "نادي الولاء وبطاقات VIP", en: "VIP Loyalty Club" },
   nav_suppliers: { fr: "Fournisseurs", ar: "الموردين", en: "Suppliers" },
   nav_invoices: { fr: "Factures", ar: "فواتير المبيعات", en: "Invoices" },
   nav_devis: { fr: "Devis & Proforma", ar: "عروض الأسعار (Devis)", en: "Quotations & Proforma" },
