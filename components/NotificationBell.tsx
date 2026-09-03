@@ -1,10 +1,26 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Bell, Package, Home, ArrowRight, Loader2, Info, Banknote } from "lucide-react";
+import {
+  Bell,
+  Package,
+  Home,
+  ArrowRight,
+  Loader2,
+  Info,
+  Banknote,
+  Car,
+  Scale,
+  Sparkles,
+  AlertTriangle,
+  CheckCircle2,
+  RefreshCw
+} from "lucide-react";
 import Link from "next/link";
+import { useLanguage } from "@/lib/i18n/context";
 
 export default function NotificationBell() {
+  const { locale, dir } = useLanguage();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -25,8 +41,7 @@ export default function NotificationBell() {
 
   useEffect(() => {
     fetchNotifications();
-    // Refresh every 5 minutes
-    const interval = setInterval(fetchNotifications, 5 * 60 * 1000);
+    const interval = setInterval(fetchNotifications, 3 * 60 * 1000); // Check every 3 mins
     return () => clearInterval(interval);
   }, []);
 
@@ -41,82 +56,169 @@ export default function NotificationBell() {
   }, []);
 
   const unreadCount = notifications.length;
+  const highPriorityCount = notifications.filter((n) => n.priority === "high").length;
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`relative p-3 rounded-2xl transition-all duration-300 group ${
-          isOpen ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/30" : "bg-white/80 hover:bg-white text-slate-400 hover:text-indigo-500 border border-slate-200"
+        className={`relative p-3 rounded-2xl transition-all duration-300 group cursor-pointer ${
+          isOpen
+            ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30"
+            : "bg-white/90 hover:bg-white text-slate-500 hover:text-indigo-600 border border-slate-200/80 shadow-xs"
         }`}
+        title={locale === "ar" ? "مركز الإشعارات والتنبيهات" : "Centre de Notifications & Alertes"}
       >
-        <Bell size={20} className={unreadCount > 0 ? "animate-wiggle" : ""} />
+        <Bell size={19} className={unreadCount > 0 ? "animate-wiggle" : ""} />
         {unreadCount > 0 && (
-          <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-rose-500 border-2 border-white rounded-full animate-pulse" />
+          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-pulse">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-3 w-80 bg-white/95 backdrop-blur-2xl border border-slate-200/60 rounded-[32px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.15)] overflow-hidden z-[110] animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Notifications</h3>
-            {unreadCount > 0 && (
-              <span className="px-2 py-0.5 bg-rose-50 text-rose-500 rounded-full text-[10px] font-black">
-                {unreadCount} Alertes
+        <div
+          dir={dir}
+          className={`absolute top-full mt-3 w-84 sm:w-96 bg-white/95 backdrop-blur-2xl border border-slate-200/80 rounded-[32px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.2)] overflow-hidden z-[120] animate-in fade-in slide-in-from-top-4 duration-300 ${
+            dir === "rtl" ? "left-0" : "right-0"
+          }`}
+        >
+          {/* Header */}
+          <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+                <Sparkles size={14} />
+              </div>
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                {locale === "ar" ? "التنبيهات التشغيلية" : "Alertes Opérationnelles"}
+              </h3>
+            </div>
+            {unreadCount > 0 ? (
+              <span className="px-2.5 py-0.5 bg-rose-50 text-rose-600 border border-rose-200/60 rounded-full text-[10px] font-black">
+                {unreadCount} {locale === "ar" ? "تنبيه نشط" : "Alertes"}
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-200/60 rounded-full text-[10px] font-black">
+                {locale === "ar" ? "كل شيء سليم" : "Tout est OK"}
               </span>
             )}
           </div>
 
-          <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
+          {/* List Content */}
+          <div className="max-h-[60vh] overflow-y-auto custom-scrollbar divide-y divide-slate-100">
             {loading && notifications.length === 0 ? (
-              <div className="p-10 flex flex-col items-center justify-center opacity-40">
-                <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-2" />
-                <p className="text-xs font-bold">Chargement...</p>
+              <div className="p-10 flex flex-col items-center justify-center opacity-60">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-2" />
+                <p className="text-xs font-bold text-slate-500">
+                  {locale === "ar" ? "جاري فحص حالة النظام والمخزون..." : "Vérification des alertes..."}
+                </p>
               </div>
             ) : notifications.length === 0 ? (
-              <div className="p-10 flex flex-col items-center justify-center text-center opacity-40">
-                <Info size={32} className="mb-2" />
-                <p className="text-xs font-bold uppercase tracking-wider">Tout est en ordre</p>
-                <p className="text-[10px] mt-1 font-medium">Aucune alerte pour le moment.</p>
+              <div className="p-10 flex flex-col items-center justify-center text-center opacity-70">
+                <CheckCircle2 size={36} className="mb-2 text-emerald-500" />
+                <p className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                  {locale === "ar" ? "النظام مستقر تماماً" : "Tout est sous contrôle"}
+                </p>
+                <p className="text-[11px] mt-1 font-medium text-slate-500">
+                  {locale === "ar"
+                    ? "لا توجد نواقص في المخزون أو ديون حرجة في الوقت الحالي."
+                    : "Aucune rupture de stock ni échéance critique pour le moment."}
+                </p>
               </div>
             ) : (
               <div className="p-2 space-y-1">
-                {notifications.map((notif) => (
-                  <Link
-                    key={notif.id}
-                    href={notif.link}
-                    onClick={() => setIsOpen(false)}
-                    className="flex items-start gap-4 p-4 rounded-2xl hover:bg-slate-50 transition-all group/item"
-                  >
-                    <div className={`p-2.5 rounded-xl ${
-                      notif.type === "stock" ? "bg-amber-50 text-amber-600" : 
-                      notif.type === "debt" ? "bg-rose-50 text-rose-600" :
-                      "bg-indigo-50 text-indigo-600"
-                    }`}>
-                      {notif.type === "stock" ? <Package size={18} /> : 
-                       notif.type === "debt" ? <Banknote size={18} /> :
-                       <ArrowRight size={18} />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${
-                        notif.priority === 'high' ? 'text-rose-500' : 'text-slate-400'
-                      }`}>{notif.title}</p>
-                      <p className="text-xs font-bold text-slate-800 leading-relaxed truncate">{notif.message}</p>
-                    </div>
-                    <ArrowRight size={14} className="mt-1 text-slate-300 opacity-0 group-hover/item:opacity-100 group-hover/item:translate-x-1 transition-all" />
-                  </Link>
-                ))}
+                {notifications.map((notif) => {
+                  const isStock = notif.type === "stock";
+                  const isDebt = notif.type === "debt";
+                  const isVehicle = notif.type === "vehicle";
+                  const isRent = notif.type === "rent";
+
+                  return (
+                    <Link
+                      key={notif.id}
+                      href={notif.link}
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-start gap-3.5 p-3.5 rounded-2xl hover:bg-slate-50/80 transition-all group/item"
+                    >
+                      <div
+                        className={`p-2.5 rounded-xl shrink-0 ${
+                          isStock
+                            ? "bg-amber-50 text-amber-600 border border-amber-200/50"
+                            : isDebt
+                            ? "bg-rose-50 text-rose-600 border border-rose-200/50"
+                            : isVehicle
+                            ? "bg-blue-50 text-blue-600 border border-blue-200/50"
+                            : isRent
+                            ? "bg-emerald-50 text-emerald-600 border border-emerald-200/50"
+                            : "bg-indigo-50 text-indigo-600 border border-indigo-200/50"
+                        }`}
+                      >
+                        {isStock ? (
+                          <Package size={17} />
+                        ) : isDebt ? (
+                          <Banknote size={17} />
+                        ) : isVehicle ? (
+                          <Car size={17} />
+                        ) : isRent ? (
+                          <Home size={17} />
+                        ) : (
+                          <AlertTriangle size={17} />
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <p
+                            className={`text-[10px] font-black uppercase tracking-wider truncate ${
+                              notif.priority === "high" ? "text-rose-600" : "text-slate-500"
+                            }`}
+                          >
+                            {notif.title}
+                          </p>
+                          {notif.priority === "high" && (
+                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-xs font-bold text-slate-800 leading-snug break-words">
+                          {notif.message}
+                        </p>
+                      </div>
+
+                      <ArrowRight
+                        size={14}
+                        className={`mt-1 text-slate-300 opacity-0 group-hover/item:opacity-100 transition-all shrink-0 ${
+                          dir === "rtl"
+                            ? "rotate-180 group-hover/item:-translate-x-1"
+                            : "group-hover/item:translate-x-1"
+                        }`}
+                      />
+                    </Link>
+                  );
+                })}
               </div>
             )}
           </div>
 
-          <div className="p-4 bg-slate-50 border-t border-slate-100">
-             <button 
-               onClick={fetchNotifications}
-               className="w-full py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-indigo-600 transition-colors"
-             >
-               Actualiser les alertes
-             </button>
+          {/* Footer Bar */}
+          <div className="p-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
+            <span className="text-[10px] font-bold text-slate-400">
+              {highPriorityCount > 0 && (
+                <span className="text-rose-600 font-black">
+                  {highPriorityCount} {locale === "ar" ? "حرجة للغاية" : "priorité haute"} •{" "}
+                </span>
+              )}
+              {locale === "ar" ? "تحديث تلقائي" : "Sync Auto"}
+            </span>
+
+            <button
+              onClick={fetchNotifications}
+              disabled={loading}
+              className="text-[10px] font-black uppercase tracking-wider text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
+              <span>{locale === "ar" ? "تحديث الآن" : "Actualiser"}</span>
+            </button>
           </div>
         </div>
       )}
@@ -124,11 +226,11 @@ export default function NotificationBell() {
       <style jsx global>{`
         @keyframes wiggle {
           0%, 100% { transform: rotate(0deg); }
-          25% { transform: rotate(10deg); }
-          75% { transform: rotate(-10deg); }
+          25% { transform: rotate(12deg); }
+          75% { transform: rotate(-12deg); }
         }
         .animate-wiggle {
-          animation: wiggle 0.5s ease-in-out infinite;
+          animation: wiggle 0.6s ease-in-out infinite;
           animation-play-state: paused;
         }
         button:hover .animate-wiggle {
