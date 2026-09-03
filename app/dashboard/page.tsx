@@ -87,7 +87,8 @@ export default function DashboardPage() {
       icon: Wallet, 
       bg: "linear-gradient(135deg, #4f46e5, #7c3aed)", 
       sc: "rgba(79,70,229,0.25)",
-      sub: locale === "ar" ? "إجمالي الفواتير الصادرة اليوم" : "Factures générées aujourd'hui"
+      sub: locale === "ar" ? "إجمالي الفواتير الصادرة اليوم" : "Factures générées aujourd'hui",
+      link: "/dashboard/invoices"
     },
     { 
       label: locale === "ar" ? "عدد فواتير اليوم" : "Factures émises", 
@@ -95,7 +96,8 @@ export default function DashboardPage() {
       icon: FileText, 
       bg: "linear-gradient(135deg, #ec4899, #8b5cf6)", 
       sc: "rgba(236,72,153,0.25)",
-      sub: locale === "ar" ? "عمليات البيع بنقاط البيع" : "Tickets & factures POS"
+      sub: locale === "ar" ? "عمليات البيع بنقاط البيع" : "Tickets & factures POS",
+      link: "/dashboard/invoices"
     },
     { 
       label: locale === "ar" ? "تنبيهات المخزون المنخفض" : "Stock faible", 
@@ -103,7 +105,8 @@ export default function DashboardPage() {
       icon: AlertTriangle, 
       bg: "linear-gradient(135deg, #f59e0b, #ef4444)", 
       sc: "rgba(245,158,11,0.25)",
-      sub: locale === "ar" ? "مواد بحاجة لإعادة التزويد" : "Articles sous le seuil d'alerte"
+      sub: locale === "ar" ? "مواد بحاجة لإعادة التزويد (اضغط للعرض)" : "Articles sous le seuil d'alerte (cliquer)",
+      link: "/dashboard/stock"
     },
   ];
 
@@ -178,6 +181,7 @@ export default function DashboardPage() {
         {stats.map((s, i) => (
           <div 
             key={i} 
+            onClick={() => s.link && router.push(s.link)}
             className="group relative overflow-hidden rounded-[32px] p-7 text-white transition-all duration-300 hover:scale-[1.02] cursor-pointer" 
             style={{ background: s.bg, boxShadow: `0 16px 36px ${s.sc}` }}
           >

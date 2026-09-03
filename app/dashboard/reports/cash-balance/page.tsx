@@ -20,11 +20,14 @@ import {
   RefreshCw,
   CreditCard,
   Banknote,
-  Receipt
+  Receipt,
+  Lock
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/context";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
 import CashBalanceModal from "./CashBalanceModal";
+import CashClosureModal from "./CashClosureModal";
+
 
 export default function CashBalancePage() {
   const { t, locale } = useLanguage();
@@ -48,6 +51,7 @@ export default function CashBalancePage() {
   
   const [loading, setLoading] = useState(true);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isClosureModalOpen, setIsClosureModalOpen] = useState(false);
   const [filters, setFilters] = useState({ 
     start: new Date().toISOString().split("T")[0], 
     end: new Date().toISOString().split("T")[0], 
@@ -170,10 +174,18 @@ export default function CashBalancePage() {
 
             <button 
               onClick={() => setIsPrintModalOpen(true)}
-              className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-black text-xs shadow-xl shadow-emerald-600/25 transition-all flex items-center gap-2 cursor-pointer"
+              className="px-5 py-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black text-xs border border-white/10 transition-all flex items-center gap-2 cursor-pointer"
             >
               <Printer size={16} />
-              <span>{locale === "ar" ? "طباعة التقرير المالي" : "Imprimer le Rapport"}</span>
+              <span>{locale === "ar" ? "طباعة التقرير" : "Imprimer le Bilan"}</span>
+            </button>
+
+            <button 
+              onClick={() => setIsClosureModalOpen(true)}
+              className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-black text-xs shadow-xl shadow-emerald-600/25 transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Lock size={16} />
+              <span>{locale === "ar" ? "إغلاق الصندوق (Rapport Z)" : "Clôture de Caisse Z"}</span>
             </button>
           </div>
         </div>
@@ -183,6 +195,15 @@ export default function CashBalancePage() {
         <CashBalanceModal 
           filters={filters} 
           onClose={() => setIsPrintModalOpen(false)} 
+        />
+      )}
+
+      {isClosureModalOpen && data?.summary && (
+        <CashClosureModal
+          summary={data.summary}
+          filters={filters}
+          userSession={userSession}
+          onClose={() => setIsClosureModalOpen(false)}
         />
       )}
 
