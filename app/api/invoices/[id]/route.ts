@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { InvoiceService } from '@/lib/services/invoice.service';
 import { getServerSession, isAdminOrManager } from '@/lib/auth_helper';
 import { applyUserScope } from '@/lib/utils/scoping';
+import { logAuditEvent } from '@/lib/services/audit.service';
 
 export async function GET(
   request: Request,
@@ -113,6 +114,17 @@ export async function DELETE(
     if (result && result.ok === false) {
         return NextResponse.json({ error: result.error || "Échec de la suppression" }, { status: 400 });
     }
+
+    await logAuditEvent({
+      action_type: "DELETE_INVOICE",
+      severity: "CRITICAL",
+      module: "VENTES",
+      description: `Suppression définitive / Annulation de la facture #${id} par ${session.username}`,
+      target_id: id,
+      user_id: Number(session.id),
+      username: session.username,
+      metadata: { invoice_id: id },
+    });
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
