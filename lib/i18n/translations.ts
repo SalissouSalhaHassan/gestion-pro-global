@@ -42,7 +42,7 @@ export const translations: TranslationDict = {
   nav_finance: { fr: "Gestion Financière", ar: "الإدارة المالية والتقارير", en: "Financial Reports" },
   nav_forex: { fr: "Forex & Devises", ar: "العملات والضرائب (Forex)", en: "Forex & Currencies" },
   nav_data_hub: { fr: "Export & Sauvegarde", ar: "التصدير والنسخ الاحتياطي", en: "Export & Backup" },
-  nav_audit: { fr: "Radar Anti-Fraude", ar: "رادار الأمان ومكافحة التلاعب", en: "Anti-Fraud Radar" },
+  nav_fraud_radar: { fr: "Radar Anti-Fraude", ar: "رادار الأمان ومكافحة التلاعب", en: "Anti-Fraud Radar" },
   nav_advances: { fr: "Dépôts & Avances", ar: "الودائع والدفعات المقدمة", en: "Deposits & Advances" },
   nav_loyers: { fr: "Gestion des Loyers", ar: "إدارة الإيجارات والعقارات", en: "Rent & Real Estate" },
   nav_vehicles: { fr: "Gestion des Véhicules", ar: "إدارة المركبات والأسطول", en: "Fleet & Vehicles" },
