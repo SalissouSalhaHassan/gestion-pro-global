@@ -22,7 +22,7 @@ export class AdvanceService {
   async getAllAdvances(session?: CustomSession) {
     let query = this.supabase
       .from('avances_clients')
-      .select('*, clients(nom)')
+      .select('*, clients(id, nom, tel, ref_client, adresse)')
       .order('date_creation', { ascending: false });
 
     if (session) {
@@ -51,7 +51,7 @@ export class AdvanceService {
     const { data, error } = await this.supabase
       .from('avances_clients')
       .insert(payload)
-      .select()
+      .select('*, clients(id, nom, tel, ref_client, adresse)')
       .single();
 
     if (error) throw new Error(error.message);
@@ -87,7 +87,7 @@ export class AdvanceService {
         statut: newStatus
       })
       .eq('id', advanceId)
-      .select()
+      .select('*, clients(id, nom, tel, ref_client, adresse)')
       .single();
 
     if (updateError) throw new Error(updateError.message);
@@ -103,7 +103,7 @@ export class AdvanceService {
       .update({ statut: 'Annulée' })
       .eq('id', advanceId)
       .eq('statut', 'Disponible')
-      .select()
+      .select('*, clients(id, nom, tel, ref_client, adresse)')
       .single();
 
     if (error) throw new Error("Cannot cancel advance, might already be used or an error occurred.");
@@ -121,7 +121,7 @@ export class AdvanceService {
       .from('avances_clients')
       .update(updateData)
       .eq('id', advanceId)
-      .select()
+      .select('*, clients(id, nom, tel, ref_client, adresse)')
       .single();
 
     if (error) throw new Error(error.message);

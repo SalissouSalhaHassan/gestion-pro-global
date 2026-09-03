@@ -121,18 +121,34 @@ export default function AdvancesPage() {
 
   const isAdmin = userSession?.admin === "Oui" || userSession?.role === 1 || userSession?.role === "1";
 
+  // Helper to safely extract client info with multiple fallbacks
+  const getClientInfo = (adv: any) => {
+    const rawClients = adv?.clients;
+    const clientFromStore = clients.find((c) => Number(c.id) === Number(adv?.client_id));
+    const clientObj = Array.isArray(rawClients) ? rawClients[0] : (rawClients || clientFromStore);
+
+    const nom = clientObj?.nom || (adv?.client_id ? `Client #${adv.client_id}` : (locale === "ar" ? "عميل غير محدد" : "Client Inconnu"));
+    const clientRef = clientObj?.ref_client || "";
+    const displayRef = adv?.reference_paiement || clientRef || (adv?.id ? `DEP-${String(adv.id).padStart(4, '0')}` : "—");
+    const tel = clientObj?.tel || "";
+
+    return { nom, clientRef, displayRef, tel, clientObj };
+  };
+
   const filteredAdvances = useMemo(() => {
     return advances.filter((a) => {
-      const clientName = (a as any).clients?.nom || "";
+      const { nom: clientName, clientRef, displayRef } = getClientInfo(a);
       const matchesSearch =
         clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        a.reference_paiement?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        clientRef.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        displayRef.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (a.reference_paiement && a.reference_paiement.toLowerCase().includes(searchTerm.toLowerCase())) ||
         a.statut?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesSeller = filterSeller === "Tous" || a.utilisateur === filterSeller;
       const matchesStatus = statusFilter === "Tous" || a.statut === statusFilter;
       return matchesSearch && matchesSeller && matchesStatus;
     });
-  }, [advances, searchTerm, filterSeller, statusFilter]);
+  }, [advances, clients, searchTerm, filterSeller, statusFilter]);
 
   const uniqueSellers = Array.from(new Set(advances.map((a) => a.utilisateur).filter(Boolean)));
 
@@ -183,15 +199,17 @@ export default function AdvancesPage() {
     setIsSubmitting(true);
     try {
       if (!createData.client_id || !createData.montant_initial) return;
+      const autoRef = createData.reference_paiement || `REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
       await addAdvance({
         client_id: Number(createData.client_id),
         montant_initial: Number(createData.montant_initial),
         date_avance: createData.date_avance,
         moyen_paiement: createData.moyen_paiement,
-        reference_paiement: createData.reference_paiement,
+        reference_paiement: autoRef,
         notes: createData.notes,
       });
       setIsCreateModalOpen(false);
+      fetchAdvances();
       setCreateData({
         client_id: "",
         montant_initial: "",
@@ -327,13 +345,13 @@ export default function AdvancesPage() {
   };
 
   const exportToCSV = () => {
-    const headers = ["Client,Date,Montant Initial,Montant Restant,Moyen,Emplacement,Vendeur,Statut"];
-    const rows = filteredAdvances.map(
-      (a) =>
-        `"${(a as any).clients?.nom || a.client_id}","${a.date_avance}",${a.montant_initial},${
-          a.montant_restant
-        },"${a.moyen_paiement}","${a.emplacement || "Général"}","${a.utilisateur}","${a.statut}"`
-    );
+    const headers = ["Client,Ref,Date,Montant Initial,Montant Restant,Moyen,Emplacement,Vendeur,Statut"];
+    const rows = filteredAdvances.map((a) => {
+      const { nom: clientNom, displayRef } = getClientInfo(a);
+      return `"${clientNom}","${displayRef}","${a.date_avance}",${a.montant_initial},${
+        a.montant_restant
+      },"${a.moyen_paiement}","${a.emplacement || "Général"}","${a.utilisateur}","${a.statut}"`;
+    });
     const content = headers.concat(rows).join("\n");
     const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -347,11 +365,12 @@ export default function AdvancesPage() {
   };
 
   const handleShareAdvanceWhatsApp = (adv: any) => {
-    const clientNom = (adv as any).clients?.nom || `Client #${adv.client_id}`;
+    const { nom: clientNom, displayRef } = getClientInfo(adv);
     const text = encodeURIComponent(
       `💰 *Reçu de Dépôt / Acompte - GestionPro Global*\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
         `👤 *Client :* ${clientNom}\n` +
+        `🔢 *Référence :* ${displayRef}\n` +
         `📅 *Date :* ${adv.date_avance}\n` +
         `💵 *Montant Déposé :* ${formatCurrencyAmount(Number(adv.montant_initial))}\n` +
         `💳 *Solde Restant :* ${formatCurrencyAmount(Number(adv.montant_restant))}\n` +
@@ -612,19 +631,30 @@ export default function AdvancesPage() {
                     return (
                       <tr key={adv.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs uppercase">
-                              {((adv as any).clients?.nom || "C").slice(0, 2)}
-                            </div>
-                            <div>
-                              <div className="font-black text-slate-900">
-                                {(adv as any).clients?.nom || `Client #${adv.client_id}`}
+                          {(() => {
+                            const { nom: clientNom, clientRef, displayRef } = getClientInfo(adv);
+                            return (
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs uppercase shadow-xs">
+                                  {clientNom.slice(0, 2)}
+                                </div>
+                                <div>
+                                  <div className="font-black text-slate-900">
+                                    {clientNom}
+                                  </div>
+                                  <div className="font-mono text-[10px] text-slate-500 font-bold flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-slate-400">REF:</span>
+                                    <span className="text-slate-800 font-extrabold">{displayRef}</span>
+                                    {clientRef && clientRef !== displayRef && (
+                                      <span className="text-blue-600 text-[9px] bg-blue-50 px-1 py-0.2 rounded border border-blue-200/50">
+                                        {clientRef}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                              <div className="font-mono text-[10px] text-slate-400">
-                                REF: {adv.reference_paiement || "—"}
-                              </div>
-                            </div>
-                          </div>
+                            );
+                          })()}
                         </td>
 
                         <td className="py-3.5 px-4 text-center text-xs font-bold text-slate-600">

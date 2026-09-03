@@ -39,7 +39,7 @@ export default function DepositListModal({ onClose }: DepositListModalProps) {
         // 2. Fetch All Advances
         const { data: adv } = await supabase
           .from("avances_clients")
-          .select("*, clients(nom)")
+          .select("*, clients(id, nom, ref_client)")
           .order('date_avance', { ascending: false });
         
         setItems(adv || []);
@@ -132,11 +132,17 @@ export default function DepositListModal({ onClose }: DepositListModalProps) {
                     </tr>
                 </thead>
                 <tbody className="text-[10px] font-bold">
-                    {items.map((item, i) => (
-                        <tr key={i} className={`border-b border-slate-100 last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
-                            <td className="p-4 border-r border-slate-50 uppercase text-slate-900 font-black">{item.clients?.nom}</td>
-                            <td className="p-4 text-center border-r border-slate-50 text-slate-400">{new Date(item.date_avance).toLocaleDateString('fr-FR')}</td>
-                            <td className="p-4 border-r border-slate-50 text-slate-500">{item.reference_paiement || '—'}</td>
+                    {items.map((item, i) => {
+                        const rawClients = item.clients;
+                        const clientObj = Array.isArray(rawClients) ? rawClients[0] : rawClients;
+                        const clientNom = clientObj?.nom || `Client #${item.client_id}`;
+                        const itemRef = item.reference_paiement || clientObj?.ref_client || `DEP-${String(item.id).padStart(4, '0')}`;
+
+                        return (
+                          <tr key={i} className={`border-b border-slate-100 last:border-0 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                              <td className="p-4 border-r border-slate-50 uppercase text-slate-900 font-black">{clientNom}</td>
+                              <td className="p-4 text-center border-r border-slate-50 text-slate-400">{new Date(item.date_avance).toLocaleDateString('fr-FR')}</td>
+                              <td className="p-4 border-r border-slate-50 text-slate-700 font-mono font-bold">{itemRef}</td>
                             <td className="p-4 text-center border-r border-slate-50">{item.moyen_paiement}</td>
                             <td className="p-4 text-right border-r border-slate-50">{new Intl.NumberFormat('fr-FR').format(item.montant_initial)}</td>
                             <td className="p-4 text-right border-r border-slate-50 font-black text-blue-600">{new Intl.NumberFormat('fr-FR').format(item.montant_restant)}</td>

@@ -330,19 +330,33 @@ export default function AdvanceReceiptModal({
             <h2 className="text-sm sm:text-base font-black uppercase tracking-wider text-slate-900">
                {getDocTitle()}
             </h2>
-            <div className="mt-1 flex items-center justify-center gap-2">
-              <span className="text-xs font-black text-slate-900 uppercase">
-                 {advance.clients?.nom || `Client #${advance.client_id}`}
-              </span>
-              {advance.clients?.tel && (
-                <span className="text-[11px] font-bold text-slate-500">
-                  ({advance.clients.tel})
-                </span>
-              )}
-            </div>
-            <div className="text-[10px] font-bold text-blue-600 mt-0.5 uppercase">
-               {locale === "ar" ? "الفرع / المستودع:" : "Emplacement :"} {advance.emplacement || "BOUTIQUE"}
-            </div>
+            {(() => {
+              const clientObj = Array.isArray(advance.clients) ? advance.clients[0] : advance.clients;
+              const clientNom = clientObj?.nom || (advance.client_id ? `Client #${advance.client_id}` : "Client");
+              const clientTel = clientObj?.tel || "";
+              const clientRef = clientObj?.ref_client || "";
+              const displayRef = advance.reference_paiement || clientRef || `DEP-${String(advance.id).padStart(4, '0')}`;
+
+              return (
+                <>
+                  <div className="mt-1 flex items-center justify-center gap-2">
+                    <span className="text-xs font-black text-slate-900 uppercase">
+                       {clientNom}
+                    </span>
+                    {clientTel && (
+                      <span className="text-[11px] font-bold text-slate-500">
+                        ({clientTel})
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] font-bold text-blue-600 mt-0.5 flex items-center justify-center gap-2">
+                     <span>{locale === "ar" ? "الفرع:" : "Emplacement :"} {advance.emplacement || "BOUTIQUE"}</span>
+                     <span>•</span>
+                     <span className="font-mono text-slate-700">REF: {displayRef}</span>
+                  </div>
+                </>
+              );
+            })()}
           </div>
 
           {/* 1. Mode Statement: Table of all movements */}
