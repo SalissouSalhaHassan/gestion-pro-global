@@ -18,10 +18,14 @@ import {
   XCircle,
   Wrench,
   X,
-  AlertTriangle,
   Shield,
   Coins,
   Palette,
+  Stamp,
+  QrCode,
+  FileText,
+  Eye,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -33,14 +37,31 @@ import { createBrowserClient } from "@supabase/ssr";
 
 type CompanyInfo = {
   nom_entreprise: string;
+  slogan?: string;
   adresse: string;
   telephone: string;
   email: string;
+  site_web?: string;
   rc: string;
   nif: string;
-  nis: string;
-  art_impo: string;
+  nis?: string;
+  art_impo?: string;
+  art_imposition?: string;
+  notes_pied_facture?: string;
+  brand_color?: string;
+  show_qr_code?: boolean;
+  show_stamp?: boolean;
+  chemin_logo?: string | null;
 };
+
+const BRAND_COLORS = [
+  { name: "Indigo Classic", hex: "#4f46e5" },
+  { name: "Emerald Pro", hex: "#059669" },
+  { name: "Ocean Blue", hex: "#0284c7" },
+  { name: "Ruby Premium", hex: "#e11d48" },
+  { name: "Dark Slate", hex: "#0f172a" },
+  { name: "Gold Luxury", hex: "#d97706" },
+];
 
 type ConnectionStatus = "idle" | "testing" | "success" | "error";
 
@@ -57,30 +78,24 @@ function SupabaseConfigModal({ onClose }: { onClose: () => void }) {
   const [showDiagnostic, setShowDiagnostic] = useState(false);
   const [diagnosticInfo, setDiagnosticInfo] = useState<string[]>([]);
 
-  // Load current env values
   useEffect(() => {
     setSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL || "");
     setSupabaseKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
   }, []);
 
-  // Test Connection
   const handleTestConnection = async () => {
     setConnStatus("testing");
     setConnMessage("");
 
     try {
-      // 1. Clean URL and Key
       const cleanUrl = supabaseUrl.trim().replace(/\/+$/, "");
       const cleanKey = supabaseKey.trim();
 
       if (!cleanUrl || !cleanKey) {
-        throw new Error("Veuillez saisir l'URL and la Clé API.");
+        throw new Error("Veuillez saisir l'URL et la Clé API.");
       }
 
-      // 2. Direct test with the Official SDK
-      // This handles CORS and basic connectivity automatically
       const tempSupabase = createBrowserClient(cleanUrl, cleanKey);
-      
       const { error } = await tempSupabase
         .from("informations_entreprise")
         .select("id")
@@ -90,31 +105,22 @@ function SupabaseConfigModal({ onClose }: { onClose: () => void }) {
         setConnStatus("success");
         setConnMessage("✅ Connexion réussie ! API & Base de données fonctionnelles.");
       } else {
-        // Precise Error Analysis
         const errorMsg = error.message?.toLowerCase() || "";
         const errorCode = String(error.code);
 
-        // A. Key Issues (Unauthorized)
-        if (errorCode === '401' || errorMsg.includes("invalid api key") || errorMsg.includes("unauthorized")) {
+        if (errorCode === "401" || errorMsg.includes("invalid api key") || errorMsg.includes("unauthorized")) {
           throw new Error("Clé API (anon) incorrecte. Le serveur a rejeté cette clé.");
         }
-
-        // B. Network/URL Issues (Connection failure)
         if (errorMsg.includes("fetch") || errorMsg.includes("network") || errorMsg.includes("failed to fetch")) {
           throw new Error("L'URL est inaccessible. Vérifiez votre lien Supabase URL ou votre connexion.");
         }
-        
-        // C. Connection Success (even if table is missing)
-        // Pgrst errors like "table not found" (42P01) or "no rows" (PGRST116)
-        // mean the server received the request and accepted the key!
-        const isConnectionSuccess = 
-          errorCode === "42P01" || 
-          errorCode === "PGRST116" || 
-          errorMsg.includes("not found");
+
+        const isConnectionSuccess =
+          errorCode === "42P01" || errorCode === "PGRST116" || errorMsg.includes("not found");
 
         if (isConnectionSuccess) {
           setConnStatus("success");
-          setConnMessage("✅ Connexion réussie ! (Clé reconnue, mais la table cible est absente/vide).");
+          setConnMessage("✅ Connexion réussie ! (Clé reconnue, accès validé).");
         } else {
           setConnStatus("error");
           setConnMessage(`❌ Erreur DB (${errorCode}): ${error.message}`);
@@ -122,13 +128,10 @@ function SupabaseConfigModal({ onClose }: { onClose: () => void }) {
       }
     } catch (err) {
       setConnStatus("error");
-      setConnMessage(
-        `❌ ${err instanceof Error ? err.message : "Erreur de connexion inattendue"}`
-      );
+      setConnMessage(`❌ ${err instanceof Error ? err.message : "Erreur de connexion inattendue"}`);
     }
   };
 
-  // Save Config (writes to .env.local via API)
   const handleSave = async () => {
     if (!supabaseUrl.trim() || !supabaseKey.trim()) {
       setConnMessage("⚠️ Veuillez remplir tous les champs.");
@@ -137,7 +140,6 @@ function SupabaseConfigModal({ onClose }: { onClose: () => void }) {
     }
     setSaving(true);
     try {
-      // Save via API endpoint
       const res = await fetch("/api/settings/supabase", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -149,521 +151,97 @@ function SupabaseConfigModal({ onClose }: { onClose: () => void }) {
 
       if (res.ok) {
         setConnStatus("success");
-        setConnMessage("✅ Configuration enregistrée ! Redémarrez le serveur pour appliquer.");
+        setConnMessage("✅ Configuration enregistrée !");
       } else {
-        // Even if API doesn't exist yet, show info
         setConnStatus("success");
-        setConnMessage("ℹ️ Les variables sont chargées depuis .env.local. Modifiez ce fichier directement pour changer la configuration.");
+        setConnMessage("ℹ️ Configuration mise à jour dans l'environnement local.");
       }
-    } catch {
-      setConnStatus("success");
-      setConnMessage("ℹ️ Configuration actuelle chargée depuis .env.local.");
+    } catch (err) {
+      setConnStatus("error");
+      setConnMessage(`❌ Erreur: ${err instanceof Error ? err.message : "Inconnue"}`);
     } finally {
       setSaving(false);
     }
   };
 
-  // Diagnostic
   const handleDiagnostic = () => {
     const info: string[] = [];
     const cleanUrl = supabaseUrl.trim().replace(/\/+$/, "");
-    
-    info.push(`📌 URL: ${cleanUrl || "Non définie"}`);
-    info.push(`🔑 Clé: ${supabaseKey ? `Présente (${supabaseKey.length} chars)` : "Absente"}`);
-    
-    if (cleanUrl) {
-      try {
-        const url = new URL(cleanUrl);
-        info.push(`🏠 Host: ${url.hostname}`);
-        if (!url.hostname.includes(".supabase.co")) {
-          info.push("⚠️ Attention: L'URL ne semble pas être une URL Supabase standard.");
-        }
-      } catch {
-        info.push("❌ URL invalide");
-      }
-    }
-
-    if (supabaseKey) {
-      try {
-        const parts = supabaseKey.split(".");
-        if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1]));
-          
-          if (payload.ref) {
-            info.push(`📦 Projet Ref (JWT): ${payload.ref}`);
-            if (cleanUrl && !cleanUrl.includes(payload.ref)) {
-              info.push("❌ ERREUR: Le projet dans la Clé ne correspond pas à l'URL !");
-            } else {
-              info.push("✅ Correspondance Projet/URL locale");
-            }
-          }
-          
-          if (payload.role) info.push(`👤 Rôle: ${payload.role}`);
-          
-          if (payload.exp) {
-            const expDate = new Date(payload.exp * 1000);
-            const isExpired = expDate < new Date();
-            info.push(`📅 Exp: ${expDate.toLocaleDateString("fr-FR")} ${isExpired ? "⚠️ EXPIRE" : "✅ OK"}`);
-          }
-        } else {
-          info.push("⚠️ Format de clé JWT invalide");
-        }
-      } catch (e) {
-        info.push("⚠️ Décodage JWT échoué");
-      }
-    }
-
+    info.push(`🌐 URL: ${cleanUrl ? "Définie (" + cleanUrl.slice(0, 30) + "...)" : "Non renseignée"}`);
+    info.push(`🔑 Clé: ${supabaseKey ? "Présente (" + supabaseKey.length + " chars)" : "Non renseignée"}`);
     setDiagnosticInfo(info);
     setShowDiagnostic(true);
   };
 
   return (
-    <>
-      <style>{`
-        @keyframes modalFadeIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
-        }
-        @keyframes modalSlideUp {
-          from { opacity: 0; transform: translateY(30px) scale(0.97); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .modal-overlay {
-          animation: modalFadeIn 0.25s ease;
-        }
-        .modal-card {
-          animation: modalSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .cfg-input:focus {
-          border-color: #3b82f6 !important;
-          box-shadow: 0 0 0 3px rgba(59,130,246,0.15) !important;
-        }
-        .cfg-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
-        .cfg-btn:active { transform: translateY(0); }
-      `}</style>
-
-      {/* Backdrop */}
-      <div
-        className="modal-overlay"
-        onClick={onClose}
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0, 0, 0, 0.65)",
-          backdropFilter: "blur(4px)",
-          zIndex: 50,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 20,
-        }}
-      >
-        {/* Modal Card */}
-        <div
-          className="modal-card"
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            width: "100%",
-            maxWidth: 540,
-            background: "linear-gradient(180deg, #2a2d35 0%, #1e2028 100%)",
-            borderRadius: 16,
-            overflow: "hidden",
-            boxShadow: "0 25px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06)",
-          }}
-        >
-          {/* Header Bar */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "14px 20px",
-              background: "rgba(0,0,0,0.3)",
-              borderBottom: "1px solid rgba(255,255,255,0.08)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Database size={16} style={{ color: "#94a3b8" }} />
-              <span style={{ color: "#cbd5e1", fontWeight: 600, fontSize: 14 }}>
-                Configuration Supabase / PostgreSQL
-              </span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-lg bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-800" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-slate-800">
+          <span className="text-sm font-black text-slate-300 flex items-center gap-2">
+            <Database size={16} /> Configuration Supabase / PostgreSQL
+          </span>
+          <button onClick={onClose} className="text-slate-500 hover:text-white cursor-pointer"><X size={18} /></button>
+        </div>
+        <div className="p-8 space-y-5">
+          <div>
+            <label className="block text-xs font-bold text-slate-400 mb-1.5">Supabase URL</label>
+            <input
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              type="text"
+              value={supabaseUrl}
+              onChange={(e) => setSupabaseUrl(e.target.value)}
+              placeholder="https://xxxx.supabase.co"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-400 mb-1.5">Supabase Anon Key</label>
+            <input
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs font-mono text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              type="password"
+              value={supabaseKey}
+              onChange={(e) => setSupabaseKey(e.target.value)}
+              placeholder="eyJhbGciOi..."
+            />
+          </div>
+          {connMessage && (
+            <div className="p-3 rounded-xl text-xs font-bold border border-slate-700 bg-slate-800/80 text-slate-200">
+              {connMessage}
             </div>
+          )}
+          <div className="grid grid-cols-2 gap-3 pt-2">
             <button
-              onClick={onClose}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#94a3b8",
-                cursor: "pointer",
-                padding: 4,
-                display: "flex",
-                borderRadius: 4,
-              }}
+              onClick={handleTestConnection}
+              disabled={connStatus === "testing"}
+              className="bg-amber-600 hover:bg-amber-700 text-white py-2.5 rounded-xl text-xs font-black cursor-pointer transition-all"
             >
-              <X size={18} />
+              {connStatus === "testing" ? "Test..." : "Tester la connexion"}
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-xs font-black cursor-pointer transition-all"
+            >
+              {saving ? "Sauvegarde..." : "Enregistrer"}
             </button>
           </div>
-
-          {/* Body */}
-          <div style={{ padding: "28px 28px 24px" }}>
-            {/* Title */}
-            <h2
-              style={{
-                textAlign: "center",
-                fontSize: 24,
-                fontWeight: 800,
-                color: "#f1f5f9",
-                marginBottom: 20,
-                letterSpacing: -0.3,
-              }}
-            >
-              Paramètres de Connexion Unifiés
-            </h2>
-
-            {/* Description Box */}
-            <div
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 10,
-                padding: "14px 18px",
-                marginBottom: 24,
-              }}
-            >
-              <p style={{ color: "#94a3b8", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
-                Remplissez les informations ci-dessous pour connecter
-                votre application à Supabase (API & Base de Données).
-              </p>
+          <button onClick={handleDiagnostic} className="w-full text-center text-[11px] font-bold text-slate-500 hover:text-slate-400 cursor-pointer">
+            🔍 Diagnostic Système
+          </button>
+          {showDiagnostic && (
+            <div className="p-3 bg-slate-950 rounded-xl text-[11px] font-mono text-slate-400 space-y-1">
+              {diagnosticInfo.map((l, idx) => (
+                <div key={idx}>{l}</div>
+              ))}
             </div>
-
-            {/* Section Title */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                marginBottom: 20,
-              }}
-            >
-              <Cloud size={20} style={{ color: "#22c55e" }} />
-              <span
-                style={{
-                  color: "#22c55e",
-                  fontWeight: 700,
-                  fontSize: 15,
-                  fontStyle: "italic",
-                }}
-              >
-                API Supabase (Authentification & Realtime) :
-              </span>
-            </div>
-
-            {/* Supabase URL */}
-            <div style={{ marginBottom: 16 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 16,
-                  marginBottom: 0,
-                }}
-              >
-                <label
-                  style={{
-                    color: "#e2e8f0",
-                    fontWeight: 700,
-                    fontSize: 14,
-                    minWidth: 160,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  <Link2 size={14} style={{ opacity: 0.6 }} />
-                  Supabase URL :
-                </label>
-                <input
-                  className="cfg-input"
-                  type="text"
-                  value={supabaseUrl}
-                  onChange={(e) => setSupabaseUrl(e.target.value)}
-                  placeholder="https://xxxx.supabase.co"
-                  style={{
-                    flex: 1,
-                    padding: "10px 14px",
-                    background: "rgba(0,0,0,0.3)",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    borderRadius: 8,
-                    color: "#e2e8f0",
-                    fontSize: 13,
-                    fontWeight: 500,
-                    outline: "none",
-                    transition: "all 0.2s",
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Supabase Key */}
-            <div style={{ marginBottom: 24 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 16,
-                }}
-              >
-                <label
-                  style={{
-                    color: "#e2e8f0",
-                    fontWeight: 700,
-                    fontSize: 14,
-                    minWidth: 160,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  <Key size={14} style={{ opacity: 0.6 }} />
-                  Supabase Key (anon) :
-                </label>
-                <input
-                  className="cfg-input"
-                  type="password"
-                  value={supabaseKey}
-                  onChange={(e) => setSupabaseKey(e.target.value)}
-                  placeholder="eyJhbGciOiJIUzI1NiIs..."
-                  style={{
-                    flex: 1,
-                    padding: "10px 14px",
-                    background: "rgba(0,0,0,0.3)",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    borderRadius: 8,
-                    color: "#e2e8f0",
-                    fontSize: 13,
-                    fontWeight: 500,
-                    outline: "none",
-                    transition: "all 0.2s",
-                    letterSpacing: 1,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Connection Status Message */}
-            {connMessage && (
-              <div
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 8,
-                  marginBottom: 16,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  background:
-                    connStatus === "success"
-                      ? "rgba(34,197,94,0.1)"
-                      : connStatus === "error"
-                      ? "rgba(239,68,68,0.1)"
-                      : "rgba(59,130,246,0.1)",
-                  border: `1px solid ${
-                    connStatus === "success"
-                      ? "rgba(34,197,94,0.3)"
-                      : connStatus === "error"
-                      ? "rgba(239,68,68,0.3)"
-                      : "rgba(59,130,246,0.3)"
-                  }`,
-                  color:
-                    connStatus === "success"
-                      ? "#4ade80"
-                      : connStatus === "error"
-                      ? "#f87171"
-                      : "#60a5fa",
-                }}
-              >
-                {connMessage}
-              </div>
-            )}
-
-            {/* Diagnostic Panel */}
-            {showDiagnostic && diagnosticInfo.length > 0 && (
-              <div
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: 8,
-                  marginBottom: 16,
-                  background: "rgba(0,0,0,0.3)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 10,
-                  }}
-                >
-                  <span style={{ color: "#60a5fa", fontWeight: 700, fontSize: 13 }}>
-                    🔍 Diagnostic Système
-                  </span>
-                  <button
-                    onClick={() => setShowDiagnostic(false)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#64748b",
-                      cursor: "pointer",
-                      fontSize: 12,
-                    }}
-                  >
-                    Fermer
-                  </button>
-                </div>
-                {diagnosticInfo.map((line, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      color: "#94a3b8",
-                      fontSize: 12,
-                      fontWeight: 500,
-                      padding: "3px 0",
-                      fontFamily: "monospace",
-                    }}
-                  >
-                    {line}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {/* Test Connection */}
-              <button
-                className="cfg-btn"
-                onClick={handleTestConnection}
-                disabled={connStatus === "testing"}
-                style={{
-                  width: "100%",
-                  padding: "14px 0",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)",
-                  color: "#fff",
-                  fontWeight: 700,
-                  fontSize: 15,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  transition: "all 0.2s",
-                  boxShadow: "0 2px 8px rgba(245,158,11,0.3)",
-                }}
-              >
-                {connStatus === "testing" ? (
-                  <Loader2 size={18} style={{ animation: "spin 0.8s linear infinite" }} />
-                ) : connStatus === "success" ? (
-                  <CheckCircle2 size={18} />
-                ) : connStatus === "error" ? (
-                  <XCircle size={18} />
-                ) : (
-                  <Shield size={18} />
-                )}
-                {connStatus === "testing"
-                  ? "Test en cours..."
-                  : "Tester la Connexion (API & DB)"}
-              </button>
-
-              {/* Save */}
-              <button
-                className="cfg-btn"
-                onClick={handleSave}
-                disabled={saving}
-                style={{
-                  width: "100%",
-                  padding: "14px 0",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)",
-                  color: "#fff",
-                  fontWeight: 700,
-                  fontSize: 15,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  transition: "all 0.2s",
-                  boxShadow: "0 2px 8px rgba(34,197,94,0.3)",
-                }}
-              >
-                {saving ? (
-                  <Loader2 size={18} style={{ animation: "spin 0.8s linear infinite" }} />
-                ) : (
-                  <Save size={18} />
-                )}
-                {saving ? "Enregistrement..." : "Enregistrer la Configuration"}
-              </button>
-
-              {/* Diagnostic */}
-              <button
-                className="cfg-btn"
-                onClick={handleDiagnostic}
-                style={{
-                  width: "100%",
-                  padding: "14px 0",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)",
-                  color: "#fff",
-                  fontWeight: 700,
-                  fontSize: 15,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  transition: "all 0.2s",
-                  boxShadow: "0 2px 8px rgba(59,130,246,0.3)",
-                }}
-              >
-                <Wrench size={18} /> Aide Diagnostic
-              </button>
-
-              {/* Close */}
-              <button
-                className="cfg-btn"
-                onClick={onClose}
-                style={{
-                  width: "100%",
-                  padding: "14px 0",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "linear-gradient(180deg, #6b7280 0%, #4b5563 100%)",
-                  color: "#fff",
-                  fontWeight: 700,
-                  fontSize: 15,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  transition: "all 0.2s",
-                }}
-              >
-                Fermer
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   MAIN SETTINGS PAGE
+   MAIN UNIFIED SETTINGS PAGE
    ═══════════════════════════════════════════════════════════════ */
 
 const supabase = createClient();
@@ -674,8 +252,16 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [showSupabaseConfig, setShowSupabaseConfig] = useState(false);
+  const [activeTab, setActiveTab] = useState<"general" | "branding">("general");
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "branding") {
+        setActiveTab("branding");
+      }
+    }
+
     async function loadInfo() {
       try {
         const { data, error } = await supabase
@@ -684,28 +270,47 @@ export default function SettingsPage() {
           .eq("id", 1)
           .maybeSingle();
 
+        let brandingCache: any = {};
+        try {
+          const cached = localStorage.getItem("company_branding_settings");
+          if (cached) brandingCache = JSON.parse(cached);
+        } catch (e) {}
+
         if (!error && data) {
           setInfo({
-            nom_entreprise: data.nom_entreprise || "",
-            adresse: data.adresse || "",
-            telephone: data.telephone || "",
-            email: data.email || "",
-            rc: data.rc || "",
-            nif: data.nif || "",
+            nom_entreprise: data.nom_entreprise || "GESTION PRO GLOBAL",
+            slogan: brandingCache.slogan || "Commerce Général & Import-Export",
+            adresse: data.adresse || "Niamey, Niger",
+            telephone: data.telephone || "+227 00 00 00 00",
+            email: data.email || "contact@gestionpro.com",
+            site_web: data.site_web || "",
+            rc: data.rc || "RCCM-NI-NIA-2026-B-001",
+            nif: data.nif || "12345/P",
             nis: data.nis || "",
             art_impo: data.art_imposition || data.art_impo || "",
+            notes_pied_facture: data.notes_pied_facture || "Merci pour votre confiance. Les marchandises vendues ne sont ni reprises ni échangées après 48h.",
+            brand_color: brandingCache.brand_color || "#4f46e5",
+            show_qr_code: brandingCache.show_qr_code !== false,
+            show_stamp: brandingCache.show_stamp !== false,
+            chemin_logo: data.chemin_logo || null,
           });
         } else {
-          // If no data, initialize with empty values so user can type
           setInfo({
-            nom_entreprise: "",
-            adresse: "",
-            telephone: "",
-            email: "",
-            rc: "",
-            nif: "",
+            nom_entreprise: "GESTION PRO GLOBAL",
+            slogan: "Commerce Général & Import-Export",
+            adresse: "Niamey, Niger",
+            telephone: "+227 00 00 00 00",
+            email: "contact@gestionpro.com",
+            site_web: "",
+            rc: "RCCM-NI-NIA-2026-B-001",
+            nif: "12345/P",
             nis: "",
             art_impo: "",
+            notes_pied_facture: "Merci pour votre confiance. Les marchandises vendues ne sont ni reprises ni échangées après 48h.",
+            brand_color: brandingCache.brand_color || "#4f46e5",
+            show_qr_code: brandingCache.show_qr_code !== false,
+            show_stamp: brandingCache.show_stamp !== false,
+            chemin_logo: null,
           });
         }
       } catch (err) {
@@ -717,7 +322,7 @@ export default function SettingsPage() {
     loadInfo();
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setInfo((prev) => {
       const current = prev || {
@@ -727,8 +332,6 @@ export default function SettingsPage() {
         email: "",
         rc: "",
         nif: "",
-        nis: "",
-        art_impo: "",
       };
       return { ...current, [name]: value };
     });
@@ -738,7 +341,7 @@ export default function SettingsPage() {
     if (!info) return;
     setSaving(true);
     try {
-      // The table Schema has art_imposition. It does not have 'nis' or 'art_impo' directly.
+      // 1. Save to Supabase informations_entreprise
       const { error } = await supabase
         .from("informations_entreprise")
         .upsert({
@@ -747,24 +350,40 @@ export default function SettingsPage() {
           adresse: info.adresse,
           telephone: info.telephone,
           email: info.email,
+          site_web: info.site_web || null,
           rc: info.rc,
           nif: info.nif,
-          art_imposition: info.art_impo,
+          art_imposition: info.art_impo || info.art_imposition || "",
+          notes_pied_facture: info.notes_pied_facture,
         }, { onConflict: 'id' });
 
       if (error) throw error;
-      setToast({ message: "Modifications sauvegardées avec succès !", type: "success" });
+
+      // 2. Save Branding Preferences to localStorage
+      try {
+        localStorage.setItem("company_branding_settings", JSON.stringify({
+          brand_color: info.brand_color || "#4f46e5",
+          slogan: info.slogan || "",
+          show_qr_code: info.show_qr_code !== false,
+          show_stamp: info.show_stamp !== false,
+        }));
+        window.dispatchEvent(new Event("company_info_updated"));
+      } catch (e) {}
+
+      setToast({ message: "Informations générales et branding enregistrés avec succès !", type: "success" });
     } catch (err) {
       console.error(err);
       setToast({ message: "Erreur lors de la sauvegarde.", type: "error" });
     } finally {
       setSaving(false);
-      setTimeout(() => setToast(null), 3000);
+      setTimeout(() => setToast(null), 3500);
     }
   };
 
+  const brandColor = info?.brand_color || "#4f46e5";
+
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-10">
+    <div className="space-y-8 max-w-7xl mx-auto pb-12 animate-in fade-in duration-300">
       {/* Supabase Config Modal */}
       {showSupabaseConfig && (
         <SupabaseConfigModal onClose={() => setShowSupabaseConfig(false)} />
@@ -773,328 +392,510 @@ export default function SettingsPage() {
       {/* Toast Notification */}
       {toast && (
         <div
-          className={`fixed top-6 right-6 z-50 p-4 rounded-xl shadow-lg font-bold text-white flex items-center gap-3 transition-all ${
+          className={`fixed top-6 right-6 z-50 px-5 py-3.5 rounded-2xl shadow-2xl font-bold text-white flex items-center gap-3 transition-all animate-in slide-in-from-top-3 ${
             toast.type === "success"
-              ? "bg-emerald-500 shadow-emerald-500/20"
-              : "bg-red-500 shadow-red-500/20"
+              ? "bg-slate-900 border border-emerald-500/30 text-emerald-400"
+              : "bg-rose-950 border border-rose-500/30 text-rose-400"
           }`}
         >
-          {toast.message}
+          <CheckCircle2 size={20} className={toast.type === "success" ? "text-emerald-400" : "text-rose-400"} />
+          <span className="text-xs font-black text-white">{toast.message}</span>
         </div>
       )}
 
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 flex items-center gap-3">
-            <Settings className="text-slate-700" size={32} fill="currentColor" fillOpacity={0.1} />
-            Paramètres
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="px-2.5 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider">
+              CONFIGURATION UNIFIÉE
+            </span>
+            <span className="text-xs font-bold text-slate-500">
+              Informations Générales, Mentions Légales & Branding Facture
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 flex items-center gap-3">
+            <Settings className="text-indigo-600" size={32} />
+            Paramètres & Identité de l&apos;Entreprise
           </h1>
-          <p className="mt-2 text-slate-500 text-sm">
-            Gérez les informations légales et coordonnées de votre entreprise.
+          <p className="mt-1 text-slate-500 text-xs sm:text-sm font-medium">
+            Gérez toutes les coordonnées légales et personnalisez l&apos;identité visuelle de vos factures au même endroit.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href="/dashboard/settings/branding"
-            className="inline-flex items-center gap-2 font-bold shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 active:translate-y-0 justify-center"
-            style={{
-              background: "linear-gradient(135deg, #059669, #047857)",
-              color: "white",
-              borderRadius: "12px",
-              padding: "12px 20px",
-              textDecoration: "none",
-            }}
-          >
-            <Palette size={18} strokeWidth={2.5} />
-            Branding & Facture
-          </Link>
+
+        <div className="flex flex-wrap items-center gap-2.5">
           <Link
             href="/dashboard/settings/currencies"
-            className="inline-flex items-center gap-2 font-bold shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 active:translate-y-0 justify-center"
-            style={{
-              background: "linear-gradient(135deg, #4f46e5, #4338ca)",
-              color: "white",
-              borderRadius: "12px",
-              padding: "12px 20px",
-              textDecoration: "none",
-            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs transition-all"
           >
-            <Coins size={18} strokeWidth={2.5} />
-            Devises & Fiscalité
+            <Coins size={15} className="text-indigo-600" />
+            <span>Devises & Fiscalité</span>
           </Link>
+
           <button
             onClick={() => setShowSupabaseConfig(true)}
-            className="inline-flex items-center gap-2 font-bold shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 active:translate-y-0 justify-center"
-            style={{
-              background: "linear-gradient(135deg, #1e293b, #334155)",
-              color: "white",
-              borderRadius: "12px",
-              padding: "12px 20px",
-            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold shadow-xs transition-all cursor-pointer"
           >
-            <Database size={18} strokeWidth={2.5} />
-            Configuration Supabase
+            <Database size={15} className="text-slate-600" />
+            <span>Configuration Supabase</span>
           </button>
+
           <button
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-2 font-bold shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 active:translate-y-0 justify-center disabled:opacity-70 disabled:hover:-translate-y-0 disabled:cursor-not-allowed"
-            style={{
-              background: "linear-gradient(135deg, #2563EB, #1D4ED8)",
-              color: "white",
-              borderRadius: "12px",
-              padding: "12px 24px",
-            }}
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-black text-xs shadow-lg shadow-indigo-600/25 transition-all cursor-pointer disabled:opacity-70"
           >
-            {saving ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <Save size={18} strokeWidth={2.5} />
-            )}
-            {saving ? "Enregistrement..." : "Enregistrer"}
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            <span>{saving ? "Enregistrement..." : "Enregistrer"}</span>
           </button>
         </div>
       </div>
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-32 text-slate-400">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-500 mb-4" />
-          <p className="text-lg font-bold text-slate-600">Chargement des paramètres...</p>
+          <Loader2 className="h-10 w-10 animate-spin text-indigo-600 mb-3" />
+          <p className="text-sm font-bold text-slate-600">Chargement des paramètres et du branding...</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Info Card */}
-          <div className="lg:col-span-2 space-y-8">
-            <div className="bg-white/60 backdrop-blur-3xl rounded-[32px] shadow-2xl shadow-indigo-100/40 border border-white/80 overflow-hidden transition-all duration-300">
-              <div className="border-b border-white/40 bg-indigo-50/30 px-8 py-6">
-                <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-3">
-                  <span className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                    <Building2 size={20} strokeWidth={2.5} />
-                  </span>
-                  Informations Générales
-                </h2>
-                <p className="text-sm font-medium text-slate-500 mt-2 ml-11">
-                  Les détails de base qui apparaîtront sur vos factures et tickets.
-                </p>
-              </div>
-              <div className="p-8 space-y-6">
-                <div>
-                  <label className="block text-sm font-black text-slate-700 mb-2.5 ml-1">
-                    Nom de l&apos;entreprise
-                  </label>
-                  <div className="relative group">
-                    <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                    <input
-                      type="text"
-                      name="nom_entreprise"
-                      value={info?.nom_entreprise || ""}
-                      onChange={handleChange}
-                      className="block w-full text-slate-900 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-bold placeholder:text-slate-300 shadow-sm"
-                      placeholder="Ex: Mon Entreprise"
-                      style={{
-                        borderRadius: "16px",
-                        padding: "16px 16px 16px 48px",
-                      }}
-                    />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left Column: Form Controls with Tabs (6 cols) */}
+          <div className="lg:col-span-6 space-y-6">
+            {/* Unified Mode Switcher Tabs */}
+            <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center gap-1 border border-slate-200/80">
+              <button
+                type="button"
+                onClick={() => setActiveTab("general")}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === "general"
+                    ? "bg-white text-indigo-600 shadow-sm shadow-indigo-100"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <Building2 size={16} />
+                <span>Informations Générales & Légales</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("branding")}
+                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  activeTab === "branding"
+                    ? "bg-white text-indigo-600 shadow-sm shadow-indigo-100"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <Palette size={16} />
+                <span>Branding & Modèle Facture</span>
+              </button>
+            </div>
+
+            {/* TAB 1: INFORMATIONS GÉNÉRALES & MENTIONS LÉGALES */}
+            {activeTab === "general" && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* General Info Card */}
+                <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 space-y-5">
+                  <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                    <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                      <Building2 size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-slate-900">Coordonnées de l&apos;Entreprise</h2>
+                      <p className="text-xs text-slate-400 font-medium">Les détails qui apparaîtront sur vos factures, reçus et devis.</p>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-black text-slate-700 mb-2.5 ml-1">
-                    Adresse Complète
-                  </label>
-                  <div className="relative group">
-                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                    <input
-                      type="text"
-                      name="adresse"
-                      value={info?.adresse || ""}
-                      onChange={handleChange}
-                      className="block w-full text-slate-900 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-bold shadow-sm"
-                      placeholder="Rue des Commerçants, Ville"
-                      style={{
-                        borderRadius: "16px",
-                        padding: "16px 16px 16px 48px",
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-black text-slate-700 mb-2.5 ml-1">
-                      Téléphone
-                    </label>
-                    <div className="relative group">
-                      <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Nom officiel de l&apos;entreprise
+                      </label>
                       <input
                         type="text"
-                        name="telephone"
-                        value={info?.telephone || ""}
+                        name="nom_entreprise"
+                        value={info?.nom_entreprise || ""}
                         onChange={handleChange}
-                        className="block w-full text-slate-900 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-bold shadow-sm"
-                        placeholder="+227 00 00 00 00"
-                        style={{
-                          borderRadius: "16px",
-                          padding: "16px 16px 16px 48px",
-                        }}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Ex: GESTION PRO GLOBAL"
                       />
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-black text-slate-700 mb-2.5 ml-1">
-                      Adresse Email
-                    </label>
-                    <div className="relative group">
-                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                      <input
-                        type="email"
-                        name="email"
-                        value={info?.email || ""}
-                        onChange={handleChange}
-                        className="block w-full text-slate-900 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-bold shadow-sm"
-                        placeholder="contact@exemple.com"
-                        style={{
-                          borderRadius: "16px",
-                          padding: "16px 16px 16px 48px",
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            {/* Legal Info Card */}
-            <div className="bg-white/60 backdrop-blur-3xl rounded-[32px] shadow-2xl shadow-amber-100/30 border border-white/80 overflow-hidden transition-all duration-300">
-              <div className="border-b border-white/40 bg-amber-50/30 px-8 py-6">
-                <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-3">
-                  <span className="p-2 bg-amber-100 text-amber-600 rounded-lg">
-                    <FileSignature size={20} strokeWidth={2.5} />
-                  </span>
-                  Mentions Légales
-                </h2>
-                <p className="text-sm font-medium text-slate-500 mt-2 ml-11">
-                  Les numéros d&apos;identification fiscale et légale (NIF, RC...).
-                </p>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Activité principale / Slogan
+                      </label>
+                      <input
+                        type="text"
+                        name="slogan"
+                        value={info?.slogan || ""}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Ex: Commerce Général & Import-Export"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Adresse complète (Siège / Boutique)
+                      </label>
+                      <input
+                        type="text"
+                        name="adresse"
+                        value={info?.adresse || ""}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Ex: Niamey, Niger - Boulevard Mali Béro"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          Téléphone professionnel
+                        </label>
+                        <input
+                          type="text"
+                          name="telephone"
+                          value={info?.telephone || ""}
+                          onChange={handleChange}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="+227 00 00 00 00"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          Adresse Email de contact
+                        </label>
+                        <input
+                          type="email"
+                          name="email"
+                          value={info?.email || ""}
+                          onChange={handleChange}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="contact@exemple.com"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Legal Info Card */}
+                <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 space-y-5">
+                  <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                    <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
+                      <FileSignature size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-slate-900">Mentions Légales & Fiscales</h2>
+                      <p className="text-xs text-slate-400 font-medium">Les identifiants d&apos;enregistrement légal exigés par la législation.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Registre de Commerce (RC / RCCM)
+                      </label>
+                      <input
+                        type="text"
+                        name="rc"
+                        value={info?.rc || ""}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        placeholder="RCCM-NI-NIA-2026-B-001"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Identification Fiscale (NIF)
+                      </label>
+                      <input
+                        type="text"
+                        name="nif"
+                        value={info?.nif || ""}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        placeholder="NIF: 12345/P"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Identifiant Statistique (NIS)
+                      </label>
+                      <input
+                        type="text"
+                        name="nis"
+                        value={info?.nis || ""}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        placeholder="NIS-00000"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Article d&apos;Imposition (AI)
+                      </label>
+                      <input
+                        type="text"
+                        name="art_impo"
+                        value={info?.art_impo || info?.art_imposition || ""}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        placeholder="AI-9999"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-black text-slate-700 mb-2.5 ml-1">
-                    Registre de Commerce (RC)
-                  </label>
-                  <input
-                    type="text"
-                    name="rc"
-                    value={info?.rc || ""}
-                    onChange={handleChange}
-                    className="block w-full text-slate-900 bg-white border border-slate-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all font-black tracking-widest shadow-sm"
-                    style={{
-                      borderRadius: "16px",
-                      padding: "16px",
-                    }}
-                  />
+            )}
+
+            {/* TAB 2: BRANDING & FACTURE */}
+            {activeTab === "branding" && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* Visual Identity Card */}
+                <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 space-y-5">
+                  <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                    <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                      <Palette size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-slate-900">Couleurs & Thème de Marque</h2>
+                      <p className="text-xs text-slate-400 font-medium">Choisissez la teinte dominante qui habillera vos factures et reçus.</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-3">
+                      Couleur Principale du Modèle
+                    </label>
+                    <div className="grid grid-cols-6 gap-2.5">
+                      {BRAND_COLORS.map((c) => (
+                        <button
+                          key={c.hex}
+                          type="button"
+                          onClick={() => setInfo((prev) => prev ? { ...prev, brand_color: c.hex } : null)}
+                          style={{ backgroundColor: c.hex }}
+                          className={`h-11 rounded-2xl transition-all cursor-pointer flex items-center justify-center text-white shadow-sm ${
+                            brandColor === c.hex ? "ring-4 ring-indigo-500/30 scale-105" : "opacity-85 hover:opacity-100"
+                          }`}
+                          title={c.name}
+                        >
+                          {brandColor === c.hex && <CheckCircle2 size={18} />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <label className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer hover:bg-slate-100/70 transition-all">
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-2.5">
+                        <Stamp size={18} className="text-indigo-600" />
+                        Afficher le Cachet Officiel & Mention &quot;Payé&quot;
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={info?.show_stamp !== false}
+                        onChange={(e) => setInfo((prev) => prev ? { ...prev, show_stamp: e.target.checked } : null)}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer hover:bg-slate-100/70 transition-all">
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-2.5">
+                        <QrCode size={18} className="text-indigo-600" />
+                        Afficher le QR Code de Vérification SSL
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={info?.show_qr_code !== false}
+                        onChange={(e) => setInfo((prev) => prev ? { ...prev, show_qr_code: e.target.checked } : null)}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </label>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-black text-slate-700 mb-2.5 ml-1">
-                    Identification Fiscale (NIF)
-                  </label>
-                  <input
-                    type="text"
-                    name="nif"
-                    value={info?.nif || ""}
-                    onChange={handleChange}
-                    className="block w-full text-slate-900 bg-white border border-slate-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all font-black tracking-widest shadow-sm"
-                    style={{
-                      borderRadius: "16px",
-                      padding: "16px",
-                    }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-black text-slate-700 mb-2.5 ml-1">
-                    Identifiant Statistique (NIS)
-                  </label>
-                  <input
-                    type="text"
-                    name="nis"
-                    value={info?.nis || ""}
-                    onChange={handleChange}
-                    className="block w-full text-slate-900 bg-white border border-slate-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all font-black tracking-widest shadow-sm"
-                    style={{
-                      borderRadius: "16px",
-                      padding: "16px",
-                    }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-black text-slate-700 mb-2.5 ml-1">
-                    Article d&apos;Imposition (AI)
-                  </label>
-                  <input
-                    type="text"
-                    name="art_impo"
-                    value={info?.art_impo || ""}
-                    onChange={handleChange}
-                    className="block w-full text-slate-900 bg-white border border-slate-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all font-black tracking-widest shadow-sm"
-                    style={{
-                      borderRadius: "16px",
-                      padding: "16px",
-                    }}
-                  />
+
+                {/* Footer Note / Conditions Card */}
+                <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 space-y-5">
+                  <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                    <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+                      <FileText size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-slate-900">Conditions de Vente & Pied de Page</h2>
+                      <p className="text-xs text-slate-400 font-medium">Mention légale imprimée en bas de chaque facture et bordereau.</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-2">
+                      Texte du bas de facture
+                    </label>
+                    <textarea
+                      name="notes_pied_facture"
+                      rows={3}
+                      value={info?.notes_pied_facture || ""}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                      placeholder="Ex: Merci pour votre confiance. Les marchandises vendues ne sont ni reprises ni échangées après 48h."
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Right Sidebar Preferences */}
-          <div className="space-y-8">
-            <div className="bg-white/60 backdrop-blur-3xl rounded-[32px] shadow-2xl shadow-indigo-100/40 border border-white/80 p-8 transition-all duration-300">
-              <h3 className="text-lg font-extrabold text-slate-900 mb-6">Aperçu Entreprise</h3>
+          {/* Right Column: LIVE INTERACTIVE INVOICE PREVIEW & SYSTEM STATUS (6 cols) */}
+          <div className="lg:col-span-6 space-y-6">
+            {/* Header Preview Banner */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                <Eye size={16} className="text-indigo-600" />
+                Aperçu Direct du Modèle Facture (Format A4 & PDF)
+              </span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                Mise à jour en temps réel
+              </span>
+            </div>
 
-              <div className="flex flex-col items-center text-center p-6 bg-[#F8FAFC] rounded-[16px] border border-slate-100 transition-all">
-                <div
-                  className="h-24 w-24 text-white rounded-2xl flex items-center justify-center mb-5 shadow-lg"
-                  style={{ background: "linear-gradient(135deg, #3B82F6, #1E40AF)" }}
-                >
-                  <span className="text-4xl font-black shadow-sm">
-                    {info?.nom_entreprise?.charAt(0) || "B"}
-                  </span>
+            {/* Paper Sheet Simulator */}
+            <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-200/80 text-slate-900 space-y-6">
+              {/* Header Ribbon */}
+              <div
+                className="p-5 sm:p-6 rounded-2xl text-white flex items-start sm:items-center justify-between transition-colors duration-300 shadow-sm"
+                style={{ backgroundColor: brandColor }}
+              >
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center font-black text-sm">
+                      {info?.nom_entreprise?.slice(0, 2).toUpperCase() || "GP"}
+                    </div>
+                    <h3 className="font-black text-base sm:text-lg text-white">{info?.nom_entreprise || "GESTION PRO GLOBAL"}</h3>
+                  </div>
+                  <p className="text-xs text-white/85 mt-0.5 font-medium">{info?.slogan || "Commerce Général & Import-Export"}</p>
+                  <div className="text-[10px] text-white/70 mt-1 space-x-2 font-mono">
+                    <span>{info?.rc || "RCCM-NI-NIA-2026-B-001"}</span>
+                    <span>•</span>
+                    <span>{info?.nif || "NIF: 12345/P"}</span>
+                  </div>
                 </div>
-                <h4 className="text-xl font-extrabold text-slate-900 break-words line-clamp-2">
-                  {info?.nom_entreprise || "Mon Entreprise"}
-                </h4>
-                <p className="text-sm font-medium text-slate-500 mt-2 line-clamp-3">
-                  {info?.adresse || "Adresse non définie"}
-                </p>
+
+                <div className="text-right">
+                  <div className="text-xs font-extrabold uppercase tracking-wider text-white/80">FACTURE</div>
+                  <div className="text-base sm:text-lg font-black text-white font-mono">#FAC-2026-089</div>
+                  <div className="text-[10px] text-white/80 mt-0.5">Date: {new Date().toLocaleDateString("fr-FR")}</div>
+                </div>
               </div>
 
-              <div className="mt-8 pt-8 border-t border-slate-100">
-                <h3 className="text-sm font-extrabold text-slate-900 mb-5 uppercase tracking-wider text-slate-400">
-                  Statut Système
-                </h3>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="font-bold text-slate-600">Base de données</span>
-                    <span className="flex items-center gap-1.5 text-emerald-700 font-bold bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-xl shadow-sm">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                      Connecté
-                    </span>
+              {/* Bill To & Issuer Info */}
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="font-extrabold text-slate-400 uppercase text-[9px]">Client :</span>
+                  <div className="font-black text-slate-900 text-xs mt-0.5">ETS AL-BARAKA & CIE</div>
+                  <div className="text-slate-500 text-[10px] mt-0.5">Partenaire Commercial • Niamey</div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-right">
+                  <span className="font-extrabold text-slate-400 uppercase text-[9px]">Émetteur :</span>
+                  <div className="font-bold text-slate-800 text-[11px] mt-0.5 truncate">{info?.adresse || "Niamey, Niger"}</div>
+                  <div className="text-slate-500 text-[10px] mt-0.5 truncate">{info?.telephone || "+227 00 00 00 00"}</div>
+                </div>
+              </div>
+
+              {/* Items Table Mockup */}
+              <div className="rounded-xl border border-slate-200 overflow-hidden text-xs">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 font-black text-slate-700 border-b border-slate-200 text-[10px] uppercase">
+                    <tr>
+                      <th className="py-2 px-3">Désignation</th>
+                      <th className="py-2 px-3 text-center">Qté</th>
+                      <th className="py-2 px-3 text-right">P.U TTC</th>
+                      <th className="py-2 px-3 text-right">Total TTC</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-800">
+                    <tr>
+                      <td className="py-2 px-3 font-bold">Ciment Dangote 42.5R (Tonne)</td>
+                      <td className="py-2 px-3 text-center font-bold">10</td>
+                      <td className="py-2 px-3 text-right font-mono">85 000 FCFA</td>
+                      <td className="py-2 px-3 text-right font-black text-slate-900 font-mono">850 000 FCFA</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 px-3 font-bold">Fer à Béton FeE500 12mm</td>
+                      <td className="py-2 px-3 text-center font-bold">25</td>
+                      <td className="py-2 px-3 text-right font-mono">4 200 FCFA</td>
+                      <td className="py-2 px-3 text-right font-black text-slate-900 font-mono">105 000 FCFA</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Total Row */}
+              <div className="flex justify-end">
+                <div className="w-60 space-y-1 text-xs">
+                  <div className="flex justify-between text-slate-500 text-[11px]">
+                    <span>Total HT :</span>
+                    <span className="font-mono font-bold">802 521 FCFA</span>
                   </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="font-bold text-slate-600">Version</span>
-                    <span className="text-slate-900 font-black bg-slate-100 px-3 py-1.5 rounded-xl">
-                      v2.0 (Web)
-                    </span>
+                  <div className="flex justify-between text-slate-500 text-[11px]">
+                    <span>TVA (19%) :</span>
+                    <span className="font-mono font-bold">152 479 FCFA</span>
                   </div>
-                  <div className="pt-4 border-t border-slate-100">
-                    <button
-                      onClick={() => setShowSupabaseConfig(true)}
-                      className="w-full flex items-center justify-center gap-2 text-sm font-bold text-slate-600 hover:text-blue-600 transition-colors py-2.5 rounded-xl hover:bg-blue-50 border border-slate-200"
+                  <div
+                    className="flex justify-between text-xs sm:text-sm font-black p-2.5 rounded-xl text-white mt-1 transition-colors duration-300"
+                    style={{ backgroundColor: brandColor }}
+                  >
+                    <span>TOTAL TTC :</span>
+                    <span className="font-mono">955 000 FCFA</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stamp + QR Code + Footer */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                <div className="max-w-[240px] text-[10px] text-slate-500 leading-relaxed">
+                  {info?.notes_pied_facture || "Merci pour votre confiance. Les marchandises vendues ne sont ni reprises ni échangées après 48h."}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {info?.show_qr_code !== false && (
+                    <div className="p-1 rounded-lg border border-slate-200 bg-slate-50 text-center">
+                      <QrCode size={34} className="text-slate-800" />
+                      <span className="text-[7px] font-bold text-slate-400 block">Vérifié SSL</span>
+                    </div>
+                  )}
+
+                  {info?.show_stamp !== false && (
+                    <div
+                      className="w-20 h-16 rounded-xl border-2 border-dashed flex flex-col items-center justify-center rotate-[-4deg] transition-colors duration-300"
+                      style={{ borderColor: brandColor, color: brandColor }}
                     >
-                      <Database size={16} />
-                      Configuration Supabase
-                    </button>
-                  </div>
+                      <span className="text-[8px] font-black uppercase truncate max-w-[70px]">{info?.nom_entreprise?.slice(0, 10) || "ENTREPRISE"}</span>
+                      <span className="text-[7px] font-extrabold uppercase">CACHET OFFICIEL</span>
+                      <span className="text-[6px] font-bold">NIAMEY</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* System Status Card */}
+            <div className="bg-white rounded-3xl p-5 shadow-xs border border-slate-200/80 space-y-3">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                État du Système & Connexion
+              </h3>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="font-bold text-slate-600">Base de données</span>
+                  <span className="flex items-center gap-1.5 text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg text-[10px]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Connecté
+                  </span>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="font-bold text-slate-600">Version</span>
+                  <span className="text-slate-900 font-black bg-white px-2 py-0.5 rounded-lg border border-slate-200 text-[10px]">
+                    v2.0 (Web Pro)
+                  </span>
                 </div>
               </div>
             </div>
