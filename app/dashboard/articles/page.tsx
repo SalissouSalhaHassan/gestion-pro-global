@@ -28,6 +28,7 @@ import {
   CheckCircle2,
   Layers,
   Filter,
+  Store,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import Barcode from "react-barcode";
@@ -405,6 +406,16 @@ export default function ArticlesPage() {
               <RefreshCw size={15} />
               <span>{locale === "ar" ? "تحديث" : "Actualiser"}</span>
             </button>
+
+            <a
+              href="/catalog"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xl shadow-emerald-600/25 transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Store size={16} />
+              <span>{locale === "ar" ? "🌐 الكتالوج العام" : "🌐 Boutique en Ligne"}</span>
+            </a>
 
             <button
               onClick={handleOpenAddModal}
