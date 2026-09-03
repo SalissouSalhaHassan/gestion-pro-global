@@ -46,17 +46,24 @@ export async function GET(
 
     if (advErr) throw new Error(advErr.message);
 
-    // 3. Fetch Advances History (Withdrawals/Cancellations)
+    // 3. Fetch Advances History (Withdrawals/Cancellations) - Graceful fallback if table not yet created
     let history: any[] = [];
     if (advances && advances.length > 0) {
-      const advanceIds = advances.map(a => a.id);
-      const { data: histData, error: histErr } = await supabase
-        .from("avances_history")
-        .select("*")
-        .in("advance_id", advanceIds);
+      try {
+        const advanceIds = advances.map(a => a.id);
+        const { data: histData, error: histErr } = await supabase
+          .from("avances_history")
+          .select("*")
+          .in("advance_id", advanceIds);
 
-      if (histErr) throw new Error(histErr.message);
-      history = histData || [];
+        if (!histErr && histData) {
+          history = histData;
+        } else if (histErr) {
+          console.warn("Notice: avances_history not queryable yet:", histErr.message);
+        }
+      } catch (histCatch) {
+        console.warn("Notice: avances_history fetch failed gracefully:", histCatch);
+      }
     }
 
     // 4. Fetch Client Invoices
