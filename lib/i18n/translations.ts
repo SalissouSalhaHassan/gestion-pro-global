@@ -33,6 +33,7 @@ export const translations: TranslationDict = {
   nav_clients: { fr: "Clients", ar: "العملاء", en: "Customers" },
   nav_suppliers: { fr: "Fournisseurs", ar: "الموردين", en: "Suppliers" },
   nav_invoices: { fr: "Factures", ar: "فواتير المبيعات", en: "Invoices" },
+  nav_devis: { fr: "Devis & Proforma", ar: "عروض الأسعار (Devis)", en: "Quotations & Proforma" },
   nav_purchases: { fr: "Achats", ar: "فواتير المشتريات", en: "Purchases" },
   nav_expenses: { fr: "Dépenses", ar: "المصروفات اليومية", en: "Expenses" },
   nav_cash_balance: { fr: "Bilan de Caisse", ar: "ميزان الصندوق والخزينة", en: "Cash Balance" },
