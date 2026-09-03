@@ -42,6 +42,8 @@ type Article = {
   p_achat_ht?: number;
   p_vente_ht: number;
   p_vente_ttc: number;
+  prix_gros?: number | null;
+  prix_special?: number | null;
   image_path: string | null;
   stock_total: number;
 };
@@ -86,6 +88,8 @@ export default function ArticlesPage() {
     p_achat_ttc: "",
     p_vente_ht: "",
     p_vente_ttc: "",
+    prix_gros: "",
+    prix_special: "",
     taxe: "0",
     qte_min: "5",
     article_par_colis: "1",
@@ -160,6 +164,8 @@ export default function ArticlesPage() {
           p_achat_ht: Number(a.p_achat_ht) || 0,
           p_vente_ht: Number(a.p_vente_ht) || Number(a.p_vente_ttc) || 0,
           p_vente_ttc: Number(a.p_vente_ttc) || Number(a.p_vente_ht) || 0,
+          prix_gros: a.prix_gros ? Number(a.prix_gros) : null,
+          prix_special: a.prix_special ? Number(a.prix_special) : null,
           image_path: a.image_path || null,
           stock_total: stockMap[a.id] || 0,
         }));
@@ -190,6 +196,8 @@ export default function ArticlesPage() {
       p_achat_ttc: "",
       p_vente_ht: "",
       p_vente_ttc: "",
+      prix_gros: "",
+      prix_special: "",
       taxe: "0",
       qte_min: "5",
       article_par_colis: "1",
@@ -218,6 +226,8 @@ export default function ArticlesPage() {
       p_achat_ttc: String(article.p_achat_ht || "0"),
       p_vente_ht: String(article.p_vente_ht),
       p_vente_ttc: String(article.p_vente_ttc),
+      prix_gros: article.prix_gros ? String(article.prix_gros) : "",
+      prix_special: article.prix_special ? String(article.prix_special) : "",
       taxe: "0",
       qte_min: "5",
       article_par_colis: "1",
@@ -252,6 +262,8 @@ export default function ArticlesPage() {
         p_achat_ttc: pAchatHt,
         p_vente_ht: pVenteHt,
         p_vente_ttc: pVenteTtc,
+        prix_gros: formData.prix_gros ? Number(formData.prix_gros) : null,
+        prix_special: formData.prix_special ? Number(formData.prix_special) : null,
         taxe: Number(formData.taxe) || 0,
         qte_min: Number(formData.qte_min) || 0,
         article_par_colis: Number(formData.article_par_colis) || 1,
@@ -839,7 +851,7 @@ export default function ArticlesPage() {
 
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                      {locale === "ar" ? "سعر البيع للجمهور" : "Prix de Vente TTC"} *
+                      {locale === "ar" ? "سعر البيع للجمهور (تجزئة)" : "Prix de Vente Détail (TTC)"} *
                     </label>
                     <input
                       type="number"
@@ -855,6 +867,34 @@ export default function ArticlesPage() {
                         })
                       }
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-black text-indigo-700 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      {locale === "ar" ? "سعر الجملة (Gros - اختياري)" : "Prix de Vente Gros"}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Optionnel"
+                      value={formData.prix_gros}
+                      onChange={(e) => setFormData({ ...formData, prix_gros: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-emerald-700 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      {locale === "ar" ? "سعر خاص / موزع (اختياري)" : "Prix Spécial / Revendeur"}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Optionnel"
+                      value={formData.prix_special}
+                      onChange={(e) => setFormData({ ...formData, prix_special: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-amber-700 bg-white"
                     />
                   </div>
 

@@ -52,6 +52,8 @@ type Article = {
   designation: string;
   p_vente_ht: number;
   p_vente_ttc: number;
+  prix_gros?: number | null;
+  prix_special?: number | null;
   taxe: number;
   image_path: string | null;
   stock_total: number;
@@ -70,6 +72,7 @@ type Client = {
   ref_client: string | null;
   nom: string;
   tel: string | null;
+  type_client?: string | null;
   credit_facture: number;
 };
 
@@ -341,6 +344,8 @@ function buildArticle(row: Row): Article {
     designation: String(row.designation ?? row.nom ?? row.reference ?? ""),
     p_vente_ht: toNumber(row.p_vente_ht),
     p_vente_ttc: toNumber(row.p_vente_ttc ?? row.prix ?? row.price),
+    prix_gros: row.prix_gros ? toNumber(row.prix_gros) : null,
+    prix_special: row.prix_special ? toNumber(row.prix_special) : null,
     taxe: toNumber(row.taxe),
     image_path: row.image_path ? String(row.image_path) : null,
     stock_total: toNumber(row.stock_total),
@@ -354,6 +359,7 @@ function buildClient(row: Row): Client {
     ref_client: row.ref_client ? String(row.ref_client) : null,
     nom: String(row.nom ?? row.raison_sociale ?? `Client ${row.id}`),
     tel: row.tel ? String(row.tel) : null,
+    type_client: row.type_client ? String(row.type_client) : (Number(row.prix_client) === 2 ? "Gros" : Number(row.prix_client) === 3 ? "Revendeur" : "Détail"),
     credit_facture: toNumber(row.credit_facture),
   };
 }
@@ -942,6 +948,7 @@ function PosPage() {
   const [query, setQuery] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | number>(1);
+  const [pricingTier, setPricingTier] = useState<"Détail" | "Gros" | "Revendeur">("Détail");
   const [selectedDepot, setSelectedDepot] = useState<string>("");
   const [cashierName, setCashierName] = useState("Admin");
   const [isAdmin, setIsAdmin] = useState(false);
@@ -1410,8 +1417,35 @@ function PosPage() {
   }, [isAdmin, selectedDepot, userEmplacement]);
 
   /* ═══════════════════════════════════════════════════════════════════
-     CART LOGIC
+     CART LOGIC (MULTI-TIER PRICING AWARE)
      ═══════════════════════════════════════════════════════════════════ */
+
+  const getEffectiveItemPrice = useCallback((article: Article, tier: "Détail" | "Gros" | "Revendeur") => {
+    if (tier === "Gros" && article.prix_gros && article.prix_gros > 0) {
+      return article.prix_gros;
+    }
+    if (tier === "Revendeur") {
+      if (article.prix_special && article.prix_special > 0) return article.prix_special;
+      if (article.prix_gros && article.prix_gros > 0) return article.prix_gros;
+    }
+    return article.p_vente_ttc;
+  }, []);
+
+  const handlePricingTierChange = useCallback((newTier: "Détail" | "Gros" | "Revendeur") => {
+    setPricingTier(newTier);
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.price_modified) return item;
+        const newPrice = getEffectiveItemPrice(item, newTier);
+        return {
+          ...item,
+          p_vente_ttc: newPrice,
+          p_vente_ht: newPrice,
+          original_price: newPrice,
+        };
+      })
+    );
+  }, [getEffectiveItemPrice]);
 
   const addItem = useCallback((article: Article) => {
     setCart((prev) => {
@@ -1433,9 +1467,10 @@ function PosPage() {
             : item
         );
       }
-      return [...prev, { ...article, quantite: 1, original_price: article.p_vente_ttc, price_modified: false }];
+      const unitPrice = getEffectiveItemPrice(article, pricingTier);
+      return [...prev, { ...article, p_vente_ttc: unitPrice, p_vente_ht: unitPrice, quantite: 1, original_price: unitPrice, price_modified: false }];
     });
-  }, [editInvoiceId, selectedDepot]);
+  }, [editInvoiceId, selectedDepot, pricingTier, getEffectiveItemPrice]);
 
   const handleCameraBarcodeScanned = useCallback((scannedCode: string) => {
     const clean = scannedCode.trim().toLowerCase();
@@ -2593,7 +2628,19 @@ function PosPage() {
                   <select 
                     style={{ ...S.customerSelect, flex: 1 }}
                     value={selectedClientId}
-                    onChange={(e) => { setSelectedClientId(e.target.value); setClientQuery(""); }}
+                    onChange={(e) => {
+                      const cId = e.target.value;
+                      setSelectedClientId(cId);
+                      setClientQuery("");
+                      const selectedC = clients.find((c) => String(c.id) === String(cId));
+                      if (selectedC?.type_client === "Gros") {
+                        handlePricingTierChange("Gros");
+                      } else if (selectedC?.type_client === "Revendeur") {
+                        handlePricingTierChange("Revendeur");
+                      } else if (selectedC?.type_client === "Détail") {
+                        handlePricingTierChange("Détail");
+                      }
+                    }}
                     size={clientQuery ? Math.min(clients.filter(c => normalizeText(c.nom).includes(normalizeText(clientQuery)) || (c.tel ?? "").includes(clientQuery)).length + 1, 6) : 1}
                   >
                     <option value="">Sélectionner un client...</option>
@@ -2605,7 +2652,7 @@ function PosPage() {
                       : clients
                     ).map(c => (
                       <option key={c.id} value={c.id}>
-                        {c.nom} {c.tel ? `(${c.tel})` : ""}
+                        {c.nom} {c.tel ? `(${c.tel})` : ""} {c.type_client && c.type_client !== "Détail" ? `[${c.type_client}]` : ""}
                       </option>
                     ))}
                   </select>
@@ -2632,7 +2679,68 @@ function PosPage() {
                 </div>
               </div>
 
-              <div style={{ height: 1, background: "#dce1e7", margin: "4px 0" }} />
+              {/* Multi-Tier Pricing Mode Switcher */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px", background: "#f1f5f9", borderRadius: 14, border: "1px solid #e2e8f0" }}>
+                <button
+                  type="button"
+                  onClick={() => handlePricingTierChange("Détail")}
+                  style={{
+                    flex: 1,
+                    padding: "7px 4px",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    borderRadius: 10,
+                    border: "none",
+                    cursor: "pointer",
+                    background: pricingTier === "Détail" ? "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)" : "transparent",
+                    color: pricingTier === "Détail" ? "#fff" : "#64748b",
+                    boxShadow: pricingTier === "Détail" ? "0 2px 8px rgba(79, 70, 229, 0.35)" : "none",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  Détail
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePricingTierChange("Gros")}
+                  style={{
+                    flex: 1,
+                    padding: "7px 4px",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    borderRadius: 10,
+                    border: "none",
+                    cursor: "pointer",
+                    background: pricingTier === "Gros" ? "linear-gradient(135deg, #059669 0%, #10b981 100%)" : "transparent",
+                    color: pricingTier === "Gros" ? "#fff" : "#64748b",
+                    boxShadow: pricingTier === "Gros" ? "0 2px 8px rgba(5, 150, 105, 0.35)" : "none",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  Gros 🏷️
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePricingTierChange("Revendeur")}
+                  style={{
+                    flex: 1,
+                    padding: "7px 4px",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    borderRadius: 10,
+                    border: "none",
+                    cursor: "pointer",
+                    background: pricingTier === "Revendeur" ? "linear-gradient(135deg, #d97706 0%, #f59e0b 100%)" : "transparent",
+                    color: pricingTier === "Revendeur" ? "#fff" : "#64748b",
+                    boxShadow: pricingTier === "Revendeur" ? "0 2px 8px rgba(217, 119, 6, 0.35)" : "none",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  Spécial ⭐
+                </button>
+              </div>
+
+              <div style={{ height: 1, background: "#dce1e7", margin: "2px 0" }} />
 
               {/* Payment Method Buttons */}
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

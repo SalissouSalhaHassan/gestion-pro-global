@@ -27,7 +27,7 @@ export default function ClientsPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [formData, setFormData] = useState({ nom: "", tel: "", ref_client: "" });
+  const [formData, setFormData] = useState({ nom: "", tel: "", ref_client: "", type_client: "Détail" });
   const [toast, setToast] = useState<{message: string, type: "success" | "error"} | null>(null);
 
   // ── Session & Role State ──
@@ -80,10 +80,11 @@ export default function ClientsPage() {
           nom: formData.nom,
           tel: formData.tel || null,
           ref_client: finalRef,
+          type_client: formData.type_client || "Détail",
           credit_facture: 0,
           credit_bl: 0,
           montant_plafond: 0,
-          prix_client: 1,
+          prix_client: formData.type_client === "Gros" ? 2 : formData.type_client === "Revendeur" ? 3 : 1,
           pre_client: false,
           is_deleted: false,
         })
@@ -610,6 +611,20 @@ export default function ClientsPage() {
                     placeholder="Auto-générée si vide"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Catégorie Tarifaire (Tarif appliqué)</label>
+                <select
+                  value={formData.type_client}
+                  onChange={(e) => setFormData({...formData, type_client: e.target.value})}
+                  className="block w-full text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-bold cursor-pointer"
+                  style={{ background: "#F9FAFB", borderRadius: "12px", padding: "14px 16px", border: "1px solid #e2e8f0" }}
+                >
+                  <option value="Détail">Détail (Prix Public Standard)</option>
+                  <option value="Gros">Gros (Tarif Grossiste & Commandes en volume)</option>
+                  <option value="Revendeur">Revendeur (Tarif Spécial Partenaires)</option>
+                </select>
               </div>
               
               <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-100 mt-6">
