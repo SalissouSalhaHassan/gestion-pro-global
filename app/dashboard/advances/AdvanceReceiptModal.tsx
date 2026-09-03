@@ -54,6 +54,7 @@ export default function AdvanceReceiptModal({
   const [advance, setAdvance] = useState<any>(null);
   const [allAdvances, setAllAdvances] = useState<any[]>([]);
   const [allHistory, setAllHistory] = useState<any[]>([]);
+  const [advancePayments, setAdvancePayments] = useState<any[]>([]);
   const [company, setCompany] = useState<any>(null);
   const [pageSize, setPageSize] = useState<'A4' | 'A5' | 'Ticket'>('A5');
   const [receiptMode, setReceiptMode] = useState<ReceiptType>(initialMode);
@@ -128,6 +129,115 @@ export default function AdvanceReceiptModal({
     return transactions.reduce((sum, tx) => sum + tx.montant, 0);
   }, [transactions]);
 
+  const singleAdvanceMovements = useMemo(() => {
+    if (!advance) return [];
+    const list: any[] = [];
+    
+    // 1. Initial Deposit (Credit)
+    list.push({
+      id: `dep-${advance.id}`,
+      date: advance.date_avance || advance.created_at,
+      type: locale === "ar" ? "إيداع أمانة مبدئي" : "Dépôt initial",
+      ref: advance.reference_paiement || `DEP-${advance.id}`,
+      mode: advance.moyen_paiement || "Espèce",
+      debit: 0,
+      credit: Number(advance.montant_initial) || 0,
+      notes: advance.notes || (locale === "ar" ? "إيداع أمانة" : "Constitution d'acompte"),
+      timestamp: new Date(advance.date_avance || advance.created_at).getTime()
+    });
+
+    // 2. Withdrawals or Imputations from history
+    const thisHist = allHistory.filter(h => Number(h.advance_id) === Number(advance.id));
+    thisHist.forEach(h => {
+      const isWithdraw = h.action === "WITHDRAW";
+      const isInvoice = h.action === "INVOICE_PAYMENT";
+      const isCancel = h.action === "CANCEL";
+
+      list.push({
+        id: `h-${h.id}`,
+        date: h.date_action,
+        type: isWithdraw 
+          ? (locale === "ar" ? "سحب / استرداد نقدي" : "Retrait d'acompte")
+          : isInvoice 
+            ? (locale === "ar" ? "تسوية فاتورة" : "Imputation Facture")
+            : isCancel 
+              ? (locale === "ar" ? "إلغاء أمانة" : "Annulation")
+              : (h.action || "Mouvement"),
+        ref: h.notes || (isWithdraw ? `RET-${h.id}` : isInvoice ? `IMP-${h.id}` : `MVT-${h.id}`),
+        mode: isWithdraw ? "Espèce" : "Avance",
+        debit: Number(h.amount) || 0,
+        credit: 0,
+        notes: h.notes || "",
+        timestamp: new Date(h.date_action).getTime()
+      });
+    });
+
+    // 3. Linked Payments in database
+    advancePayments.forEach(p => {
+      const pRef = p.factures?.bl_number || p.reference_paiement || `REG-${p.id}`;
+      const alreadyIn = list.some(item => item.ref === pRef);
+      if (!alreadyIn) {
+        list.push({
+          id: `p-${p.id}`,
+          date: p.date_operation || p.created_at,
+          type: locale === "ar" ? "تسوية فاتورة" : "Règlement Facture",
+          ref: pRef,
+          mode: p.moyen_reglement || "Avance",
+          debit: Number(p.montant_regle) || 0,
+          credit: 0,
+          notes: `${locale === "ar" ? "فاتورة" : "Facture"} ${p.factures?.bl_number || ""}`,
+          timestamp: new Date(p.date_operation || p.created_at).getTime()
+        });
+      }
+    });
+
+    // 4. Reconciliation difference: If remaining < initial and debit movements don't equal difference
+    const totalDebitsSoFar = list.reduce((sum, item) => sum + item.debit, 0);
+    const expectedConsumed = Math.max(0, (Number(advance.montant_initial) || 0) - (Number(advance.montant_restant) || 0));
+    
+    if (expectedConsumed > totalDebitsSoFar) {
+      const remainingDiff = expectedConsumed - totalDebitsSoFar;
+      list.push({
+        id: `auto-diff-${advance.id}`,
+        date: advance.updated_at || advance.date_avance || advance.created_at,
+        type: locale === "ar" ? "استخدام في فواتير / سحب" : "Utilisation Facture / Retrait",
+        ref: `IMP-00${advance.id}`,
+        mode: "Avance",
+        debit: remainingDiff,
+        credit: 0,
+        notes: locale === "ar" ? "تسوية مشتريات أو سحب نقدية" : "Imputation sur vente ou retrait de fonds",
+        timestamp: new Date(advance.updated_at || advance.date_avance || advance.created_at).getTime()
+      });
+    }
+
+    // Sort chronologically
+    list.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Compute running balance
+    let running = 0;
+    return list.map(item => {
+      running += (item.credit - item.debit);
+      return {
+        ...item,
+        solde_courant: running
+      };
+    });
+  }, [advance, allHistory, advancePayments, locale]);
+
+  const singleTotals = useMemo(() => {
+    let deb = 0;
+    let cred = 0;
+    singleAdvanceMovements.forEach(m => {
+      deb += m.debit;
+      cred += m.credit;
+    });
+    return {
+      totalDebit: deb,
+      totalCredit: cred,
+      finalBalance: cred - deb
+    };
+  }, [singleAdvanceMovements]);
+
   useEffect(() => {
     async function fetchData() {
       try {
@@ -149,6 +259,19 @@ export default function AdvanceReceiptModal({
         setAdvance(adv);
 
         if (adv) {
+          // Fetch linked payments for this advance
+          try {
+            const { data: payData } = await supabase
+              .from("paiements")
+              .select("*, factures(id, bl_number, num_facture, total_ttc)")
+              .eq("avance_client_id", adv.id);
+            if (payData) {
+              setAdvancePayments(payData);
+            }
+          } catch (pErr) {
+            console.warn("Notice: paiements query in AdvanceReceiptModal:", pErr);
+          }
+
           const { data: allAdvs } = await supabase
             .from("avances_clients")
             .select("*")
@@ -160,13 +283,19 @@ export default function AdvanceReceiptModal({
 
           if (advancesList.length > 0) {
             const advIds = advancesList.map(a => a.id);
-            const { data: allHist } = await supabase
-              .from("avances_history")
-              .select("*")
-              .in("advance_id", advIds)
-              .order("date_action", { ascending: true });
-            
-            setAllHistory(allHist || []);
+            try {
+              const { data: allHist, error: hErr } = await supabase
+                .from("avances_history")
+                .select("*")
+                .in("advance_id", advIds)
+                .order("date_action", { ascending: true });
+              
+              if (!hErr && allHist) {
+                setAllHistory(allHist);
+              }
+            } catch (hCatch) {
+              console.warn("Notice: avances_history in AdvanceReceiptModal:", hCatch);
+            }
           }
         }
 
@@ -402,34 +531,85 @@ export default function AdvanceReceiptModal({
             </div>
           )}
 
-          {/* 2. Mode Single Deposit: Original Deposit Voucher */}
+          {/* 2. Mode Single Deposit: Comprehensive Accounting Movements Table */}
           {receiptMode === 'single' && (
-            <div className="mb-4 space-y-2 border border-slate-950 p-4 rounded-xl bg-slate-50/50">
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-500 uppercase">{locale === "ar" ? "رقم المرجع:" : "Référence :"}</span>
-                <span className="font-mono font-black">{advance.reference_paiement || `DEP-${advance.id}`}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-500 uppercase">{locale === "ar" ? "تاريخ الإيداع:" : "Date Opération :"}</span>
-                <span className="font-black">{new Date(advance.date_avance || advance.created_at).toLocaleDateString(locale === "ar" ? 'ar-SA' : 'fr-FR')}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-500 uppercase">{locale === "ar" ? "طريقة الدفع:" : "Mode de Paiement :"}</span>
-                <span className="font-black uppercase">{advance.moyen_paiement || "Espèce"}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs border-t border-slate-200 pt-2">
-                <span className="font-bold text-slate-500 uppercase">{locale === "ar" ? "المبلغ المودع:" : "Montant Initial Déposé :"}</span>
-                <span className="font-black text-emerald-600 text-sm">{formatCurrencyAmount(Number(advance.montant_initial))}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-500 uppercase">{locale === "ar" ? "الرصيد المتبقي المتاح:" : "Solde Restant Disponible :"}</span>
-                <span className="font-black text-blue-600 text-sm">{formatCurrencyAmount(Number(advance.montant_restant))}</span>
-              </div>
-              {advance.notes && (
-                <div className="text-[10px] text-slate-600 italic border-t border-slate-200 pt-1.5">
-                  {locale === "ar" ? "ملاحظات:" : "Note :"} {advance.notes}
+            <div className="mb-4 space-y-3">
+              {/* Deposit Metadata Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 border border-slate-900 rounded-xl p-3 bg-slate-50/70 text-xs">
+                <div>
+                  <span className="text-[9px] font-black uppercase text-slate-400 block">{locale === "ar" ? "المرجع:" : "RÉFÉRENCE :"}</span>
+                  <span className="font-mono font-black text-slate-900">{advance.reference_paiement || `DEP-${advance.id}`}</span>
                 </div>
-              )}
+                <div>
+                  <span className="text-[9px] font-black uppercase text-slate-400 block">{locale === "ar" ? "تاريخ الإيداع:" : "DATE DÉPÔT :"}</span>
+                  <span className="font-bold text-slate-900">{new Date(advance.date_avance || advance.created_at).toLocaleDateString(locale === "ar" ? 'ar-SA' : 'fr-FR')}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] font-black uppercase text-slate-400 block">{locale === "ar" ? "طريقة الدفع:" : "MODE DE PAIEMENT :"}</span>
+                  <span className="font-bold uppercase text-slate-900">{advance.moyen_paiement || "Espèce"}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] font-black uppercase text-slate-400 block">{locale === "ar" ? "المبلغ الأولي:" : "MONTANT INITIAL :"}</span>
+                  <span className="font-black text-emerald-600">{formatCurrencyAmount(Number(advance.montant_initial))}</span>
+                </div>
+              </div>
+
+              {/* Table of Movements */}
+              <div className="overflow-x-auto border border-slate-900 rounded-xl">
+                <table className="w-full text-left border-collapse min-w-[480px] print:min-w-full sm:min-w-full">
+                  <thead>
+                    <tr className="bg-slate-900 text-white uppercase text-[9px] font-black border-b border-slate-900 print:bg-slate-200 print:text-black">
+                      <th className="py-2 px-2.5 border-r border-white/20 print:border-slate-400 text-center w-20">{locale === "ar" ? "التاريخ" : "DATE"}</th>
+                      <th className="py-2 px-2.5 border-r border-white/20 print:border-slate-400">{locale === "ar" ? "العملية والبيان" : "OPÉRATION / LIBELLÉ"}</th>
+                      <th className="py-2 px-2.5 border-r border-white/20 print:border-slate-400 text-center w-24">{locale === "ar" ? "المرجع" : "RÉFÉRENCE"}</th>
+                      <th className="py-2 px-2.5 border-r border-white/20 print:border-slate-400 text-right w-24 text-rose-300 print:text-rose-700 font-black">{locale === "ar" ? "مدين (-)" : "DÉBIT (-)"}</th>
+                      <th className="py-2 px-2.5 border-r border-white/20 print:border-slate-400 text-right w-24 text-emerald-300 print:text-emerald-700 font-black">{locale === "ar" ? "دائن (+)" : "CRÉDIT (+)"}</th>
+                      <th className="py-2 px-2.5 text-right w-28 font-black">{locale === "ar" ? "الرصيد" : "SOLDE"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[10px] font-bold divide-y divide-slate-200">
+                    {singleAdvanceMovements.map((m) => (
+                      <tr key={m.id} className="hover:bg-slate-50/50">
+                        <td className="py-2 px-2.5 text-center font-mono text-[9px] text-slate-600 border-r border-slate-200">
+                          {new Date(m.date).toLocaleDateString(locale === "ar" ? 'ar-SA' : 'fr-FR')}
+                        </td>
+                        <td className="py-2 px-2.5 border-r border-slate-200">
+                          <div className="text-slate-900 font-black">{m.type}</div>
+                          {m.notes && <div className="text-[9px] text-slate-400 font-normal truncate max-w-[200px]">{m.notes}</div>}
+                        </td>
+                        <td className="py-2 px-2.5 text-center font-mono text-[9px] text-slate-700 border-r border-slate-200">
+                          {m.ref}
+                        </td>
+                        <td className="py-2 px-2.5 text-right font-black text-rose-600 border-r border-slate-200">
+                          {m.debit > 0 ? `-${formatCurrencyAmount(m.debit)}` : "—"}
+                        </td>
+                        <td className="py-2 px-2.5 text-right font-black text-emerald-600 border-r border-slate-200">
+                          {m.credit > 0 ? `+${formatCurrencyAmount(m.credit)}` : "—"}
+                        </td>
+                        <td className="py-2 px-2.5 text-right font-black text-slate-900 font-mono">
+                          {formatCurrencyAmount(m.solde_courant)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-900 text-white font-black text-[10px] uppercase border-t-2 border-slate-950 print:bg-slate-200 print:text-black">
+                      <td colSpan={3} className="py-2.5 px-3 text-right border-r border-white/20 print:border-slate-400">
+                        {locale === "ar" ? "المجموع والرصيد المتبقي :" : "TOTAUX & SOLDE DISPONIBLE :"}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-right text-rose-300 print:text-rose-700 font-mono border-r border-white/20 print:border-slate-400">
+                        {singleTotals.totalDebit > 0 ? `-${formatCurrencyAmount(singleTotals.totalDebit)}` : "0 FCFA"}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-right text-emerald-300 print:text-emerald-700 font-mono border-r border-white/20 print:border-slate-400">
+                        +{formatCurrencyAmount(singleTotals.totalCredit)}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-right text-white print:text-black font-mono text-xs">
+                        {formatCurrencyAmount(singleTotals.finalBalance)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           )}
 
