@@ -933,11 +933,11 @@ export async function POST(request: Request) {
         depotId: effectiveDepotId,
         depotName: canonicalDepotName,
       });
-    }
 
-    // Award loyalty points to client if registered
-    if (clientId && Number(clientId) > 1 && finalTotalTTC > 0) {
-      await awardLoyaltyPoints(clientId, extractedId, finalTotalTTC);
+      // Award loyalty points to client if registered
+      if (clientId && Number(clientId) > 1 && finalTotalTTC > 0) {
+        await awardLoyaltyPoints(clientId, extractedId, finalTotalTTC);
+      }
     }
 
     return NextResponse.json({
