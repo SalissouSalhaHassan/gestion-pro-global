@@ -1267,18 +1267,50 @@ function PosPage() {
         /* ── 2. Clients ── */
         let clientQueryBuilder = supabase
           .from("clients")
-          .select("id, ref_client, nom, tel, credit_facture, is_deleted, type_client, points_fidelite, niveau_fidelite, carte_fidelite_numero")
+          .select("id, ref_client, nom, tel, credit_facture, is_deleted, type_client, prix_client")
           .eq("is_deleted", false)
           .order("nom", { ascending: true });
 
-        // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
+        // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client (with safe fallback) ──
         const posSession = getClientSessionFromCookie();
         const posIsAdmin = isAdminOrManagerSession(posSession);
+        
+        let clientsRaw: any[] | null = null;
+        let cliErr: any = null;
+
         if (!posIsAdmin && posSession?.id) {
-          clientQueryBuilder = clientQueryBuilder.or(`created_by.eq.${posSession.id},id.eq.${DEFAULT_CLIENT_ID}`);
+          try {
+            const isolatedRes = await supabase
+              .from("clients")
+              .select("id, ref_client, nom, tel, credit_facture, is_deleted, type_client, prix_client")
+              .eq("is_deleted", false)
+              .or(`created_by.eq.${posSession.id},id.eq.${DEFAULT_CLIENT_ID}`)
+              .order("nom", { ascending: true })
+              .limit(500);
+            if (!isolatedRes.error && isolatedRes.data) {
+              clientsRaw = isolatedRes.data;
+            } else {
+              // created_by column does not exist in clients table, fallback to standard query
+              const fallbackRes = await clientQueryBuilder.limit(500);
+              clientsRaw = fallbackRes.data;
+              cliErr = fallbackRes.error;
+            }
+          } catch {
+            const fallbackRes = await clientQueryBuilder.limit(500);
+            clientsRaw = fallbackRes.data;
+            cliErr = fallbackRes.error;
+          }
+        } else {
+          const res = await clientQueryBuilder.limit(500);
+          clientsRaw = res.data;
+          cliErr = res.error;
         }
 
-        const { data: clientsRaw, error: cliErr } = await clientQueryBuilder.limit(500);
+        if (cliErr) {
+          console.error("❌ Clients fetch error:", cliErr.message, cliErr.details);
+        } else {
+          console.log("✅ Clients fetched:", clientsRaw?.length || 0);
+        }
 
         /* ── 3. Depots ── */
         const { data: depotsRaw, error: depErr } = await supabase
@@ -1379,9 +1411,11 @@ function PosPage() {
 
         // Process clients
         if (!cliErr && clientsRaw && clientsRaw.length > 0) {
-          setClients(clientsRaw.map((r) => buildClient(r as Row)));
-          if (!selectedClientId && clientsRaw.length > 0) {
-            setSelectedClientId((clientsRaw[0] as Row).id as string | number);
+          const mappedClients = clientsRaw.map((r) => buildClient(r as Row));
+          setClients(mappedClients);
+          if (!selectedClientId && mappedClients.length > 0) {
+            const defaultCli = mappedClients.find(c => c.id === DEFAULT_CLIENT_ID || c.id === 1 || (c.ref_client && c.ref_client.toUpperCase().includes("COMPTOIR"))) || mappedClients[0];
+            setSelectedClientId(defaultCli.id);
           }
         }
 
@@ -1755,7 +1789,7 @@ function PosPage() {
       try {
         const offlineSale = recordOfflineInvoice({
           clientId: selectedClientId || 1,
-          clientName: clients.find((c) => c.id === selectedClientId)?.nom || "Client Passant",
+          clientName: clients.find((c) => String(c.id) === String(selectedClientId))?.nom || "Client Passant",
           items: cart.map((it) => ({
             articleId: it.id,
             reference: it.reference,
@@ -1911,7 +1945,7 @@ function PosPage() {
             montant_restant: fullInvoice?.montant_restant !== undefined 
               ? fullInvoice.montant_restant 
               : (cart.reduce((acc, it) => acc + (it.p_vente_ttc * it.quantite), 0) - Number(receivedAmount)),
-            client_nom: clientRow?.nom || fullInvoice?.client_nom || clients.find(c => c.id === (fullInvoice?.client_id || selectedClientId))?.nom || "Client Divers",
+            client_nom: clientRow?.nom || fullInvoice?.client_nom || clients.find(c => String(c.id) === String(fullInvoice?.client_id || selectedClientId))?.nom || "Client Divers",
             ...fullInvoice // Spread original fields if any
           };
           
@@ -2010,7 +2044,6 @@ function PosPage() {
           ref_client: finalRef,
           credit_facture: 0,
           is_deleted: false,
-          created_by: readClientSession()?.id || null  // Track creator for data isolation
         })
         .select()
         .single();
@@ -2583,9 +2616,9 @@ function PosPage() {
                   <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#64748b", fontWeight: 800, fontSize: 12, textTransform: "uppercase" }}>
                     <UserRound size={14} /> Client
                   </div>
-                  {selectedClientId && clients.find(c => c.id === selectedClientId)?.credit_facture ? (
+                  {selectedClientId && clients.find(c => String(c.id) === String(selectedClientId))?.credit_facture ? (
                     <div style={S.customerCreditBadge}>
-                      Dette: {formatAmount(clients.find(c => c.id === selectedClientId)!.credit_facture)} F
+                      Dette: {formatAmount(clients.find(c => String(c.id) === String(selectedClientId))!.credit_facture)} F
                     </div>
                   ) : null}
                   {totalAdvanceBalance > 0 && (

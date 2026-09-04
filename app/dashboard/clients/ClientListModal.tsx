@@ -47,15 +47,33 @@ export default function ClientListModal({ onClose }: ClientListModalProps) {
           .select("id, ref_client, nom, tel, credit_facture, credit_bl")
           .eq("is_deleted", false);
 
+        let clientsData: any[] | null = null;
+
         // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
         if (!admin && session?.id) {
-          clientQuery = clientQuery.or(`created_by.eq.${session.id},id.eq.${DEFAULT_CLIENT_ID}`);
+          try {
+            const isolatedRes = await supabase
+              .from("clients")
+              .select("id, ref_client, nom, tel, credit_facture, credit_bl")
+              .eq("is_deleted", false)
+              .or(`created_by.eq.${session.id},id.eq.${DEFAULT_CLIENT_ID}`);
+            if (!isolatedRes.error && isolatedRes.data) {
+              clientsData = isolatedRes.data;
+            } else {
+              const fallbackRes = await clientQuery;
+              clientsData = fallbackRes.data;
+            }
+          } catch {
+            const fallbackRes = await clientQuery;
+            clientsData = fallbackRes.data;
+          }
+        } else {
+          const { data } = await clientQuery;
+          clientsData = data;
         }
 
-        const { data, error } = await clientQuery;
-
-        if (data) {
-          setClients(data.map(c => ({
+        if (clientsData) {
+          setClients(clientsData.map(c => ({
             ...c,
             credit: (Number(c.credit_facture) || 0) + (Number(c.credit_bl) || 0)
           })));

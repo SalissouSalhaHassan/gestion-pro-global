@@ -62,13 +62,33 @@ export default function EditInvoiceModal({ invoiceId, onClose, onRefresh }: Edit
           .eq("is_deleted", false)
           .order("nom");
 
+        let clsData: any[] | null = null;
+
         // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
         if (!admin && session?.id) {
-          clientQuery = clientQuery.or(`created_by.eq.${session.id},id.eq.${DEFAULT_CLIENT_ID}`);
+          try {
+            const isolatedRes = await supabase
+              .from("clients")
+              .select("id, nom")
+              .eq("is_deleted", false)
+              .or(`created_by.eq.${session.id},id.eq.${DEFAULT_CLIENT_ID}`)
+              .order("nom");
+            if (!isolatedRes.error && isolatedRes.data) {
+              clsData = isolatedRes.data;
+            } else {
+              const fallbackRes = await clientQuery;
+              clsData = fallbackRes.data;
+            }
+          } catch {
+            const fallbackRes = await clientQuery;
+            clsData = fallbackRes.data;
+          }
+        } else {
+          const { data } = await clientQuery;
+          clsData = data;
         }
 
-        const { data: cls } = await clientQuery;
-        setClients(cls || []);
+        setClients(clsData || []);
 
       } catch (err) {
         console.error("Error loading invoice for edit:", err);
