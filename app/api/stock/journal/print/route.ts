@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth_helper';
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,15 +13,26 @@ export async function GET(request: NextRequest) {
     const variationType = searchParams.get("variation") || "Tous";
 
     const supabase = await createClient();
+    const session = await getServerSession();
+    if (!session) {
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    }
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
 
-    // 1. Fetch Company Info
-    const { data: company } = await supabase.from('informations_entreprise').select('*').limit(1).single();
+    // 1. Fetch Company Info (Scoped by organization)
+    const { data: company } = await supabase
+      .from('informations_entreprise')
+      .select('*')
+      .eq('organization_id', orgId)
+      .limit(1)
+      .maybeSingle();
 
-    // 2. Fetch Journal Data (Re-using the logic from the journal API)
+    // 2. Fetch Journal Data (Scoped by organization)
     // First, get articles
     let articlesQuery = supabase
       .from("articles")
       .select("id, reference, designation, unite, categorie_id")
+      .eq("organization_id", orgId)
       .eq("is_deleted", false);
 
     if (search) {
@@ -40,6 +52,7 @@ export async function GET(request: NextRequest) {
       let mvtQuery = supabase
         .from("mouvements")
         .select("quantite, stock_avant, stock_apres, date_mouvement")
+        .eq("organization_id", orgId)
         .eq("article_id", art.id)
         .gte("date_mouvement", startRange)
         .lte("date_mouvement", endRange)
@@ -63,6 +76,7 @@ export async function GET(request: NextRequest) {
         let lastMvtQuery = supabase
           .from("mouvements")
           .select("stock_apres")
+          .eq("organization_id", orgId)
           .eq("article_id", art.id)
           .lt("date_mouvement", startRange)
           .order("date_mouvement", { ascending: false })
@@ -82,6 +96,7 @@ export async function GET(request: NextRequest) {
             let firstMvtQuery = supabase
                 .from("mouvements")
                 .select("stock_avant")
+                .eq("organization_id", orgId)
                 .eq("article_id", art.id)
                 .order("date_mouvement", { ascending: true })
                 .limit(1);

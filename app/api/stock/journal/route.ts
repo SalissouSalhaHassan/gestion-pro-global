@@ -20,6 +20,7 @@ export async function GET(request: Request) {
   }
 
   const isAdmin = await isAdminOrManager(user);
+  const orgId = user.organization_id || "00000000-0000-0000-0000-000000000001";
   const allowedDepots = getAllowedDepots(user);
   const userDepot = user.emplacement || "";
 
@@ -32,10 +33,11 @@ export async function GET(request: Request) {
     }
   }
 
-  // 1. Start building the articles query
+  // 1. Start building the articles query (Scoped by organization)
   let articlesQuery = supabase
     .from("articles")
     .select("id, reference, designation, unite, categorie_id")
+    .eq("organization_id", orgId)
     .eq("is_deleted", false);
 
   if (search) {
@@ -53,10 +55,11 @@ export async function GET(request: Request) {
   const endRange = `${endDateStr}T23:59:59.999Z`;
 
   const results = await Promise.all(articles.map(async (art) => {
-    // 3. Fetch all movements for this article on the selected date
+    // 3. Fetch all movements for this article on the selected date (Scoped by organization)
     let mvtQuery = supabase
       .from("mouvements")
       .select("quantite, stock_avant, stock_apres, date_mouvement")
+      .eq("organization_id", orgId)
       .eq("article_id", art.id)
       .gte("date_mouvement", startRange)
       .lte("date_mouvement", endRange)
@@ -87,10 +90,11 @@ export async function GET(request: Request) {
       // Avant is Après - Variation
       avant = apres - variation;
     } else {
-      // No movements today. Find the last movement BEFORE today.
+      // No movements today. Find the last movement BEFORE today (Scoped by organization)
       let lastMvtQuery = supabase
         .from("mouvements")
         .select("stock_apres")
+        .eq("organization_id", orgId)
         .eq("article_id", art.id)
         .lt("date_mouvement", startRange)
         .order("date_mouvement", { ascending: false })
@@ -112,10 +116,11 @@ export async function GET(request: Request) {
         apres = avant;
         variation = 0;
       } else {
-        // No movements ever before today. Check first movement ever.
+        // No movements ever before today. Check first movement ever (Scoped by organization)
         let firstMvtQuery = supabase
             .from("mouvements")
             .select("stock_avant")
+            .eq("organization_id", orgId)
             .eq("article_id", art.id)
             .order("date_mouvement", { ascending: true })
             .limit(1);
@@ -135,12 +140,13 @@ export async function GET(request: Request) {
             avant = Number(firstMvts[0].stock_avant || 0);
             apres = avant;
         } else {
-            // No movements at all. Check current stock if range includes today, else 0.
+            // No movements at all. Check current stock if range includes today, else 0 (Scoped by organization)
             const todayStr = new Date().toISOString().split('T')[0];
             if (todayStr >= startDateStr && todayStr <= endDateStr) {
                 let stockQuery = supabase
                     .from("stocks")
                     .select("quantite")
+                    .eq("organization_id", orgId)
                     .eq("article_id", art.id);
                 
                 if (depot && depot !== "Tous") {

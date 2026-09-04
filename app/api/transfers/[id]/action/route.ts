@@ -20,11 +20,14 @@ export async function POST(
       return NextResponse.json({ error: 'Action requise.' }, { status: 400 });
     }
 
-    // 1. Fetch current transfer status and details
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
+
+    // 1. Fetch current transfer status and details (Scoped by organization)
     const { data: transfer, error: fetchErr } = await supabase
       .from('transferts_stock')
       .select('*, depot_depart:depot_depart_id(nom), depot_arrivee:depot_arrivee_id(nom)')
       .eq('id', transferId)
+      .eq('organization_id', orgId)
       .single();
 
     if (fetchErr || !transfer) {
@@ -41,6 +44,7 @@ export async function POST(
       const { data: userDeps } = await supabase
         .from("depots")
         .select("id, nom")
+        .eq("organization_id", orgId)
         .in("nom", depotsToFilter);
       const allowedIds = userDeps?.map(d => d.id) || [];
       const allowedNames = userDeps?.map(d => d.nom.toLowerCase()) || [];
@@ -94,6 +98,7 @@ export async function POST(
         const { data: stockRow } = await supabase
           .from('stocks')
           .select('quantite')
+          .eq('organization_id', orgId)
           .eq('article_id', item.article_id)
           .eq('warehouse_id', transfer.depot_depart_id)
           .maybeSingle();
@@ -107,7 +112,8 @@ export async function POST(
           .upsert({
             article_id: item.article_id,
             warehouse_id: transfer.depot_depart_id,
-            quantite: newQty
+            quantite: newQty,
+            organization_id: orgId
           }, { onConflict: 'article_id,depot_nom' });
 
         // Add mouvement record
@@ -123,7 +129,8 @@ export async function POST(
           stock_apres: newQty,
           warehouse_id: transfer.depot_depart_id,
           user_id: Number(session.id),
-          utilisateur: session.username || 'Système'
+          utilisateur: session.username || 'Système',
+          organization_id: orgId
         });
       }
 
@@ -140,7 +147,8 @@ export async function POST(
         details: legacyDetails,
         notes: notes,
         created_by: session.username || 'Système',
-        status: 'En Transit'
+        status: 'En Transit',
+        organization_id: orgId
       });
 
     } else if (action === 'receive') {
@@ -153,6 +161,7 @@ export async function POST(
         const { data: stockRow } = await supabase
           .from('stocks')
           .select('quantite')
+          .eq('organization_id', orgId)
           .eq('article_id', item.article_id)
           .eq('warehouse_id', transfer.depot_arrivee_id)
           .maybeSingle();
@@ -166,7 +175,8 @@ export async function POST(
           .upsert({
             article_id: item.article_id,
             warehouse_id: transfer.depot_arrivee_id,
-            quantite: newQty
+            quantite: newQty,
+            organization_id: orgId
           }, { onConflict: 'article_id,depot_nom' });
 
         // Add mouvement record
@@ -182,7 +192,8 @@ export async function POST(
           stock_apres: newQty,
           warehouse_id: transfer.depot_arrivee_id,
           user_id: Number(session.id),
-          utilisateur: session.username || 'Système'
+          utilisateur: session.username || 'Système',
+          organization_id: orgId
         });
       }
 
@@ -194,7 +205,8 @@ export async function POST(
           date_reception: new Date().toISOString(),
           received_by: session.username || 'Système'
         })
-        .eq("reference", transfer.reference);
+        .eq("reference", transfer.reference)
+        .eq("organization_id", orgId);
 
     } else if (action === 'confirm') {
       if (transfer.statut !== 'Recu') return NextResponse.json({ error: 'Transition invalide.' }, { status: 400 });
@@ -211,7 +223,8 @@ export async function POST(
         statut: nextStatus,
         updated_at: new Date().toISOString()
       })
-      .eq('id', transferId);
+      .eq('id', transferId)
+      .eq('organization_id', orgId);
 
     if (updateErr) throw updateErr;
 

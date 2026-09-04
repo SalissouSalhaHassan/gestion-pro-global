@@ -14,16 +14,18 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const month = url.searchParams.get("month") || new Date().toISOString().slice(0, 7); // e.g. "2026-09"
 
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
     const startOfMonth = `${month}-01T00:00:00Z`;
     const endOfMonth = `${month}-31T23:59:59Z`;
 
     // 1. Fetch users, monthly targets, invoices, and payouts in parallel
     const [usersRes, targetsRes, invoicesRes, payoutsRes] = await Promise.all([
-      supabase.from('users').select('id, utilisateur, nom_prenom, role_name, emplacement').order('nom_prenom'),
+      supabase.from('users').select('id, utilisateur, nom_prenom, role_name, emplacement').eq('organization_id', orgId).order('nom_prenom'),
       supabase.from('objectifs_vendeurs').select('*').eq('mois_annee', month),
       supabase
         .from('factures')
         .select('id, created_by, total_ttc, date_facture, statut')
+        .eq('organization_id', orgId)
         .gte('date_facture', startOfMonth)
         .lte('date_facture', endOfMonth),
       supabase.from('commissions_versements').select('*').eq('mois_annee', month),
@@ -110,8 +112,18 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { user_id, mois_annee, objectif_ca, taux_commission, prime_bonus_atteinte, notes } = body;
 
-    if (!user_id || !mois_annee) {
-      return NextResponse.json({ error: "Vendeur et mois requis" }, { status: 400 });
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
+
+    // Verify user belongs to the same organization
+    const { data: targetUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', Number(user_id))
+      .eq('organization_id', orgId)
+      .maybeSingle();
+
+    if (!targetUser) {
+      return NextResponse.json({ error: "Vendeur introuvable dans votre organisation" }, { status: 403 });
     }
 
     const { data, error } = await supabase
@@ -124,6 +136,7 @@ export async function POST(request: Request) {
           taux_commission: Number(taux_commission) || 0,
           prime_bonus_atteinte: Number(prime_bonus_atteinte) || 0,
           notes: notes || null,
+          organization_id: orgId,
         },
         { onConflict: 'user_id,mois_annee' }
       )

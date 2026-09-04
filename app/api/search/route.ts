@@ -20,19 +20,22 @@ export async function GET(request: Request) {
     }
 
     const isAdmin = await isAdminOrManager(user);
+    const orgId = user.organization_id || "00000000-0000-0000-0000-000000000001";
 
-    // 1. Search Articles
+    // 1. Search Articles (Scoped by organization)
     const { data: articles } = await supabase
       .from("articles")
       .select("id, reference, designation, p_vente_ttc")
+      .eq("organization_id", orgId)
       .or(`designation.ilike.%${query}%,reference.ilike.%${query}%,code_barre.ilike.%${query}%`)
       .eq("is_deleted", false)
       .limit(5);
 
-    // 2. Search Clients (with isolation for Dépôt users)
+    // 2. Search Clients (Scoped by organization, with isolation for Dépôt users)
     let clientQuery = supabase
       .from("clients")
       .select("id, nom, ref_client, tel")
+      .eq("organization_id", orgId)
       .or(`nom.ilike.%${query}%,ref_client.ilike.%${query}%`)
       .eq("is_deleted", false);
 
@@ -43,10 +46,11 @@ export async function GET(request: Request) {
 
     const { data: clients } = await clientQuery.limit(5);
 
-    // 3. Search Invoices (Using bl_number as reference)
+    // 3. Search Invoices (Scoped by organization)
     const { data: invoices } = await supabase
       .from("factures")
       .select("id, bl_number, total_ttc, date_facture")
+      .eq("organization_id", orgId)
       .ilike("bl_number", `%${query}%`)
       .eq("is_deleted", false)
       .limit(5);

@@ -12,11 +12,14 @@ export async function GET(request: NextRequest) {
     
     const supabase = await createClient();
     const session = await getServerSession();
-    let query = supabase.from('voitures').select('*').eq('is_deleted', false);
-    
-    if (session?.organization_id) {
-      query = query.eq('organization_id', session.organization_id);
-    }
+    if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
+
+    let query = supabase
+      .from('voitures')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('is_deleted', false);
 
     if (search) {
       query = query.or(`matricule.ilike.%${search}%,marque.ilike.%${search}%,modele.ilike.%${search}%,chauffeur.ilike.%${search}%`);
@@ -40,12 +43,14 @@ export async function POST(request: NextRequest) {
     const data = await request.json();
     const supabase = await createClient();
     const session = await getServerSession();
+    if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
     
     const { data: result, error } = await supabase
       .from('voitures')
       .upsert({
         ...data,
-        organization_id: session?.organization_id || "00000000-0000-0000-0000-000000000001",
+        organization_id: orgId,
         updated_at: new Date().toISOString()
       })
       .select()

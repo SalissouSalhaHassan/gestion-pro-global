@@ -23,6 +23,8 @@ export async function GET() {
     const firstDayPrevMonth = new Date(currentYear, currentMonth - 1, 1).toISOString().split('T')[0];
     const lastDayPrevMonth = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
 
+    const orgId = user.organization_id || "00000000-0000-0000-0000-000000000001";
+
     // ═══════════════════════════════════════════════════════════════
     // 1. TOP SELLING PRODUCTS (based on facture_items)
     // ═══════════════════════════════════════════════════════════════
@@ -30,12 +32,9 @@ export async function GET() {
       .from("facture_items")
       .select("article_id, qte, articles(designation), factures!inner(is_deleted, date_facture, vendeur, organization_id)")
       .eq("factures.is_deleted", false)
+      .eq("factures.organization_id", orgId)
       .gte("factures.date_facture", firstDayCurrentMonth)
       .lte("factures.date_facture", lastDayCurrentMonth);
-
-    if (user.organization_id) {
-      topProductsQuery = topProductsQuery.eq("factures.organization_id", user.organization_id);
-    }
 
     const { data: itemsRaw } = await topProductsQuery;
 
@@ -135,8 +134,8 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      topProducts: topProducts.length > 0 ? topProducts : [{ name: "CAFFEE 10x120", qty: 8 }],
-      topLocations: topLocations.length > 0 ? topLocations : [{ name: "BOUTIQUE", revenue: currentMonthTotal || 19200 }],
+      topProducts,
+      topLocations,
       monthlyComparison,
       summary: {
         currentMonthTotal,

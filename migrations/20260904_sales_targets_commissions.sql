@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.objectifs_vendeurs (
     prime_bonus_atteinte NUMERIC(15, 2) NOT NULL DEFAULT 0, -- Bonus if 100% target achieved
     statut VARCHAR(20) NOT NULL DEFAULT 'ACTIF',
     notes TEXT,
+    organization_id UUID REFERENCES public.organizations(id) DEFAULT '00000000-0000-0000-0000-000000000001',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     CONSTRAINT unq_user_mois UNIQUE (user_id, mois_annee)
 );
@@ -29,12 +30,17 @@ CREATE TABLE IF NOT EXISTS public.commissions_versements (
     reference_recu VARCHAR(100),
     paye_le TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     paye_par VARCHAR(100),
+    organization_id UUID REFERENCES public.organizations(id) DEFAULT '00000000-0000-0000-0000-000000000001',
     notes TEXT
 );
 
 -- 3. Composite Indexes
 CREATE INDEX IF NOT EXISTS idx_objectifs_user_mois ON public.objectifs_vendeurs (user_id, mois_annee);
 CREATE INDEX IF NOT EXISTS idx_commissions_payout_user ON public.commissions_versements (user_id, mois_annee);
+
+-- 3b. Ensure stock_transits and parametres_fiscaux have organization_id
+ALTER TABLE IF EXISTS public.stock_transits ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id) DEFAULT '00000000-0000-0000-0000-000000000001';
+ALTER TABLE IF EXISTS public.parametres_fiscaux ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id) DEFAULT '00000000-0000-0000-0000-000000000001';
 
 -- 4. Row Level Security
 ALTER TABLE public.objectifs_vendeurs ENABLE ROW LEVEL SECURITY;

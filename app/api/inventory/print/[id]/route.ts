@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth_helper';
 
 export async function GET(
   request: NextRequest,
@@ -14,28 +15,37 @@ export async function GET(
     }
 
     const supabase = await createClient();
+    const session = await getServerSession();
+    if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+
+    const orgId = session.organization_id || '00000000-0000-0000-0000-000000000001';
 
     // Fetch Inventory Session
-    const { data: inv, error: invError } = await supabase
+    let invQuery = supabase
       .from('inventaires')
       .select('*')
-      .eq('id', invId)
-      .single();
+      .eq('id', invId);
+    if (orgId) invQuery = invQuery.eq('organization_id', orgId);
+    const { data: inv, error: invError } = await invQuery.single();
 
     if (invError || !inv) {
       return NextResponse.json({ error: 'Session d\'inventaire introuvable' }, { status: 404 });
     }
 
     // Fetch Inventory Items
-    const { data: items, error: itemsError } = await supabase
+    let itemsQuery = supabase
       .from('inventaire_items')
       .select('*')
       .eq('inventaire_id', invId);
+    if (orgId) itemsQuery = itemsQuery.eq('organization_id', orgId);
+    const { data: items, error: itemsError } = await itemsQuery;
 
     if (itemsError) throw itemsError;
 
     // Fetch Company Info
-    const { data: company } = await supabase.from('informations_entreprise').select('*').limit(1).single();
+    let compQuery = supabase.from('informations_entreprise').select('*');
+    if (orgId) compQuery = compQuery.eq('organization_id', orgId);
+    const { data: company } = await compQuery.maybeSingle();
 
     const formatDate = (value: string | null | undefined) => {
       if (!value) return '—';

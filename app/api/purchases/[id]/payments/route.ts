@@ -26,7 +26,8 @@ export async function POST(
       body.method || 'Espèces',
       body.reference || '',
       Number(session.id),
-      session.username
+      session.username,
+      session
     );
     
     return NextResponse.json(payment, { status: 201 });

@@ -18,6 +18,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Vendeur, mois et montant valide requis" }, { status: 400 });
     }
 
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
+
+    // Verify user belongs to same organization
+    const { data: targetUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', Number(user_id))
+      .eq('organization_id', orgId)
+      .maybeSingle();
+
+    if (!targetUser) {
+      return NextResponse.json({ error: "Vendeur introuvable dans votre organisation" }, { status: 403 });
+    }
+
     const refRecu = `COM-PAY-${mois_annee.replace('-', '')}-${user_id}-${Math.floor(100 + Math.random() * 900)}`;
 
     const { data, error } = await supabase
@@ -29,6 +43,7 @@ export async function POST(request: Request) {
         moyen_paiement: moyen_paiement || "Espèces",
         reference_recu: refRecu,
         paye_par: session.username || "Direction",
+        organization_id: orgId,
         notes: notes || null,
       })
       .select()

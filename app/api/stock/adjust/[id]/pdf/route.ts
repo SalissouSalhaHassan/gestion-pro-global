@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth_helper';
 
 export async function GET(
   request: NextRequest,
@@ -16,8 +17,13 @@ export async function GET(
     }
 
     const supabase = await createClient();
+    const session = await getServerSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    }
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
 
-    // Fetch movement details with article info
+    // Fetch movement details with article info (Scoped by organization)
     const { data: mvt, error: mError } = await supabase
       .from('mouvements')
       .select(`
@@ -25,14 +31,20 @@ export async function GET(
         articles(*)
       `)
       .eq('id', mvtId)
+      .eq('organization_id', orgId)
       .single();
 
     if (mError || !mvt) {
       return NextResponse.json({ error: 'Adjustment not found' }, { status: 404 });
     }
 
-    // Fetch Company Info
-    const { data: company } = await supabase.from('informations_entreprise').select('*').limit(1).single();
+    // Fetch Company Info (Scoped by organization)
+    const { data: company } = await supabase
+      .from('informations_entreprise')
+      .select('*')
+      .eq('organization_id', orgId)
+      .limit(1)
+      .maybeSingle();
 
     const formatDate = (value: string | null | undefined) => {
       if (!value) return '—';

@@ -19,6 +19,7 @@ export async function POST(request: Request) {
   }
 
   const isAdmin = await isAdminOrManager(user);
+  const orgId = user.organization_id || "00000000-0000-0000-0000-000000000001";
   const userDepot = user.emplacement;
 
   // Security check: Employee can only adjust their own depot
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
     const { data: stockEntry, error: sError } = await supabase
       .from("stocks")
       .select("quantite")
+      .eq("organization_id", orgId)
       .eq("article_id", article_id)
       .eq("depot_nom", depot_nom)
       .maybeSingle();
@@ -51,13 +53,14 @@ export async function POST(request: Request) {
       const { error } = await supabase
         .from("stocks")
         .update({ quantite: stockApres })
+        .eq("organization_id", orgId)
         .eq("article_id", article_id)
         .eq("depot_nom", depot_nom);
       stockUpdateError = error;
     } else {
       const { error } = await supabase
         .from("stocks")
-        .insert({ article_id, depot_nom, quantite: stockApres });
+        .insert({ article_id, depot_nom, quantite: stockApres, organization_id: orgId });
       stockUpdateError = error;
     }
 
@@ -82,7 +85,8 @@ export async function POST(request: Request) {
         nr_doc: ref,
         fournisseur_client: (fournisseur_nom || "Ajustement Manuel") + (notes ? ` (${notes})` : ""),
         user_id: user.id,
-        utilisateur: user.username
+        utilisateur: user.username,
+        organization_id: orgId,
       })
       .select()
       .single();

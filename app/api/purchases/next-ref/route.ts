@@ -8,11 +8,17 @@ export async function GET() {
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('achats')
       .select('id')
       .order('id', { ascending: false })
       .limit(1);
+
+    if (session.organization_id) {
+      query = query.eq('organization_id', session.organization_id);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 

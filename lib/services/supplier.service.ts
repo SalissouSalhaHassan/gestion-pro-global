@@ -13,6 +13,7 @@ export type Supplier = {
   site?: string;
   credit?: number;
   is_deleted?: boolean;
+  organization_id?: string;
   created_at?: string;
   updated_at?: string;
 };
@@ -47,11 +48,13 @@ export class SupplierService {
     return data;
   }
 
-  async createSupplier(supplierData: Supplier, userId?: number) {
+  async createSupplier(supplierData: Supplier, session?: any) {
+    const orgId = supplierData.organization_id || session?.organization_id || '00000000-0000-0000-0000-000000000001';
     const { data, error } = await this.supabase
       .from('fournisseurs')
       .insert({
         ...supplierData,
+        organization_id: orgId,
         is_deleted: false,
         credit: supplierData.credit || 0
       })
@@ -62,14 +65,20 @@ export class SupplierService {
     return data;
   }
 
-  async updateSupplier(id: number, supplierData: Partial<Supplier>, userId?: number) {
-    const { data, error } = await this.supabase
+  async updateSupplier(id: number, supplierData: Partial<Supplier>, session?: any) {
+    let query = this.supabase
       .from('fournisseurs')
       .update({
         ...supplierData,
         updated_at: new Date().toISOString()
       })
-      .eq('id', id)
+      .eq('id', id);
+
+    if (session?.organization_id) {
+      query = query.eq('organization_id', session.organization_id);
+    }
+
+    const { data, error } = await query
       .select()
       .single();
 
@@ -77,14 +86,20 @@ export class SupplierService {
     return data;
   }
 
-  async deleteSupplier(id: number, userId?: number) {
-    const { error } = await this.supabase
+  async deleteSupplier(id: number, session?: any) {
+    let query = this.supabase
       .from('fournisseurs')
       .update({
         is_deleted: true,
         deleted_at: new Date().toISOString()
       })
       .eq('id', id);
+
+    if (session?.organization_id) {
+      query = query.eq('organization_id', session.organization_id);
+    }
+
+    const { error } = await query;
 
     if (error) throw new Error(error.message);
     return true;

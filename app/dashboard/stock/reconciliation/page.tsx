@@ -30,37 +30,59 @@ export default function InventoryReconciliation() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDepotId, setSelectedDepotId] = useState<number | null>(null);
   const [depots, setDepots] = useState<{id: number, nom: string}[]>([]);
+  const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
-    fetchDepots();
+    let orgId: string | null = null;
+    try {
+      const match = document.cookie.split("; ").find((c) => c.startsWith("gp_session="));
+      if (match) {
+        const decoded = decodeURIComponent(match.split("=")[1]);
+        const data = JSON.parse(decoded);
+        if (data.organization_id) {
+          orgId = data.organization_id;
+          setCurrentOrgId(data.organization_id);
+        }
+      }
+    } catch {}
+    fetchDepots(orgId);
   }, []);
 
   useEffect(() => {
     if (selectedDepotId) {
       fetchStock();
     }
-  }, [selectedDepotId]);
+  }, [selectedDepotId, currentOrgId]);
 
-  const fetchDepots = async () => {
-    const { data } = await supabase.from("depots").select("id, nom").eq("is_active", true);
+  const fetchDepots = async (org?: string | null) => {
+    const activeOrg = org || currentOrgId;
+    let q = supabase.from("depots").select("id, nom").eq("is_active", true);
+    if (activeOrg) q = q.eq("organization_id", activeOrg);
+    const { data } = await q;
     if (data) setDepots(data);
   };
 
-  const fetchStock = async () => {
+  const fetchStock = async (org?: string | null) => {
+    const activeOrg = org || currentOrgId;
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let artQ = supabase
         .from("articles")
         .select(`
           id, reference, designation
         `)
         .eq("is_deleted", false);
+      if (activeOrg) artQ = artQ.eq("organization_id", activeOrg);
+
+      const { data, error } = await artQ;
 
       if (data) {
-        // Fetch all stocks for these articles to filter manually (avoiding complex join issues)
-        const { data: allStocks } = await supabase.from("stocks").select("article_id, quantite, depot_nom");
+        // Fetch all stocks for these articles scoped by organization
+        let stockQ = supabase.from("stocks").select("article_id, quantite, depot_nom");
+        if (activeOrg) stockQ = stockQ.eq("organization_id", activeOrg);
+        const { data: allStocks } = await stockQ;
         
         const mapped = data.map((art: any) => {
           const systemQte = (allStocks || [])
@@ -106,17 +128,19 @@ export default function InventoryReconciliation() {
     setSaving(true);
     try {
       for (const change of changes) {
-        // 1. Update stock using depot name
+        // 1. Update stock using depot name and organization_id
         const depotName = depots.find(d => d.id === selectedDepotId)?.nom;
-        const { error: stockErr } = await supabase
+        let stockUpdate = supabase
           .from("stocks")
           .update({ quantite: change.physical_qte })
           .eq("article_id", change.id)
           .eq("depot_nom", depotName);
+        if (currentOrgId) stockUpdate = stockUpdate.eq("organization_id", currentOrgId);
 
+        const { error: stockErr } = await stockUpdate;
         if (stockErr) throw stockErr;
 
-        // 2. Record movement
+        // 2. Record movement with organization_id
         await supabase.from("mouvements").insert({
           article_id: change.id,
           depot_id: selectedDepotId,
@@ -126,7 +150,8 @@ export default function InventoryReconciliation() {
           stock_apres: change.physical_qte,
           nr_doc: "INV-" + new Date().toISOString().split('T')[0],
           date_mouvement: new Date().toISOString(),
-          fournisseur_client: "Ajustement Inventaire"
+          fournisseur_client: "Ajustement Inventaire",
+          ...(currentOrgId ? { organization_id: currentOrgId } : {})
         });
       }
       setSuccess(true);

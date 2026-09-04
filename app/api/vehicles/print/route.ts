@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth_helper';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +11,9 @@ export async function GET(request: NextRequest) {
     const end = searchParams.get('end');
 
     const supabase = await createClient();
+    const session = await getServerSession();
+    if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
 
     let html = `
       <html>
@@ -40,7 +44,11 @@ export async function GET(request: NextRequest) {
     `;
 
     if (type === 'fleet') {
-      const { data: vehicles } = await supabase.from('voitures').select('*').eq('is_deleted', false);
+      const { data: vehicles } = await supabase
+        .from('voitures')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('is_deleted', false);
       html += `
         <h3>État de la Flotte Automobile</h3>
         <table>
@@ -69,7 +77,11 @@ export async function GET(request: NextRequest) {
         </table>
       `;
     } else if (type === 'fees' || type === 'expenses') {
-      let query = supabase.from('vehicle_records').select('*, voitures(matricule)').eq('record_type', type === 'fees' ? 'FRAI' : 'DEPENSE');
+      let query = supabase
+        .from('vehicle_records')
+        .select('*, voitures(matricule)')
+        .eq('organization_id', orgId)
+        .eq('record_type', type === 'fees' ? 'FRAI' : 'DEPENSE');
       if (vehicleId && vehicleId !== 'all') query = query.eq('voiture_id', vehicleId);
       if (start) query = query.gte('record_date', start);
       if (end) query = query.lte('record_date', end);

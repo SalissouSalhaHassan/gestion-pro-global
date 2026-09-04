@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Le nom est obligatoire' }, { status: 400 });
     }
 
-    const newSupplier = await supplierService.createSupplier(body, Number(session.id));
+    const newSupplier = await supplierService.createSupplier(body, session);
     return NextResponse.json(newSupplier, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

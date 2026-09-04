@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth_helper';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -13,6 +14,10 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     
     const supabase = await createClient();
+    const session = await getServerSession();
+    if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
+
     let query = supabase.from('vehicle_records').select(`
       *,
       voitures (
@@ -22,7 +27,7 @@ export async function GET(request: NextRequest) {
         date_expiration,
         date_assurance_exp
       )
-    `);
+    `).eq('organization_id', orgId);
     
     if (vehicleId) query = query.eq('voiture_id', vehicleId);
     if (type) query = query.eq('record_type', type);
@@ -46,10 +51,16 @@ export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
     const supabase = await createClient();
+    const session = await getServerSession();
+    if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
     
     const { data: result, error } = await supabase
       .from('vehicle_records')
-      .upsert(data)
+      .upsert({
+        ...data,
+        organization_id: orgId
+      })
       .select()
       .single();
       
@@ -69,7 +80,7 @@ export async function POST(request: NextRequest) {
     }
     
     if (Object.keys(vehicleUpdates).length > 0 && data.voiture_id) {
-      await supabase.from('voitures').update(vehicleUpdates).eq('id', data.voiture_id);
+      await supabase.from('voitures').update(vehicleUpdates).eq('id', data.voiture_id).eq('organization_id', orgId);
     }
     
     return NextResponse.json(result);

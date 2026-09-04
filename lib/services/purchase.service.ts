@@ -9,6 +9,7 @@ export type PurchaseItem = {
   quantite: number;
   prix_unitaire_ht: number;
   montant_ligne: number;
+  organization_id?: string;
 };
 
 export type Purchase = {
@@ -27,6 +28,7 @@ export type Purchase = {
   notes?: string;
   depot_nom: string;
   auto_stock?: boolean;
+  organization_id?: string;
   items?: PurchaseItem[];
 };
 
@@ -67,14 +69,16 @@ export class PurchaseService {
     return data;
   }
 
-  async createPurchase(purchaseData: Purchase, userId?: number, username?: string) {
+  async createPurchase(purchaseData: Purchase, userId?: number, username?: string, session?: any) {
     const { items, auto_stock, ...purchaseRow } = purchaseData;
+    const orgId = purchaseData.organization_id || session?.organization_id || '00000000-0000-0000-0000-000000000001';
 
     // 1. Insert Purchase
     const { data: newPurchase, error: purchaseError } = await this.supabase
       .from('achats')
       .insert({
-        ...purchaseRow
+        ...purchaseRow,
+        organization_id: orgId
       })
       .select()
       .single();
@@ -85,7 +89,8 @@ export class PurchaseService {
     if (items && items.length > 0) {
       const itemsToInsert = items.map(item => ({
         ...item,
-        achat_id: newPurchase.id
+        achat_id: newPurchase.id,
+        organization_id: orgId
       }));
 
       const { error: itemsError } = await this.supabase
@@ -98,7 +103,7 @@ export class PurchaseService {
       // By default, purchase creation is decoupled from direct stock entry
       if (purchaseData.auto_stock === true) {
         for (const item of items) {
-          await this.applyStockAndPMP(item, newPurchase.id, newPurchase.numero_facture, newPurchase.fournisseur_nom, newPurchase.depot_nom, newPurchase.date_achat);
+          await this.applyStockAndPMP(item, newPurchase.id, newPurchase.numero_facture, newPurchase.fournisseur_nom, newPurchase.depot_nom, newPurchase.date_achat, orgId);
         }
       }
     }
@@ -110,7 +115,8 @@ export class PurchaseService {
       action: 'CREATE',
       entity_type: 'Achat',
       entity_id: newPurchase.id,
-      details: `L'achat N°${newPurchase.numero_facture} a été créé. Fournisseur: ${newPurchase.fournisseur_nom}, Montant: ${newPurchase.montant_total}`
+      details: `L'achat N°${newPurchase.numero_facture} a été créé. Fournisseur: ${newPurchase.fournisseur_nom}, Montant: ${newPurchase.montant_total}`,
+      organization_id: orgId
     });
 
     return newPurchase;
@@ -148,17 +154,19 @@ export class PurchaseService {
     return true;
   }
 
-  private async applyStockAndPMP(item: PurchaseItem, purchaseId: number, ref: string, supplier: string, depot: string, date: string) {
+  private async applyStockAndPMP(item: PurchaseItem, purchaseId: number, ref: string, supplier: string, depot: string, date: string, organizationId?: string) {
     const { article_id, quantite: qte_entree, prix_unitaire_ht: nouveau_pu_achat_ht } = item;
     const purchaseRef = `ACH-${purchaseId}`;
+    const orgId = organizationId || '00000000-0000-0000-0000-000000000001';
 
     // Get current stock in depot
-    const { data: stockInDepot } = await this.supabase
+    let stockQuery = this.supabase
       .from('stocks')
       .select('quantite')
       .eq('article_id', article_id)
-      .eq('depot_nom', depot)
-      .single();
+      .eq('depot_nom', depot);
+    if (orgId) stockQuery = stockQuery.eq('organization_id', orgId);
+    const { data: stockInDepot } = await stockQuery.maybeSingle();
 
     const stockAvant = stockInDepot?.quantite || 0;
 
@@ -168,17 +176,19 @@ export class PurchaseService {
       .upsert({
         article_id,
         depot_nom: depot,
-        quantite: stockAvant + qte_entree
+        quantite: stockAvant + qte_entree,
+        organization_id: orgId
       }, { onConflict: 'article_id,depot_nom' });
 
     if (stockError) throw new Error(stockError.message);
 
     // Get global stock and current PMP
-    const { data: articleData } = await this.supabase
+    let artQuery = this.supabase
       .from('articles')
       .select('pmp_ht, stocks(quantite)')
-      .eq('id', article_id)
-      .single();
+      .eq('id', article_id);
+    if (orgId) artQuery = artQuery.eq('organization_id', orgId);
+    const { data: articleData } = await artQuery.single();
 
     const pmp_avant = articleData?.pmp_ht || 0;
     const total_stock_apres = (articleData?.stocks as any[])?.reduce((acc, s) => acc + s.quantite, 0) || qte_entree;
@@ -190,13 +200,15 @@ export class PurchaseService {
     }
 
     // Update Article
-    await this.supabase
+    let updateArtQuery = this.supabase
       .from('articles')
       .update({
         p_achat_ht: nouveau_pu_achat_ht,
         pmp_ht: nouveau_pmp_ht
       })
       .eq('id', article_id);
+    if (orgId) updateArtQuery = updateArtQuery.eq('organization_id', orgId);
+    await updateArtQuery;
 
     // Log Movement
     await this.supabase.from('mouvements').insert({
@@ -209,7 +221,8 @@ export class PurchaseService {
       entree: qte_entree,
       stock_avant: stockAvant,
       stock_apres: stockAvant + qte_entree,
-      depot: depot
+      depot: depot,
+      organization_id: orgId
     });
   }
 
@@ -278,24 +291,27 @@ export class PurchaseService {
     return updatedPurchase;
   }
 
-  async deletePurchase(id: number, userId?: number, username?: string) {
+  async deletePurchase(id: number, userId?: number, username?: string, session?: any) {
     // 1. Get purchase info
-    const { data: purchase, error: getError } = await this.supabase
+    let purQuery = this.supabase
       .from('achats')
       .select('*, achat_items(*)')
-      .eq('id', id)
-      .single();
+      .eq('id', id);
+    if (session?.organization_id) purQuery = purQuery.eq('organization_id', session.organization_id);
+    const { data: purchase, error: getError } = await purQuery.single();
 
-    if (getError) throw new Error(getError.message);
+    if (getError || !purchase) throw new Error("Achat introuvable ou non autorisé");
 
     // 2. Revert Stock and PMP
     await this.revertStockAndPMP(purchase);
 
     // 3. Delete (or Soft Delete)
-    const { error: deleteError } = await this.supabase
+    let delQuery = this.supabase
       .from('achats')
-      .delete() // or update is_deleted = true
+      .delete()
       .eq('id', id);
+    if (session?.organization_id) delQuery = delQuery.eq('organization_id', session.organization_id);
+    const { error: deleteError } = await delQuery;
 
     if (deleteError) throw new Error(deleteError.message);
 
@@ -306,7 +322,8 @@ export class PurchaseService {
       action: 'DELETE',
       entity_type: 'Achat',
       entity_id: id,
-      details: `L'achat N°${purchase.numero_facture} a été supprimé.`
+      details: `L'achat N°${purchase.numero_facture} a été supprimé.`,
+      organization_id: purchase.organization_id || session?.organization_id
     });
 
     return true;
@@ -367,8 +384,19 @@ export class PurchaseService {
     }
   }
 
-  async addPayment(purchaseId: number, amount: number, method: string, reference: string, userId?: number, username?: string) {
-    // 1. Insert Payment
+  async addPayment(purchaseId: number, amount: number, method: string, reference: string, userId?: number, username?: string, session?: any) {
+    const orgId = session?.organization_id || '00000000-0000-0000-0000-000000000001';
+
+    // 1. Check purchase ownership
+    let purQuery = this.supabase
+      .from('achats')
+      .select('montant_total, montant_paye, organization_id')
+      .eq('id', purchaseId);
+    if (session?.organization_id) purQuery = purQuery.eq('organization_id', session.organization_id);
+    const { data: purchase, error: purErr } = await purQuery.single();
+    if (purErr || !purchase) throw new Error("Achat introuvable ou non autorisé");
+
+    // 2. Insert Payment
     const { data: payment, error: paymentError } = await this.supabase
       .from('paiements')
       .insert({
@@ -377,20 +405,15 @@ export class PurchaseService {
         montant_regle: amount,
         moyen_reglement: method,
         reference_paiement: reference,
-        utilisateur: username
+        utilisateur: username,
+        organization_id: purchase.organization_id || orgId
       })
       .select()
       .single();
 
     if (paymentError) throw new Error(paymentError.message);
 
-    // 2. Update Purchase Balance
-    const { data: purchase } = await this.supabase
-      .from('achats')
-      .select('montant_total, montant_paye')
-      .eq('id', purchaseId)
-      .single();
-
+    // 3. Update Purchase Balance
     const newTotalPaid = (purchase?.montant_paye || 0) + amount;
     const total = purchase?.montant_total || 0;
     

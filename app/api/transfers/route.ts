@@ -14,12 +14,14 @@ export async function GET(request: Request) {
     const destDepotId = searchParams.get('dest_depot_id');
 
     const isAdmin = await isAdminOrManager(session);
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
     const allowedDepots = getAllowedDepots(session);
     const userDepot = session.emplacement || "";
 
     let query = supabase
       .from('transferts_stock')
       .select('*, depot_depart:depot_depart_id(nom), depot_arrivee:depot_arrivee_id(nom), transferts_etapes(*), users:created_by(utilisateur)')
+      .eq('organization_id', orgId)
       .order('created_at', { ascending: false });
 
     if (!isAdmin) {
@@ -31,6 +33,7 @@ export async function GET(request: Request) {
       const { data: userDeps } = await supabase
         .from("depots")
         .select("id")
+        .eq("organization_id", orgId)
         .in("nom", depotsToFilter);
       const allowedIds = userDeps?.map(d => d.id) || [];
       
@@ -70,6 +73,7 @@ export async function POST(request: Request) {
     const { depot_depart_id, depot_arrivee_id, items, notes } = body;
 
     const isAdmin = await isAdminOrManager(session);
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
     const allowedDepots = getAllowedDepots(session);
     const userDepot = session.emplacement || "";
 
@@ -78,6 +82,7 @@ export async function POST(request: Request) {
       const { data: userDeps } = await supabase
         .from("depots")
         .select("id")
+        .eq("organization_id", orgId)
         .in("nom", depotsToFilter);
       const allowedIds = userDeps?.map(d => d.id) || [];
       
@@ -97,7 +102,7 @@ export async function POST(request: Request) {
     // Generate unique reference
     const uniqueRef = `TRF-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    // 1. Insert transfer header
+    // 1. Insert transfer header (Stamped with organization_id)
     const { data: transfer, error: headerErr } = await supabase
       .from('transferts_stock')
       .insert({
@@ -105,7 +110,8 @@ export async function POST(request: Request) {
         depot_depart_id: Number(depot_depart_id),
         depot_arrivee_id: Number(depot_arrivee_id),
         statut: 'Demande',
-        created_by: Number(session.id)
+        created_by: Number(session.id),
+        organization_id: orgId
       })
       .select()
       .single();

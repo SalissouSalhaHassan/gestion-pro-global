@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth_helper';
 
 export async function GET(
   request: NextRequest,
@@ -16,16 +17,22 @@ export async function GET(
     }
 
     const supabase = await createClient();
+    const session = await getServerSession();
+    if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+
+    const orgId = session.organization_id || '00000000-0000-0000-0000-000000000001';
 
     // Fetch purchase details
-    const { data: purchase, error: purError } = await supabase
+    let purQuery = supabase
       .from('achats')
       .select(`
         *,
         achat_items(*)
       `)
-      .eq('id', purchaseId)
-      .single();
+      .eq('id', purchaseId);
+
+    if (orgId) purQuery = purQuery.eq('organization_id', orgId);
+    const { data: purchase, error: purError } = await purQuery.single();
 
     if (purError || !purchase) {
       return NextResponse.json(
@@ -35,7 +42,9 @@ export async function GET(
     }
 
     // Fetch Company Info
-    const { data: company } = await supabase.from('informations_entreprise').select('*').limit(1).single();
+    let compQuery = supabase.from('informations_entreprise').select('*');
+    if (orgId) compQuery = compQuery.eq('organization_id', orgId);
+    const { data: company } = await compQuery.maybeSingle();
 
     // Extract financial details metadata JSON if present in notes or purchase object
     let meta: any = {};

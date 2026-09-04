@@ -36,7 +36,7 @@ export async function PUT(
     const body = await request.json();
     const supplierService = new SupplierService(supabase);
     
-    const updated = await supplierService.updateSupplier(Number(id), body, Number(session.id));
+    const updated = await supplierService.updateSupplier(Number(id), body, session);
     return NextResponse.json(updated);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -54,7 +54,7 @@ export async function DELETE(
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
     const supplierService = new SupplierService(supabase);
-    await supplierService.deleteSupplier(Number(id), Number(session.id));
+    await supplierService.deleteSupplier(Number(id), session);
     
     return NextResponse.json({ success: true });
   } catch (error: any) {

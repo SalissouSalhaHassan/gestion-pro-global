@@ -10,13 +10,15 @@ export async function GET() {
   }
 
   const isAdmin = await isAdminOrManager(user);
+  const orgId = user.organization_id || "00000000-0000-0000-0000-000000000001";
   const allowedDepots = getAllowedDepots(user);
   const userDepot = user.emplacement || "";
 
-  // Use the dedicated 'depots' table as the primary source of truth.
+  // Use the dedicated 'depots' table as the primary source of truth (Scoped by organization).
   let query = supabase
     .from("depots")
     .select("id, nom")
+    .eq("organization_id", orgId)
     .eq("is_active", true)
     .order("nom");
 

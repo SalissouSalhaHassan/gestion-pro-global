@@ -23,29 +23,33 @@ export async function GET(
       return NextResponse.json({ error: `ID de fournisseur invalide: ${rawId}` }, { status: 400 });
     }
 
+    const orgId = session.organization_id || '00000000-0000-0000-0000-000000000001';
+
     // 1. Fetch Supplier Details
-    const { data: supplier, error: suppErr } = await supabase
+    let suppQuery = supabase
       .from("fournisseurs")
       .select("*")
-      .eq("id", supplierId)
-      .single();
+      .eq("id", supplierId);
+    if (orgId) suppQuery = suppQuery.eq("organization_id", orgId);
+    const { data: supplier, error: suppErr } = await suppQuery.single();
 
     if (suppErr || !supplier) {
       return NextResponse.json({ error: "Fournisseur introuvable" }, { status: 404 });
     }
 
     // 2. Fetch Company Details
-    const { data: company } = await supabase
-      .from("informations_entreprise")
-      .select("*")
-      .maybeSingle();
+    let compQuery = supabase.from("informations_entreprise").select("*");
+    if (orgId) compQuery = compQuery.eq("organization_id", orgId);
+    const { data: company } = await compQuery.maybeSingle();
 
     // 3. Fetch Supplier Purchases (Achats)
-    const { data: achats, error: achatsErr } = await supabase
+    let achatsQuery = supabase
       .from("achats")
       .select("id, numero_facture, date_achat, montant_total, montant_paye, statut, notes, depot_nom")
       .or(`fournisseur_id.eq.${supplierId},fournisseur_nom.eq."${supplier.nom}"`)
       .order("date_achat", { ascending: true });
+    if (orgId) achatsQuery = achatsQuery.eq("organization_id", orgId);
+    const { data: achats, error: achatsErr } = await achatsQuery;
 
     if (achatsErr) throw new Error(achatsErr.message);
 
@@ -53,11 +57,13 @@ export async function GET(
     const achatIds = (achats || []).map((a: any) => a.id);
     let payments: any[] = [];
     if (achatIds.length > 0) {
-      const { data: payData, error: payErr } = await supabase
+      let payQuery = supabase
         .from("paiements")
         .select("id, achat_id, date_operation, montant_regle, moyen_reglement, reference_paiement, utilisateur")
         .in("achat_id", achatIds)
         .order("date_operation", { ascending: true });
+      if (orgId) payQuery = payQuery.eq("organization_id", orgId);
+      const { data: payData, error: payErr } = await payQuery;
 
       if (!payErr && payData) {
         payments = payData;

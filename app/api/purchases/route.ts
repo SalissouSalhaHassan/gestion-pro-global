@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Données manquantes' }, { status: 400 });
     }
 
-    const newPurchase = await purchaseService.createPurchase(body, Number(session.id), session.username);
+    const newPurchase = await purchaseService.createPurchase(body, Number(session.id), session.username, session);
     return NextResponse.json(newPurchase, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

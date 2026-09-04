@@ -11,6 +11,7 @@ export async function POST(request: Request) {
   const user = await getServerSession();
   if (!user) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   const isAdmin = await isAdminOrManager(user);
+  const orgId = user.organization_id || "00000000-0000-0000-0000-000000000001";
   const userDepot = user.emplacement;
 
   // ──────────────────────────────────────────────────────────────────
@@ -20,8 +21,13 @@ export async function POST(request: Request) {
      if (!transit_id) return NextResponse.json({ error: "ID de transit manquant" }, { status: 400 });
 
      try {
-       // Fetch transit
-       const { data: transit, error: errTransit } = await supabase.from("stock_transits").select("*").eq("id", transit_id).single();
+       // Fetch transit (Scoped by organization)
+       const { data: transit, error: errTransit } = await supabase
+         .from("stock_transits")
+         .select("*")
+         .eq("id", transit_id)
+         .eq("organization_id", orgId)
+         .single();
        if (errTransit || !transit) throw new Error("Transit introuvable");
 
        if (transit.status !== "En Transit") {
@@ -38,22 +44,34 @@ export async function POST(request: Request) {
        for (const detail of articlesDetails) {
           const { article_id, qty } = detail;
 
-          // Process Destination Stock IN
-          const { data: destStock } = await supabase.from("stocks").select("quantite").eq("article_id", article_id).ilike("depot_nom", transit.dest_depot).maybeSingle();
+          // Process Destination Stock IN (Scoped by organization)
+          const { data: destStock } = await supabase
+            .from("stocks")
+            .select("quantite")
+            .eq("organization_id", orgId)
+            .eq("article_id", article_id)
+            .ilike("depot_nom", transit.dest_depot)
+            .maybeSingle();
           
           if (destStock) {
-            await supabase.from("stocks").update({ quantite: Number(destStock.quantite) + qty }).eq("article_id", article_id).ilike("depot_nom", transit.dest_depot);
+            await supabase
+              .from("stocks")
+              .update({ quantite: Number(destStock.quantite) + qty })
+              .eq("organization_id", orgId)
+              .eq("article_id", article_id)
+              .ilike("depot_nom", transit.dest_depot);
           } else {
-            await supabase.from("stocks").insert({ article_id, depot_nom: transit.dest_depot, quantite: qty });
+            await supabase.from("stocks").insert({ article_id, depot_nom: transit.dest_depot, quantite: qty, organization_id: orgId });
           }
 
-          // Record Movement IN
+          // Record Movement IN (Stamped with organization_id)
           const destBefore = destStock ? Number(destStock.quantite) : 0;
           await supabase.from("mouvements").insert({
             article_id, type: 'transfert_entree', quantite: qty, entree: qty, sortie: 0,
             stock_avant: destBefore, stock_apres: destBefore + qty,
             depot: transit.dest_depot, date_mouvement: new Date().toISOString(), nr_doc: transit.reference, fournisseur_client: `De ${transit.source_depot}`,
-            user_id: user.id, utilisateur: user.username
+            user_id: user.id, utilisateur: user.username,
+            organization_id: orgId
           });
        }
 
@@ -62,7 +80,7 @@ export async function POST(request: Request) {
           status: "Reçu",
           date_reception: new Date().toISOString(),
           received_by: user.username
-       }).eq("id", transit_id);
+       }).eq("id", transit_id).eq("organization_id", orgId);
 
        return NextResponse.json({
          success: true,
@@ -82,7 +100,12 @@ export async function POST(request: Request) {
     if (!transit_id) return NextResponse.json({ error: "ID de transit manquant" }, { status: 400 });
 
     try {
-      const { data: transit, error: errTransit } = await supabase.from("stock_transits").select("*").eq("id", transit_id).single();
+      const { data: transit, error: errTransit } = await supabase
+        .from("stock_transits")
+        .select("*")
+        .eq("id", transit_id)
+        .eq("organization_id", orgId)
+        .single();
       if (errTransit || !transit) throw new Error("Transit introuvable");
 
       if (transit.status !== "En Transit") {
@@ -99,20 +122,32 @@ export async function POST(request: Request) {
       for (const detail of articlesDetails) {
          const { article_id, qty } = detail;
 
-         // Return Stock to Source Depot
-         const { data: sourceStock } = await supabase.from("stocks").select("quantite").eq("article_id", article_id).ilike("depot_nom", transit.source_depot).maybeSingle();
+         // Return Stock to Source Depot (Scoped by organization)
+         const { data: sourceStock } = await supabase
+           .from("stocks")
+           .select("quantite")
+           .eq("organization_id", orgId)
+           .eq("article_id", article_id)
+           .ilike("depot_nom", transit.source_depot)
+           .maybeSingle();
          
          const beforeQty = sourceStock ? Number(sourceStock.quantite) : 0;
          const afterQty = beforeQty + qty;
 
-         await supabase.from("stocks").update({ quantite: afterQty }).eq("article_id", article_id).ilike("depot_nom", transit.source_depot);
+         await supabase
+           .from("stocks")
+           .update({ quantite: afterQty })
+           .eq("organization_id", orgId)
+           .eq("article_id", article_id)
+           .ilike("depot_nom", transit.source_depot);
 
-         // Record Cancellation Movement
+         // Record Cancellation Movement (Stamped with organization_id)
          await supabase.from("mouvements").insert({
            article_id, type: 'transfert_annule', quantite: qty, entree: qty, sortie: 0,
            stock_avant: beforeQty, stock_apres: afterQty,
            depot: transit.source_depot, date_mouvement: new Date().toISOString(), nr_doc: transit.reference, fournisseur_client: `Annulation transit vers ${transit.dest_depot}`,
-           user_id: user.id, utilisateur: user.username
+           user_id: user.id, utilisateur: user.username,
+           organization_id: orgId
          });
       }
 
@@ -120,7 +155,7 @@ export async function POST(request: Request) {
       await supabase.from("stock_transits").update({
          status: "Annulé",
          notes: (transit.notes || "") + " (Annulé le " + new Date().toLocaleDateString() + ")"
-      }).eq("id", transit_id);
+      }).eq("id", transit_id).eq("organization_id", orgId);
 
       return NextResponse.json({ success: true, message: "Transfert annulé. Stock retourné au dépôt source." });
 
@@ -148,6 +183,7 @@ export async function POST(request: Request) {
     const { data: sourceStock } = await supabase
       .from("stocks")
       .select("quantite")
+      .eq("organization_id", orgId)
       .eq("article_id", article_id)
       .ilike("depot_nom", source_depot)
       .maybeSingle();
@@ -157,10 +193,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Stock insuffisant au dépôt source (Dispo: ${currentSourceQty})` }, { status: 400 });
     }
 
-    // Deduct from Source
+    // Deduct from Source (Scoped by organization)
     const { error: errSource } = await supabase
       .from("stocks")
       .update({ quantite: currentSourceQty - qty })
+      .eq("organization_id", orgId)
       .eq("article_id", article_id)
       .ilike("depot_nom", source_depot);
 
@@ -169,17 +206,23 @@ export async function POST(request: Request) {
     const refTrans = reference || `TRF-${new Date().getTime().toString().slice(-10)}`;
     const date = new Date().toISOString();
 
-    // Record Movement OUT
+    // Record Movement OUT (Stamped with organization_id)
     await supabase.from("mouvements").insert({
       article_id, type: 'transfert_sortie', quantite: -qty, entree: 0, sortie: qty,
       stock_avant: currentSourceQty, stock_apres: currentSourceQty - qty,
       depot: source_depot, date_mouvement: date, nr_doc: refTrans, fournisseur_client: `En transit vers ${dest_depot}`,
-      user_id: user.id, utilisateur: user.username
+      user_id: user.id, utilisateur: user.username,
+      organization_id: orgId
     });
 
-    // Create Transit Record
+    // Create Transit Record (Stamped with organization_id)
     // Fetch article designation for transit record
-    const { data: artRow } = await supabase.from("articles").select("designation").eq("id", article_id).single();
+    const { data: artRow } = await supabase
+      .from("articles")
+      .select("designation")
+      .eq("id", article_id)
+      .eq("organization_id", orgId)
+      .single();
     const details = [{ article_id, qty, designation: artRow?.designation || "Article ID " + article_id }];
     
     await supabase.from("stock_transits").insert({
@@ -188,7 +231,8 @@ export async function POST(request: Request) {
        dest_depot,
        details,
        notes: notes || "Expédition standard",
-       created_by: user.username
+       created_by: user.username,
+       organization_id: orgId
     });
 
     return NextResponse.json({

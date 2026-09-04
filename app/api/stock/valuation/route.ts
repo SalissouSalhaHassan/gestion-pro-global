@@ -18,6 +18,7 @@ export async function GET(request: Request) {
     }
 
     const isAdmin = await isAdminOrManager(user);
+    const orgId = user.organization_id || "00000000-0000-0000-0000-000000000001";
     const userEmplacement = user.emplacement || "Tous";
 
     // 1. Fetch articles with categories
@@ -33,11 +34,8 @@ export async function GET(request: Request) {
         categorie_id,
         categories (nom)
       `)
+      .eq("organization_id", orgId)
       .eq("is_deleted", false);
-
-    if (user.organization_id) {
-      articlesQuery = articlesQuery.eq("organization_id", user.organization_id);
-    }
 
     if (categoryId && categoryId !== "all") {
       articlesQuery = articlesQuery.eq("categorie_id", categoryId);
@@ -53,11 +51,8 @@ export async function GET(request: Request) {
     let stocksQuery = supabase
       .from("stocks")
       .select("article_id, quantite, depot_nom")
+      .eq("organization_id", orgId)
       .in("article_id", articleIds);
-
-    if (user.organization_id) {
-      stocksQuery = stocksQuery.eq("organization_id", user.organization_id);
-    }
 
     const { data: stocksData, error: stocksErr } = await stocksQuery;
     if (stocksErr) throw stocksErr;

@@ -14,8 +14,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const depot = searchParams.get("depot");
     const status = searchParams.get("status");
+    const orgId = user.organization_id || "00000000-0000-0000-0000-000000000001";
 
-    let query = supabase.from("stock_transits").select("*").order("date_expedition", { ascending: false });
+    let query = supabase
+      .from("stock_transits")
+      .select("*")
+      .eq("organization_id", orgId)
+      .order("date_expedition", { ascending: false });
 
     if (depot && depot !== "Tous") {
        // Filter transfers where depot is source or destination
