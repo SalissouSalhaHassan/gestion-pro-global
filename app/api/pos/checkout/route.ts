@@ -669,8 +669,8 @@ export async function POST(request: Request) {
           calcTotalHT += totalItemHt;
           calcTotalTTC += totalItemTtc;
 
-          const itemDescription = article?.designation || article?.nom || item.nom || item.designation || item.description || "Article";
-          const itemCodeArt = article?.reference || item.reference || item.code_barre || null;
+          const itemDescription = article?.designation || article?.nom || (item as any)?.nom || (item as any)?.designation || (item as any)?.description || "Article";
+          const itemCodeArt = article?.reference || (item as any)?.reference || (item as any)?.code_barre || null;
 
           lineItemsToInsert.push({
             article_id: Number(item.id),
