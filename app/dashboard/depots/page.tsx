@@ -67,6 +67,24 @@ export default function DepotManagementPage() {
   // Toast
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
+  const [currentOrgId, setCurrentOrgId] = useState<string>("");
+
+  useEffect(() => {
+    try {
+      const match = document.cookie.split("; ").find((c) => c.startsWith("gp_session="));
+      if (match) {
+        const decoded = decodeURIComponent(match.split("=")[1]);
+        const data = JSON.parse(decoded);
+        if (data.organization_id) {
+          setCurrentOrgId(data.organization_id);
+          loadData(data.organization_id);
+          return;
+        }
+      }
+    } catch {}
+    loadData();
+  }, []);
+
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 3500);
@@ -74,32 +92,39 @@ export default function DepotManagementPage() {
     }
   }, [toast]);
 
-  const loadData = async () => {
+  const loadData = async (orgIdOverride?: string) => {
     setRefreshing(true);
+    const activeOrg = orgIdOverride || currentOrgId;
     try {
-      // 1. Fetch Users for the responsible dropdown
-      const { data: userData } = await supabase
+      // 1. Fetch Users for the responsible dropdown (scoped by organization)
+      let userQuery = supabase
         .from("users")
         .select("utilisateur, nom_prenom")
         .order("utilisateur");
+      if (activeOrg) userQuery = userQuery.eq("organization_id", activeOrg);
+      const { data: userData } = await userQuery;
 
       if (userData) {
         setUsers(userData.map((u) => u.nom_prenom || u.utilisateur));
       }
 
-      // 2. Fetch Depots
-      const { data: depotsData, error } = await supabase
+      // 2. Fetch Depots (scoped by organization)
+      let depotQuery = supabase
         .from("depots")
         .select("*")
         .eq("is_deleted", false)
         .order("nom");
+      if (activeOrg) depotQuery = depotQuery.eq("organization_id", activeOrg);
+      const { data: depotsData, error } = await depotQuery;
 
       if (error) throw error;
 
-      // 3. Fetch Stock counts per depot
-      const { data: stockData } = await supabase
+      // 3. Fetch Stock counts per depot (scoped by organization)
+      let stockQuery = supabase
         .from("stocks")
         .select("depot_nom, quantite, articles(prix_achat)");
+      if (activeOrg) stockQuery = stockQuery.eq("organization_id", activeOrg);
+      const { data: stockData } = await stockQuery;
 
       const stockMap: Record<string, { count: number; value: number }> = {};
       if (stockData) {
@@ -173,6 +198,9 @@ export default function DepotManagementPage() {
         responsable: formData.responsable || "Non assigné",
         is_active: formData.is_active,
       };
+      if (currentOrgId) {
+        payload.organization_id = currentOrgId;
+      }
 
       if (isEditing && formData.id) {
         const { error } = await supabase.from("depots").update(payload).eq("id", formData.id);

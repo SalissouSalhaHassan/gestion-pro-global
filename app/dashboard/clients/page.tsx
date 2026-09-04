@@ -80,6 +80,7 @@ export default function ClientsPage() {
           prix_client: formData.type_client === "Gros" ? 2 : formData.type_client === "Revendeur" ? 3 : 1,
           pre_client: false,
           is_deleted: false,
+          organization_id: userSession?.organization_id || "00000000-0000-0000-0000-000000000001",
         })
         .select()
         .single();
@@ -120,6 +121,10 @@ export default function ClientsPage() {
           .select("id, ref_client, nom, tel, credit_facture, credit_bl")
           .eq("is_deleted", false)
           .order("nom");
+
+        if (userSession?.organization_id) {
+          clientQuery = clientQuery.eq("organization_id", userSession.organization_id);
+        }
 
         const { data, error } = await clientQuery;
 

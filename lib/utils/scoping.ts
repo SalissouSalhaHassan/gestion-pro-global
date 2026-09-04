@@ -1,31 +1,38 @@
 import { PostgrestFilterBuilder } from "@supabase/postgrest-js";
 import { CustomSession, isAdminOrManager, getAllowedDepots } from "@/lib/auth_helper";
-import { createClient } from "@/lib/supabase/server";
 
 /**
- * Applies data isolation filters to a Supabase query based on user session.
+ * Applies strict multi-tenant and user isolation filters to a Supabase query based on user session.
  * 
  * Rules:
- * - Admin/Manager: No filters (sees everything).
- * - Seller:
- *    - For 'factures': sees only their own sales (by user_id or vendeur name).
- *    - For 'stocks' or 'mouvements': sees only data for their allowed warehouses.
- */
-/**
- * Applies data isolation filters to a Supabase query based on user session.
+ * 1. Multi-Tenant Isolation (Highest Priority):
+ *    - Every organization only sees its own records (organization_id = session.organization_id).
+ *    - An Admin of a tenant is ONLY an Admin within their own organization.
+ * 2. Role / Staff Scoping (Within the Tenant):
+ *    - Tenant Admin/Manager: Sees all records within their organization.
+ *    - Seller / Cashier:
+ *       - For 'factures': sees only their own sales.
+ *       - For 'stocks' / 'mouvements': sees only data for their authorized depots.
  */
 export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, any>>(
   query: T,
   session: CustomSession,
   entityType: 'factures' | 'mouvements' | 'stocks' | 'clients' | 'fournisseurs' | 'expenses' | 'articles' | 'loyers' | 'avances'
 ): T {
-  // 1. Admin/Manager: sees everything.
+  if (!session) return query;
+
+  // 1. Mandatory Organization Scope
+  if (session.organization_id) {
+    query = (query as any).eq('organization_id', session.organization_id);
+  }
+
+  // 2. Admin/Manager: sees everything within their organization
   const isAdmin = (session.admin === "Oui" || session.admin === "oui" || session.admin === "true" || (session as any).admin === true) || 
                   (session.role === 1 || session.role === "1" || session.role === "admin");
   
   if (isAdmin) return query;
 
-  // 2. Scoping by Warehouse (for Inventory/Stock related tables)
+  // 3. Scoping by Warehouse (for Inventory/Stock related tables)
   if (['mouvements', 'stocks', 'expenses'].includes(entityType)) {
     const allowedDepotNames = getAllowedDepots(session);
     
@@ -43,10 +50,9 @@ export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, a
     }
   }
 
-  // 3. Scoping by Ownership (for sales/invoices)
+  // 4. Scoping by Ownership (for sales/invoices)
   if (entityType === 'factures') {
     // Sellers only see their own invoices or invoices in their allowed depots
-    const allowedDepots = getAllowedDepots(session);
     let filter = `user_id.eq.${session.id}`;
     
     if (session.username) {

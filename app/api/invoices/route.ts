@@ -39,8 +39,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Automatically set created_by to session.id
-    const newInvoice = await invoiceService.createInvoice(body, Number(session.id));
+    // Automatically set created_by to session.id and attach organization_id
+    const invoicePayload = {
+      ...body,
+      organization_id: session.organization_id || "00000000-0000-0000-0000-000000000001",
+    };
+    const newInvoice = await invoiceService.createInvoice(invoicePayload, Number(session.id));
     return NextResponse.json(newInvoice, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

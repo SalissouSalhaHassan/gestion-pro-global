@@ -28,10 +28,14 @@ export async function GET() {
     // ═══════════════════════════════════════════════════════════════
     let topProductsQuery = supabase
       .from("facture_items")
-      .select("article_id, qte, articles(designation), factures!inner(is_deleted, date_facture, vendeur)")
+      .select("article_id, qte, articles(designation), factures!inner(is_deleted, date_facture, vendeur, organization_id)")
       .eq("factures.is_deleted", false)
       .gte("factures.date_facture", firstDayCurrentMonth)
       .lte("factures.date_facture", lastDayCurrentMonth);
+
+    if (user.organization_id) {
+      topProductsQuery = topProductsQuery.eq("factures.organization_id", user.organization_id);
+    }
 
     const { data: itemsRaw } = await topProductsQuery;
 

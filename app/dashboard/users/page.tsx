@@ -82,6 +82,23 @@ export default function UserManagementPage() {
 
   // Toast
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [currentOrgId, setCurrentOrgId] = useState<string>("");
+
+  useEffect(() => {
+    try {
+      const match = document.cookie.split("; ").find((c) => c.startsWith("gp_session="));
+      if (match) {
+        const decoded = decodeURIComponent(match.split("=")[1]);
+        const data = JSON.parse(decoded);
+        if (data.organization_id) {
+          setCurrentOrgId(data.organization_id);
+          loadData(data.organization_id);
+          return;
+        }
+      }
+    } catch {}
+    loadData();
+  }, []);
 
   useEffect(() => {
     if (toast) {
@@ -90,8 +107,9 @@ export default function UserManagementPage() {
     }
   }, [toast]);
 
-  const loadData = async () => {
+  const loadData = async (orgIdOverride?: string) => {
     setRefreshing(true);
+    const activeOrg = orgIdOverride || currentOrgId;
     try {
       // 1. Fetch Roles
       const { data: rolesData } = await supabase
@@ -114,17 +132,19 @@ export default function UserManagementPage() {
         setRoles(standardRoles);
       }
 
-      // 2. Fetch available depots
-      const { data: depotsData } = await supabase
+      // 2. Fetch available depots (scoped by organization)
+      let depotQuery = supabase
         .from("depots")
         .select("id, nom")
         .eq("is_deleted", false)
         .order("nom");
+      if (activeOrg) depotQuery = depotQuery.eq("organization_id", activeOrg);
+      const { data: depotsData } = await depotQuery;
 
       if (depotsData) setAvailableDepotsData(depotsData);
 
-      // 3. Fetch Users with assigned warehouses
-      const { data, error } = await supabase
+      // 3. Fetch Users with assigned warehouses (scoped by organization)
+      let userQuery = supabase
         .from("users")
         .select(`
           id,
@@ -146,6 +166,9 @@ export default function UserManagementPage() {
           )
         `)
         .order("created_at", { ascending: false });
+
+      if (activeOrg) userQuery = userQuery.eq("organization_id", activeOrg);
+      const { data, error } = await userQuery;
 
       if (error) throw error;
 
@@ -232,6 +255,10 @@ export default function UserManagementPage() {
         ref_per: newUser.ref_per,
       };
 
+      if (currentOrgId) {
+        userData.organization_id = currentOrgId;
+      }
+
       if (newUser.mot_de_passe) {
         userData.mot_de_passe = newUser.mot_de_passe;
       }
@@ -254,6 +281,7 @@ export default function UserManagementPage() {
           const warehouseInserts = newUser.depots.map((depotId) => ({
             user_id: userId,
             depot_id: depotId,
+            ...(currentOrgId ? { organization_id: currentOrgId } : {})
           }));
           await supabase.from("user_warehouses").insert(warehouseInserts);
         }
