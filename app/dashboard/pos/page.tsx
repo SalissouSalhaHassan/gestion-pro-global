@@ -40,6 +40,7 @@ import PaymentModal from "../invoices/PaymentModal";
 import OfflinePOSBar from "@/components/OfflinePOSBar";
 import BarcodeCameraScanner from "@/components/BarcodeCameraScanner";
 import { cacheArticlesOffline, getOfflineArticles, recordOfflineInvoice } from "@/lib/utils/offline-sync";
+import CashClosureModal from "../reports/cash-balance/CashClosureModal";
 
 /* ═══════════════════════════════════════════════════════════════════
    TYPES
@@ -1018,6 +1019,9 @@ function PosPage() {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickAddForm, setQuickAddForm] = useState({ designation: "", price: "", quantity: "1" });
   const [showCameraScanner, setShowCameraScanner] = useState(false);
+  const [isCashClosureOpen, setIsCashClosureOpen] = useState(false);
+  const [cashClosureSummary, setCashClosureSummary] = useState<any>(null);
+  const [cashClosureLoading, setCashClosureLoading] = useState(false);
   
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [clientSaving, setClientSaving] = useState(false);
@@ -2071,13 +2075,47 @@ function PosPage() {
     }
   };
 
-  const handleFermerCaisse = () => {
+  const handleFermerCaisse = async () => {
     if (cart.length > 0) {
-      if (!confirm("Il y a des articles dans le panier. Voulez-vous vraiment fermer la caisse ?")) {
+      if (!confirm("Il y a des articles dans le panier en cours. Voulez-vous vraiment fermer la caisse ?")) {
         return;
       }
     }
-    router.push("/dashboard");
+    setCashClosureLoading(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const session = getClientSessionFromCookie();
+      const cashierName = session?.username || "Tous";
+      const q = new URLSearchParams({
+        start: today,
+        end: today,
+        cashier: cashierName,
+        type: "Tous",
+      }).toString();
+
+      const res = await fetch(`/api/reports/cash-balance?${q}`, { cache: "no-store" });
+      const json = await res.json();
+      if (res.ok && json?.summary) {
+        setCashClosureSummary(json.summary);
+      } else {
+        setCashClosureSummary({
+          totalIncome: 0,
+          totalExpenses: 0,
+          netBalance: 0,
+        });
+      }
+      setIsCashClosureOpen(true);
+    } catch (err) {
+      console.error("Failed to load cash closure summary:", err);
+      setCashClosureSummary({
+        totalIncome: 0,
+        totalExpenses: 0,
+        netBalance: 0,
+      });
+      setIsCashClosureOpen(true);
+    } finally {
+      setCashClosureLoading(false);
+    }
   };
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -2949,12 +2987,17 @@ function PosPage() {
           <button
             className="pos-footer-btn"
             onClick={handleFermerCaisse}
+            disabled={cashClosureLoading}
             style={S.footerBtn(
               "linear-gradient(180deg, #5d6d7e 0%, #4d5656 100%)",
               "#212f3d"
             )}
           >
-            <Lock size={18} /> Fermer Caisse
+            {cashClosureLoading ? (
+              <div style={{ width: 18, height: 18, border: "2px solid #fff", borderTop: "2px solid transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+            ) : (
+              <><Lock size={18} /> Fermer Caisse</>
+            )}
           </button>
         </footer>
       </div>
@@ -3189,6 +3232,24 @@ function PosPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Cash Closure & Rapport Z Modal */}
+      {isCashClosureOpen && cashClosureSummary && (
+        <CashClosureModal
+          summary={cashClosureSummary}
+          filters={{
+            start: new Date().toISOString().split("T")[0],
+            end: new Date().toISOString().split("T")[0],
+            cashier: getClientSessionFromCookie()?.username || "Caisse",
+          }}
+          userSession={getClientSessionFromCookie()}
+          onClose={() => setIsCashClosureOpen(false)}
+          onFinish={() => {
+            setIsCashClosureOpen(false);
+            router.push("/dashboard");
+          }}
+        />
       )}
 
       <style jsx global>{`

@@ -46,6 +46,7 @@ type CashClosureModalProps = {
   filters: { start: string; end: string; cashier: string };
   userSession: any;
   onClose: () => void;
+  onFinish?: () => void;
 };
 
 export default function CashClosureModal({
@@ -53,6 +54,7 @@ export default function CashClosureModal({
   filters,
   userSession,
   onClose,
+  onFinish,
 }: CashClosureModalProps) {
   const [fondDeCaisse, setFondDeCaisse] = useState<number>(0);
   const [especesComptees, setEspecesComptees] = useState<number | "">("");
@@ -379,6 +381,17 @@ export default function CashClosureModal({
                 >
                   <Printer size={15} />
                   <span>Imprimer le Rapport Z</span>
+                </button>
+                <button
+                  onClick={() => {
+                    if (onFinish) onFinish();
+                    else onClose();
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                  title="Terminer la clôture et quitter"
+                >
+                  <Lock size={14} />
+                  <span>Terminer la Session</span>
                 </button>
               </div>
             </div>
