@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     // 2. Fetch Articles with Stock
     let query = supabase
       .from('articles')
-      .select('id, reference, designation, famille, p_vente_ttc, prix_gros, prix_special, image_path')
+      .select('id, reference, designation, famille, p_vente_ttc, prix_gros, prix_special, image_path, code_barre, article_par_colis')
       .eq('is_deleted', false)
       .order('designation');
 
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     if (articlesRes.error && (articlesRes.error.message?.includes("prix_gros") || articlesRes.error.code === "PGRST204")) {
       let fallbackQuery = supabase
         .from('articles')
-        .select('id, reference, designation, famille, p_vente_ttc, image_path')
+        .select('id, reference, designation, famille, p_vente_ttc, image_path, code_barre, article_par_colis')
         .eq('is_deleted', false)
         .order('designation');
       if (category && category !== 'ALL') fallbackQuery = fallbackQuery.eq('famille', category);
