@@ -92,9 +92,9 @@ export default function DepotManagementPage() {
     }
   }, [toast]);
 
-  const loadData = async (orgIdOverride?: string) => {
+  const loadData = async (orgIdOverride?: any) => {
     setRefreshing(true);
-    const activeOrg = orgIdOverride || currentOrgId;
+    const activeOrg = typeof orgIdOverride === "string" ? orgIdOverride : currentOrgId;
     try {
       // 1. Fetch Users for the responsible dropdown (scoped by organization)
       let userQuery = supabase
@@ -299,7 +299,7 @@ export default function DepotManagementPage() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={loadData}
+            onClick={() => loadData()}
             className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
           >
             <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
