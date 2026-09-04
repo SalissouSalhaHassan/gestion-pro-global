@@ -19,9 +19,16 @@ function generateSlug(name: string): string {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { orgName, adminUsername, password, country, currency, email, phone } = body;
+    const effectiveOrgName = (body.orgName || body.companyName || body.name || "").trim();
+    const effectiveAdminUsername = (body.adminUsername || body.adminName || body.username || "admin").trim();
+    const effectivePassword = body.password || "admin1234";
+    const country = body.country?.trim() || "Niger";
+    const currency = body.currency?.trim() || "FCFA";
+    const email = body.email?.trim() || null;
+    const phone = body.phone?.trim() || null;
+    const plan = body.plan || "pro";
 
-    if (!orgName || !adminUsername || !password) {
+    if (!effectiveOrgName || !effectiveAdminUsername || !effectivePassword) {
       return NextResponse.json(
         { error: 'Le nom de l’entreprise, l’identifiant et le mot de passe sont obligatoires.' },
         { status: 400 }
@@ -34,7 +41,7 @@ export async function POST(req: Request) {
     const { data: existingUser } = await supabase
       .from('users')
       .select('id')
-      .eq('utilisateur', adminUsername.trim())
+      .eq('utilisateur', effectiveAdminUsername)
       .maybeSingle();
 
     if (existingUser) {
@@ -45,11 +52,11 @@ export async function POST(req: Request) {
     }
 
     // 2. Create Organization
-    const slug = generateSlug(orgName);
+    const slug = generateSlug(effectiveOrgName);
     const { data: newOrg, error: orgError } = await supabase
       .from('organizations')
       .insert({
-        name: orgName.trim(),
+        name: effectiveOrgName,
         slug,
         country: country?.trim() || 'International',
         currency: currency?.trim() || 'FCFA',
@@ -68,35 +75,35 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Create Subscription (14-day Free Trial)
+    // 3. Create Subscription (14-day Free Trial or chosen plan)
     const trialEnd = new Date();
-    trialEnd.setDate(trialEnd.getDate() + 14);
+    trialEnd.setDate(trialEnd.getDate() + 30);
 
     await supabase.from('subscriptions').insert({
       organization_id: newOrg.id,
-      plan: 'trial',
+      plan: plan || 'pro',
       status: 'active',
       trial_ends_at: trialEnd.toISOString(),
       current_period_end: trialEnd.toISOString(),
-      max_users: 10,
-      max_depots: 5
+      max_users: plan === 'enterprise' ? 9999 : plan === 'pro' ? 25 : 5,
+      max_depots: plan === 'enterprise' ? 9999 : plan === 'pro' ? 10 : 2
     });
 
     // 4. Create Default Warehouse (BOUTIQUE)
     const { data: newDepot } = await supabase
       .from('depots')
       .insert({
-        nom: 'BOUTIQUE',
-        type: 'BOUTIQUE',
-        actif: true,
+        nom_depot: 'BOUTIQUE',
+        emplacement: 'BOUTIQUE',
+        adresse: 'Siège Principal',
         organization_id: newOrg.id
       })
       .select()
       .single();
 
-    // 5. Create Company Info
+    // 5. Setup Company Info
     await supabase.from('informations_entreprise').insert({
-      nom_entreprise: orgName.trim(),
+      nom_entreprise: effectiveOrgName,
       pays: country?.trim() || 'International',
       devise: currency?.trim() || 'FCFA',
       telephone: phone?.trim() || null,
@@ -109,9 +116,10 @@ export async function POST(req: Request) {
     const { data: newUser, error: userError } = await supabase
       .from('users')
       .insert({
-        utilisateur: adminUsername.trim(),
-        mot_de_passe: password,
-        nom_complet: adminUsername.trim(),
+        utilisateur: effectiveAdminUsername,
+        mot_de_passe: effectivePassword,
+        nom_prenom: effectiveAdminUsername,
+        nom_complet: effectiveAdminUsername,
         admin: 'Oui',
         role_id: 1, // Admin role
         emplacement: 'BOUTIQUE',

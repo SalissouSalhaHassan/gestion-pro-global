@@ -34,6 +34,7 @@ import {
   Power,
   Zap,
 } from "lucide-react";
+import TenantManagementModal from "@/components/platform/TenantManagementModal";
 
 export default function PlatformManagementPage() {
   const { t, locale, dir } = useLanguage();
@@ -42,6 +43,7 @@ export default function PlatformManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [planFilter, setPlanFilter] = useState("all");
   const [activeTab, setActiveTab] = useState<"tenants" | "plans" | "infrastructure">("tenants");
+  const [selectedOrgForManage, setSelectedOrgForManage] = useState<any>(null);
 
   // Modal State
   const [isCreateOrgModalOpen, setIsCreateOrgModalOpen] = useState(false);
@@ -97,6 +99,19 @@ export default function PlatformManagementPage() {
   };
 
   const organizations = data?.organizations || [];
+
+  const planPrices: Record<string, number> = {
+    starter: 25000,
+    pro: 49000,
+    enterprise: 99000,
+    trial: 0,
+  };
+
+  const calculatedMRR = organizations.reduce((sum: number, org: any) => {
+    if (!org.is_active) return sum;
+    const p = (org.subscription?.plan || "pro").toLowerCase();
+    return sum + (planPrices[p] ?? 49000);
+  }, 0);
 
   const handleCreateOrg = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,10 +250,12 @@ export default function PlatformManagementPage() {
               <TrendingUp size={18} />
             </div>
           </div>
-          <div className="text-2xl font-black text-emerald-600">196 000 FCFA</div>
-          <div className="text-xs text-indigo-600 font-bold mt-1.5 flex items-center gap-1">
+          <div className="text-2xl font-black text-emerald-600 font-mono">
+            {formatCurrencyAmount(calculatedMRR, "FCFA")}
+          </div>
+          <div className="text-xs text-indigo-600 font-bold mt-1.5 flex items-center gap-1 font-mono">
             <Crown size={13} />
-            <span>ARR: 2 352 000 FCFA</span>
+            <span>ARR: {formatCurrencyAmount(calculatedMRR * 12, "FCFA")}</span>
           </div>
         </div>
 
@@ -396,16 +413,11 @@ export default function PlatformManagementPage() {
 
                     <td className="py-3.5 px-4 text-right">
                       <button
-                        onClick={() => {
-                          setToast({
-                            message: `Espace ${org.name} ouvert en mode Super Admin`,
-                            type: "success",
-                          });
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                        onClick={() => setSelectedOrgForManage(org)}
+                        className="px-3.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white text-xs font-black transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs border border-indigo-200"
                       >
-                        <span>{locale === "ar" ? "دخول المساحة" : "Gérer"}</span>
-                        <ExternalLink size={12} />
+                        <span>{locale === "ar" ? "إدارة وتعديل" : "Gérer & Configurer"}</span>
+                        <Sliders size={12} />
                       </button>
                     </td>
                   </tr>
@@ -617,6 +629,21 @@ export default function PlatformManagementPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Interactive Tenant Management Modal */}
+      {selectedOrgForManage && (
+        <TenantManagementModal
+          org={selectedOrgForManage}
+          onClose={() => setSelectedOrgForManage(null)}
+          onUpdated={() => {
+            loadData();
+            setToast({
+              message: locale === "ar" ? "تم تحديث بيانات المؤسسة بنجاح!" : "Organisation mise à jour avec succès !",
+              type: "success",
+            });
+          }}
+        />
       )}
     </div>
   );
