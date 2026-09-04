@@ -19,7 +19,12 @@ import {
   Eye,
   Trash2,
   Loader2,
-  Calendar
+  Calendar,
+  Database,
+  Copy,
+  Check,
+  X,
+  ExternalLink
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/context";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
@@ -40,6 +45,49 @@ type BC = {
   items?: any[];
 };
 
+const SQL_MIGRATION_SCRIPT = `-- Migration: Création des tables Bons de Commande & Articles
+CREATE TABLE IF NOT EXISTS public.bons_commande (
+    id SERIAL PRIMARY KEY,
+    numero_bc VARCHAR(50) UNIQUE NOT NULL,
+    date_commande DATE NOT NULL DEFAULT CURRENT_DATE,
+    date_livraison_prevue DATE,
+    fournisseur_id INTEGER REFERENCES public.fournisseurs(id) ON DELETE SET NULL,
+    fournisseur_nom VARCHAR(255) NOT NULL,
+    statut VARCHAR(50) NOT NULL DEFAULT 'BROUILLON',
+    total_ht NUMERIC(15, 2) DEFAULT 0,
+    total_ttc NUMERIC(15, 2) DEFAULT 0,
+    notes TEXT,
+    created_by VARCHAR(100),
+    depot_id INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.bon_commande_items (
+    id SERIAL PRIMARY KEY,
+    bon_commande_id INTEGER NOT NULL REFERENCES public.bons_commande(id) ON DELETE CASCADE,
+    article_id INTEGER REFERENCES public.articles(id) ON DELETE SET NULL,
+    reference VARCHAR(100),
+    designation VARCHAR(255) NOT NULL,
+    quantite NUMERIC(15, 2) NOT NULL,
+    prix_achat_unitaire NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    total_ligne NUMERIC(15, 2) NOT NULL DEFAULT 0
+);
+
+ALTER TABLE public.bons_commande ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bon_commande_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable read for authenticated users on bons_commande"
+  ON public.bons_commande FOR SELECT USING (true);
+CREATE POLICY "Enable write for authenticated users on bons_commande"
+  ON public.bons_commande FOR ALL USING (true);
+CREATE POLICY "Enable read for authenticated users on bon_commande_items"
+  ON public.bon_commande_items FOR SELECT USING (true);
+CREATE POLICY "Enable write for authenticated users on bon_commande_items"
+  ON public.bon_commande_items FOR ALL USING (true);
+
+NOTIFY pgrst, 'reload schema';`;
+
 export default function BonsCommandePage() {
   const { locale, dir } = useLanguage();
   const [bcs, setBcs] = useState<BC[]>([]);
@@ -51,6 +99,14 @@ export default function BonsCommandePage() {
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [selectedBc, setSelectedBc] = useState<BC | null>(null);
   const [autoSuggestions, setAutoSuggestions] = useState<any[]>([]);
+  const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
+  const [sqlCopied, setSqlCopied] = useState(false);
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SQL_MIGRATION_SCRIPT);
+    setSqlCopied(true);
+    setTimeout(() => setSqlCopied(false), 3000);
+  };
 
   const fetchBcs = async () => {
     try {
@@ -157,6 +213,15 @@ export default function BonsCommandePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setIsSqlModalOpen(true)}
+              className="px-3.5 py-3 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 text-indigo-300 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
+              title="Afficher le script SQL pour Supabase"
+            >
+              <Database size={15} className="text-indigo-400" />
+              <span>{locale === "ar" ? "إعداد قاعدة البيانات (SQL)" : "Configuration SQL"}</span>
+            </button>
+
             <button
               onClick={handleLaunchAutoReorder}
               className="px-4 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black shadow-lg shadow-orange-500/20 transition-all flex items-center gap-2 cursor-pointer"
@@ -404,6 +469,102 @@ export default function BonsCommandePage() {
           onClose={() => setSelectedBc(null)}
           onRefresh={fetchBcs}
         />
+      )}
+
+      {/* SQL Setup Modal */}
+      {isSqlModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-indigo-600/30 border border-indigo-500/40 text-indigo-400">
+                  <Database size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">
+                    {locale === "ar" ? "سكريبت تفعيل قاعدة البيانات (Supabase SQL)" : "Initialisation Base de Données (Supabase SQL)"}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {locale === "ar"
+                      ? "قم بتنفيذ هذا الاستعلام لمرة واحدة في محرر SQL في Supabase"
+                      : "Exécutez ce script une seule fois dans le SQL Editor de Supabase"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSqlModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 flex items-start gap-3">
+                <AlertCircle className="text-indigo-600 shrink-0 mt-0.5" size={18} />
+                <div className="text-xs text-indigo-950 space-y-1 font-medium">
+                  <p className="font-bold">
+                    {locale === "ar" ? "طريقة التفعيل السريع:" : "Instructions de mise en service :"}
+                  </p>
+                  <ol className="list-decimal list-inside space-y-0.5 text-slate-600">
+                    <li>
+                      {locale === "ar"
+                        ? "انسخ الكود أدناه عبر زر «نسخ سكريبت SQL»."
+                        : "Cliquez sur 'Copier le script SQL' ci-dessous."}
+                    </li>
+                    <li>
+                      {locale === "ar"
+                        ? "توجه إلى لوحة Supabase Dashboard الخاصة بمشروعك ➔ SQL Editor."
+                        : "Ouvrez votre projet Supabase ➔ Menu 'SQL Editor'."}
+                    </li>
+                    <li>
+                      {locale === "ar"
+                        ? "الصق الكود واضغط Run (تشغيل). سيتم تفعيل الجداول وتحديث الكاش فوراً."
+                        : "Collez le code et cliquez sur 'Run'. Les tables et politiques RLS seront actives."}
+                    </li>
+                  </ol>
+                </div>
+              </div>
+
+              <div className="relative">
+                <pre className="bg-slate-950 text-slate-200 text-[11px] font-mono p-4 rounded-2xl max-h-60 overflow-y-auto border border-slate-800 leading-relaxed select-all">
+                  {SQL_MIGRATION_SCRIPT}
+                </pre>
+                <button
+                  type="button"
+                  onClick={handleCopySql}
+                  className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                >
+                  {sqlCopied ? <Check size={13} className="text-emerald-300" /> : <Copy size={13} />}
+                  <span>{sqlCopied ? (locale === "ar" ? "تم النسخ!" : "Copié !") : (locale === "ar" ? "نسخ" : "Copier")}</span>
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-[11px] text-slate-400">
+                  {locale === "ar" ? "يتضمن: bons_commande, bon_commande_items, RLS Policies" : "Inclus: bons_commande, bon_commande_items, RLS"}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopySql}
+                    className="px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/20"
+                  >
+                    {sqlCopied ? <Check size={15} /> : <Copy size={15} />}
+                    <span>{sqlCopied ? (locale === "ar" ? "تم نسخ السكريبت بنجاح!" : "Script SQL Copié !") : (locale === "ar" ? "نسخ سكريبت SQL" : "Copier le script SQL")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsSqlModalOpen(false)}
+                    className="px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    {locale === "ar" ? "إغلاق" : "Fermer"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

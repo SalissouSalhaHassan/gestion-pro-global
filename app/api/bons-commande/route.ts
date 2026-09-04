@@ -28,7 +28,13 @@ export async function GET(request: Request) {
     }
 
     const { data: bcs, error } = await query;
-    if (error) throw error;
+    if (error) {
+      if (error.code === 'PGRST204' || error.message?.includes('bons_commande') || error.message?.includes('schema cache')) {
+        console.warn("Table bons_commande not yet created in Supabase. Returning empty array.");
+        return NextResponse.json([]);
+      }
+      throw error;
+    }
 
     return NextResponse.json(bcs || []);
   } catch (error: any) {
@@ -81,7 +87,15 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (headerErr) throw headerErr;
+    if (headerErr) {
+      if (headerErr.code === 'PGRST204' || headerErr.message?.includes('bons_commande') || headerErr.message?.includes('schema cache')) {
+        return NextResponse.json({
+          error: "La table 'bons_commande' n'est pas encore initialisée dans Supabase. Veuillez exécuter le script SQL dans l'éditeur Supabase SQL Editor pour activer ce module.",
+          migrationRequired: true
+        }, { status: 400 });
+      }
+      throw headerErr;
+    }
 
     // Insert Items
     const itemsToInsert = items.map((it: any) => ({
