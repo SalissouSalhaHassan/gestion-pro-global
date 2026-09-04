@@ -33,8 +33,12 @@ import {
   ExternalLink,
   Power,
   Zap,
+  Copy,
+  Check,
+  MessageCircle,
 } from "lucide-react";
 import TenantManagementModal from "@/components/platform/TenantManagementModal";
+import { openWhatsAppDirect } from "@/lib/utils/whatsapp";
 
 export default function PlatformManagementPage() {
   const { t, locale, dir } = useLanguage();
@@ -53,9 +57,13 @@ export default function PlatformManagementPage() {
     country: "Niger",
     currency: "FCFA",
     plan: "pro",
-    adminName: "",
-    adminEmail: "",
+    adminUsername: "",
+    adminPassword: "",
+    phone: "",
+    email: "",
   });
+  const [createdCredentials, setCreatedCredentials] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
 
   // Toast
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -119,6 +127,9 @@ export default function PlatformManagementPage() {
 
     setIsSubmittingOrg(true);
     try {
+      const generatedPass = newOrgForm.adminPassword.trim() || "pass" + Math.floor(1000 + Math.random() * 9000);
+      const generatedUser = (newOrgForm.adminUsername.trim() || "admin_" + newOrgForm.name.toLowerCase().replace(/[^a-z0-9]/g, "")).trim();
+
       const res = await fetch("/api/auth/register-org", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -127,19 +138,29 @@ export default function PlatformManagementPage() {
           country: newOrgForm.country,
           currency: newOrgForm.currency,
           plan: newOrgForm.plan,
-          adminName: newOrgForm.adminName || "Administrateur",
-          email: newOrgForm.adminEmail || `admin@${newOrgForm.name.toLowerCase().replace(/\s+/g, "")}.com`,
-          password: "admin" + Math.floor(1000 + Math.random() * 9000),
+          adminUsername: generatedUser,
+          password: generatedPass,
+          phone: newOrgForm.phone,
+          email: newOrgForm.email || `admin@${newOrgForm.name.toLowerCase().replace(/\s+/g, "")}.com`,
         }),
       });
 
-      if (!res.ok) throw new Error("Échec de création");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Échec de création");
+
+      setCreatedCredentials({
+        orgName: newOrgForm.name,
+        username: generatedUser,
+        password: generatedPass,
+        phone: newOrgForm.phone,
+        plan: newOrgForm.plan,
+        currency: newOrgForm.currency,
+      });
 
       setToast({
-        message: locale === "ar" ? "تم إنشاء المؤسسة السحابية بنجاح!" : "Organisation SaaS créée avec succès !",
+        message: locale === "ar" ? "تم إنشاء المؤسسة السحابية وحساب المدير بنجاح!" : "Organisation SaaS créée avec succès !",
         type: "success",
       });
-      setIsCreateOrgModalOpen(false);
       loadData();
     } catch (err: any) {
       setToast({ message: err.message || "Erreur de création", type: "error" });
@@ -546,87 +567,218 @@ export default function PlatformManagementPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateOrg} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  {locale === "ar" ? "اسم الشركة / المؤسسة" : "Nom de l'Organisation"} *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: ETS AL-BARAKA NIGER"
-                  value={newOrgForm.name}
-                  onChange={(e) => setNewOrgForm({ ...newOrgForm, name: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
+            {createdCredentials ? (
+              <div className="p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+                  <CheckCircle2 size={36} />
+                </div>
 
-              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-lg font-black text-slate-900">
+                    {locale === "ar" ? "تم إنشاء المؤسسة السحابية بنجاح!" : "Organisation SaaS Créée avec Succès !"}
+                  </h4>
+                  <p className="text-xs text-slate-500 font-medium mt-1">
+                    {locale === "ar"
+                      ? "تم ربط قاعدة البيانات، والمستودع الافتراضي، وتفعيل حساب المدير العام"
+                      : "Base de données isolée, boutique créée et compte administrateur actif."}
+                  </p>
+                </div>
+
+                {/* Credentials Box */}
+                <div className="p-4 rounded-2xl bg-slate-900 text-white text-left space-y-2.5 font-mono text-xs border border-indigo-500/30 shadow-xl">
+                  <div className="flex justify-between border-b border-white/10 pb-2">
+                    <span className="text-slate-400">Entreprise :</span>
+                    <span className="font-bold text-amber-300">{createdCredentials.orgName}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-white/10 pb-2">
+                    <span className="text-slate-400">Identifiant :</span>
+                    <span className="font-bold text-white">{createdCredentials.username}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-white/10 pb-2">
+                    <span className="text-slate-400">Mot de passe :</span>
+                    <span className="font-bold text-emerald-400">{createdCredentials.password}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Lien direct :</span>
+                    <span className="text-[11px] text-indigo-300 truncate">https://gestion-pro-global-tege.vercel.app/login</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="space-y-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const msg =
+                        `🎉 *BIENVENUE SUR GESTION PRO GLOBAL*\n\n` +
+                        `Votre espace d'entreprise dédié est prêt :\n` +
+                        `🏢 *Entreprise :* ${createdCredentials.orgName}\n` +
+                        `👤 *Identifiant :* \`${createdCredentials.username}\`\n` +
+                        `🔑 *Mot de passe :* \`${createdCredentials.password}\`\n` +
+                        `🌐 *Lien de connexion :* https://gestion-pro-global-tege.vercel.app/login\n\n` +
+                        `Connectez-vous dès maintenant pour commencer vos opérations commerciales !`;
+                      openWhatsAppDirect(createdCredentials.phone || "", msg);
+                    }}
+                    className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <MessageCircle size={16} />
+                    <span>{locale === "ar" ? "إرسال بيانات الدخول عبر WhatsApp (1-Clic)" : "Envoyer les Accès sur WhatsApp (1-Clic)"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const textToCopy = `Entreprise: ${createdCredentials.orgName}\nIdentifiant: ${createdCredentials.username}\nMot de passe: ${createdCredentials.password}\nLien: https://gestion-pro-global-tege.vercel.app/login`;
+                      navigator.clipboard.writeText(textToCopy);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2500);
+                    }}
+                    className="w-full py-2.5 rounded-2xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {copied ? <Check size={15} className="text-emerald-600" /> : <Copy size={15} />}
+                    <span>{copied ? (locale === "ar" ? "تم النسخ بنجاح !" : "Copié !") : (locale === "ar" ? "نسخ البيانات" : "Copier les identifiants")}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreateOrgModalOpen(false);
+                      setCreatedCredentials(null);
+                    }}
+                    className="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-600"
+                  >
+                    {locale === "ar" ? "إغلاق النافذة" : "Terminer"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleCreateOrg} className="p-6 space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {locale === "ar" ? "الدولة" : "Pays"}
+                    {locale === "ar" ? "اسم الشركة / المؤسسة" : "Nom de l'Organisation"} *
                   </label>
                   <input
                     type="text"
-                    value={newOrgForm.country}
-                    onChange={(e) => setNewOrgForm({ ...newOrgForm, country: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
+                    required
+                    placeholder="Ex: ETS AL-BARAKA NIGER"
+                    value={newOrgForm.name}
+                    onChange={(e) => setNewOrgForm({ ...newOrgForm, name: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {locale === "ar" ? "العملة الرئيسية" : "Devise"}
-                  </label>
-                  <select
-                    value={newOrgForm.currency}
-                    onChange={(e) => setNewOrgForm({ ...newOrgForm, currency: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
-                  >
-                    <option value="FCFA">FCFA (XOF/XAF)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="USD">USD ($)</option>
-                    <option value="SAR">SAR (﷼)</option>
-                    <option value="NGN">NGN (₦)</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {locale === "ar" ? "اسم مستخدم المدير" : "Identifiant Admin"} *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: albaraka_admin"
+                      value={newOrgForm.adminUsername}
+                      onChange={(e) => setNewOrgForm({ ...newOrgForm, adminUsername: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {locale === "ar" ? "كلمة المرور" : "Mot de passe"} *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Pass2026!"
+                      value={newOrgForm.adminPassword}
+                      onChange={(e) => setNewOrgForm({ ...newOrgForm, adminPassword: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  {locale === "ar" ? "باقة الاشتراك" : "Forfait SaaS"}
-                </label>
-                <select
-                  value={newOrgForm.plan}
-                  onChange={(e) => setNewOrgForm({ ...newOrgForm, plan: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
-                >
-                  <option value="trial">Essai Gratuit (14 jours)</option>
-                  <option value="starter">Starter (25 000 FCFA/m)</option>
-                  <option value="pro">Pro Business (49 000 FCFA/m)</option>
-                  <option value="enterprise">Enterprise Global (99 000 FCFA/m)</option>
-                </select>
-              </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {locale === "ar" ? "هاتف المدير (WhatsApp)" : "Téléphone / WhatsApp"}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: +227 90 00 00 00"
+                      value={newOrgForm.phone}
+                      onChange={(e) => setNewOrgForm({ ...newOrgForm, phone: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
+                    />
+                  </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateOrgModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
-                >
-                  {locale === "ar" ? "إلغاء" : "Annuler"}
-                </button>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {locale === "ar" ? "باقة الاشتراك" : "Forfait SaaS"}
+                    </label>
+                    <select
+                      value={newOrgForm.plan}
+                      onChange={(e) => setNewOrgForm({ ...newOrgForm, plan: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
+                    >
+                      <option value="trial">Essai Gratuit (14 jours)</option>
+                      <option value="starter">Starter (25 000 FCFA/m)</option>
+                      <option value="pro">Pro Business (49 000 FCFA/m)</option>
+                      <option value="enterprise">Enterprise Global (99 000 FCFA/m)</option>
+                    </select>
+                  </div>
+                </div>
 
-                <button
-                  type="submit"
-                  disabled={isSubmittingOrg}
-                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmittingOrg ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  <span>{locale === "ar" ? "إنشاء وتفعيل المؤسسة" : "Créer le Tenant"}</span>
-                </button>
-              </div>
-            </form>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {locale === "ar" ? "الدولة" : "Pays"}
+                    </label>
+                    <input
+                      type="text"
+                      value={newOrgForm.country}
+                      onChange={(e) => setNewOrgForm({ ...newOrgForm, country: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {locale === "ar" ? "العملة الرئيسية" : "Devise"}
+                    </label>
+                    <select
+                      value={newOrgForm.currency}
+                      onChange={(e) => setNewOrgForm({ ...newOrgForm, currency: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none"
+                    >
+                      <option value="FCFA">FCFA (XOF/XAF)</option>
+                      <option value="EUR">EUR (€)</option>
+                      <option value="USD">USD ($)</option>
+                      <option value="SAR">SAR (﷼)</option>
+                      <option value="NGN">NGN (₦)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateOrgModalOpen(false)}
+                    className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    {locale === "ar" ? "إلغاء" : "Annuler"}
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmittingOrg}
+                    className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSubmittingOrg ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    <span>{locale === "ar" ? "إنشاء وتفعيل المؤسسة" : "Créer le Tenant"}</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
