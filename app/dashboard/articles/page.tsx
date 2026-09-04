@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import Barcode from "react-barcode";
+import BarcodeLabelStudioModal from "@/components/BarcodeLabelStudioModal";
 
 type Article = {
   id: string | number;
@@ -72,6 +73,7 @@ export default function ArticlesPage() {
   const [sortField, setSortField] = useState<keyof Article>("designation");
   const [sortAsc, setSortAsc] = useState(true);
   const [selectedIds, setSelectedIds] = useState<(string | number)[]>([]);
+  const [barcodeStudioArticles, setBarcodeStudioArticles] = useState<Article[] | null>(null);
   const [printArticle, setPrintArticle] = useState<Article | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
 
@@ -415,7 +417,23 @@ export default function ArticlesPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => {
+                if (selectedIds.length > 0) {
+                  const toPrint = articles.filter(a => selectedIds.includes(a.id));
+                  setBarcodeStudioArticles(toPrint);
+                } else {
+                  setBarcodeStudioArticles(filteredArticles.slice(0, 30));
+                }
+              }}
+              className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+              title="Studio d'impression de codes-barres et étiquettes"
+            >
+              <BarcodeIcon size={16} />
+              <span>{locale === "ar" ? "طباعة الملصقات والباركود" : "Studio Étiquettes"}</span>
+            </button>
+
             <button
               onClick={loadData}
               className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
@@ -621,7 +639,7 @@ export default function ArticlesPage() {
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => setPrintArticle(art)}
+                              onClick={() => setBarcodeStudioArticles([art])}
                               className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
                               title="Imprimer Code-barres"
                             >
@@ -708,7 +726,7 @@ export default function ArticlesPage() {
 
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => setPrintArticle(art)}
+                      onClick={() => setBarcodeStudioArticles([art])}
                       className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
                       title="Imprimer"
                     >
@@ -966,43 +984,12 @@ export default function ArticlesPage() {
         </div>
       )}
 
-      {/* Barcode Print Modal */}
-      {printArticle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 text-center space-y-4">
-            <h3 className="text-base font-black text-slate-900">{printArticle.designation}</h3>
-            <p className="text-xs text-slate-500 font-mono font-bold">Réf: {printArticle.reference}</p>
-
-            <div className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center justify-center">
-              <Barcode
-                value={printArticle.code_barre || printArticle.reference}
-                width={1.5}
-                height={50}
-                fontSize={12}
-              />
-            </div>
-
-            <div className="text-sm font-black text-indigo-600">
-              {formatCurrencyAmount(printArticle.p_vente_ttc)}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <button
-                onClick={() => setPrintArticle(null)}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              >
-                {locale === "ar" ? "إغلاق" : "Fermer"}
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <Printer size={14} />
-                <span>{locale === "ar" ? "طباعة" : "Imprimer"}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* 4K Barcode Label Studio Modal */}
+      {barcodeStudioArticles && barcodeStudioArticles.length > 0 && (
+        <BarcodeLabelStudioModal
+          articles={barcodeStudioArticles}
+          onClose={() => setBarcodeStudioArticles(null)}
+        />
       )}
     </div>
   );
