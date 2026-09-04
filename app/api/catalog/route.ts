@@ -40,7 +40,7 @@ export async function GET(request: Request) {
       query = query.or(`designation.ilike.%${search}%,reference.ilike.%${search}%`);
     }
 
-    let articlesRes = await query;
+    let articlesRes: any = await query;
     if (articlesRes.error && (articlesRes.error.message?.includes("prix_gros") || articlesRes.error.code === "PGRST204")) {
       let fallbackQuery = supabase
         .from('articles')
@@ -58,11 +58,11 @@ export async function GET(request: Request) {
 
     const stocks = stocksRes.data || [];
     const stockMap: Record<number, number> = {};
-    stocks.forEach((s) => {
+    stocks.forEach((s: any) => {
       stockMap[s.article_id] = (stockMap[s.article_id] || 0) + (Number(s.quantite) || 0);
     });
 
-    const products = (articlesRes.data || []).map((art) => {
+    const products = (articlesRes.data || []).map((art: any) => {
       const stock = stockMap[art.id] || 0;
       return {
         ...art,
