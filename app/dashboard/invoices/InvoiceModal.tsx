@@ -122,18 +122,46 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
           client_email: clientRow?.email || inv.client_email || "",
         });
 
-        // 3. Fetch Items (these are included in the API if we update the service, but for now we can still fetch them if the header is allowed)
-        // Actually, let's keep the items and payments fetch as they are for now, 
-        // since the header check already verified permission.
+        // 3. Fetch Items with article info fallback
         const { data: its } = await supabase
           .from("facture_items")
           .select("*")
           .eq("facture_id", numericId);
+
+        const rawItems = its || [];
+        const missingArticleIds = rawItems
+          .filter((it: any) => (!it.description || !it.code_art) && it.article_id)
+          .map((it: any) => it.article_id);
+
+        let articlesMap = new Map<number, any>();
+        if (missingArticleIds.length > 0) {
+          const { data: arts } = await supabase
+            .from("articles")
+            .select("id, designation, nom, reference")
+            .in("id", missingArticleIds);
+          if (arts) {
+            arts.forEach((a: any) => articlesMap.set(a.id, a));
+          }
+        }
+
         setItems(
-          (its || []).map((item) => ({
-            ...item,
-            display_unit_price: resolveUnitPrice(item),
-          }))
+          rawItems.map((item: any) => {
+            const art = articlesMap.get(item.article_id);
+            const desc =
+              item.description ||
+              art?.designation ||
+              art?.nom ||
+              item.designation ||
+              "Article";
+            const code = item.code_art || art?.reference || "-";
+
+            return {
+              ...item,
+              description: desc,
+              code_art: code,
+              display_unit_price: resolveUnitPrice(item),
+            };
+          })
         );
 
         // 4. Fetch Payments
@@ -349,7 +377,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                   <tr key={i} className="border-b border-black last:border-b-0">
                     {mode === 'Invoice' ? (
                       <>
-                        <td className="border-r border-black p-1 break-words leading-tight">{item.description}</td>
+                        <td className="border-r border-black p-1 break-words leading-tight">{item.description || item.designation || "Article"}</td>
                         <td className="border-r border-black p-1 text-center font-bold">{Number(item.qte).toFixed(2)}</td>
                         <td className="border-r border-black p-1 text-right">{Number(item.display_unit_price ?? item.pu_ttc ?? item.pu_ht).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="p-1 text-right font-bold">{Number(item.total_item_ttc).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
@@ -357,7 +385,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                     ) : (
                       <>
                         <td className="border-r border-black p-1 text-center text-[9px] break-all leading-tight">{item.code_art || "-"}</td>
-                        <td className="border-r border-black p-1 break-words leading-tight">{item.description}</td>
+                        <td className="border-r border-black p-1 break-words leading-tight">{item.description || item.designation || "Article"}</td>
                         <td className="border-r border-black p-1 text-center text-[9px] break-words leading-tight">{item.depot_origine || ""}</td>
                         <td className="p-1 text-center font-bold">{Number(item.qte).toFixed(2)}</td>
                       </>

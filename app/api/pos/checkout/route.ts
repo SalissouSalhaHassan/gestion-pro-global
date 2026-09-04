@@ -669,8 +669,13 @@ export async function POST(request: Request) {
           calcTotalHT += totalItemHt;
           calcTotalTTC += totalItemTtc;
 
+          const itemDescription = article?.designation || article?.nom || item.nom || item.designation || item.description || "Article";
+          const itemCodeArt = article?.reference || item.reference || item.code_barre || null;
+
           lineItemsToInsert.push({
             article_id: Number(item.id),
+            code_art: itemCodeArt,
+            description: itemDescription,
             qte,
             pu_ht: puHt,
             pu_ttc: puTtc,

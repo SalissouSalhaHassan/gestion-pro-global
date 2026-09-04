@@ -69,7 +69,32 @@ export class InvoiceService {
 
     const { data, error } = await query.single();
     
-    if (error) return null;
+    if (error || !data) return null;
+
+    // Fallback: If any facture_items is missing description, fetch from articles
+    if (data.facture_items && Array.isArray(data.facture_items)) {
+      const missingIds = data.facture_items
+        .filter((it: any) => !it.description && it.article_id)
+        .map((it: any) => it.article_id);
+
+      if (missingIds.length > 0) {
+        const { data: arts } = await this.supabase
+          .from('articles')
+          .select('id, designation, nom, reference')
+          .in('id', missingIds);
+
+        const artMap = new Map<number, any>((arts || []).map((a: any) => [a.id, a]));
+        data.facture_items = data.facture_items.map((it: any) => {
+          const a = artMap.get(it.article_id);
+          return {
+            ...it,
+            description: it.description || a?.designation || a?.nom || 'Article',
+            code_art: it.code_art || a?.reference || it.code_art,
+          };
+        });
+      }
+    }
+
     return data;
   }
 
