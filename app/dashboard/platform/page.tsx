@@ -37,6 +37,8 @@ import {
   Check,
   MessageCircle,
   AlertCircle,
+  Trash2,
+  Edit3,
 } from "lucide-react";
 import TenantManagementModal from "@/components/platform/TenantManagementModal";
 import { openWhatsAppDirect } from "@/lib/utils/whatsapp";
@@ -66,8 +68,35 @@ export default function PlatformManagementPage() {
   const [createdCredentials, setCreatedCredentials] = useState<any>(null);
   const [copied, setCopied] = useState(false);
 
+  // Delete Organization State
+  const [orgToDelete, setOrgToDelete] = useState<any>(null);
+  const [isDeletingOrg, setIsDeletingOrg] = useState(false);
+
   // Toast
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const confirmDeleteOrg = async () => {
+    if (!orgToDelete) return;
+    try {
+      setIsDeletingOrg(true);
+      const res = await fetch(`/api/platform/organizations/${orgToDelete.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur de suppression");
+
+      setToast({
+        message: locale === "ar" ? `تم حذف مؤسسة ${orgToDelete.name} بنجاح!` : `Organisation ${orgToDelete.name} supprimée !`,
+        type: "success",
+      });
+      setOrgToDelete(null);
+      loadData();
+    } catch (err: any) {
+      setToast({ message: err.message || "Erreur de suppression", type: "error" });
+    } finally {
+      setIsDeletingOrg(false);
+    }
+  };
 
   useEffect(() => {
     if (toast) {
@@ -437,13 +466,33 @@ export default function PlatformManagementPage() {
                     </td>
 
                     <td className="py-3.5 px-4 text-right">
-                      <button
-                        onClick={() => setSelectedOrgForManage(org)}
-                        className="px-3.5 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white text-xs font-black transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs border border-indigo-200"
-                      >
-                        <span>{locale === "ar" ? "إدارة وتعديل" : "Gérer & Configurer"}</span>
-                        <Sliders size={12} />
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setSelectedOrgForManage(org)}
+                          className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white text-xs font-black transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs border border-indigo-200"
+                          title={locale === "ar" ? "تعديل وإدارة المنشأة" : "Gérer & Configurer"}
+                        >
+                          <Edit3 size={13} />
+                          <span>{locale === "ar" ? "تعديل" : "Gérer"}</span>
+                        </button>
+
+                        {org.id !== "00000000-0000-0000-0000-000000000001" && org.slug !== "gestion-pro-global" && !org.name?.toLowerCase().includes("gestion pro global") ? (
+                          <button
+                            onClick={() => setOrgToDelete(org)}
+                            className="p-1.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition-all cursor-pointer shadow-2xs border border-rose-200"
+                            title={locale === "ar" ? "حذف المؤسسة نهائياً" : "Supprimer l'organisation"}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        ) : (
+                          <span
+                            className="p-1.5 rounded-xl bg-slate-100 text-slate-400 cursor-not-allowed inline-flex items-center justify-center"
+                            title={locale === "ar" ? "المنشأة الرئيسية محمية" : "Organisation Principale (Protégée)"}
+                          >
+                            <Lock size={14} />
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -847,6 +896,59 @@ export default function PlatformManagementPage() {
             });
           }}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {orgToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-rose-100 overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+                <Trash2 size={28} />
+              </div>
+
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  {locale === "ar" ? "حذف المؤسسة نهائياً؟" : "Supprimer définitivement l'organisation ?"}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-1.5">
+                  {locale === "ar" ? (
+                    <>
+                      أنت على وشك حذف مؤسسة <strong className="text-slate-900">{orgToDelete.name}</strong>.
+                      سيتم حذف حسابات المستخدمين، المستودعات، والبيانات المرتبطة بها نهائياً.
+                    </>
+                  ) : (
+                    <>
+                      Vous êtes sur le point de supprimer l'organisation <strong className="text-slate-900">{orgToDelete.name}</strong>.
+                      Tous les utilisateurs, dépôts et données associés seront définitivement effacés.
+                    </>
+                  )}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setOrgToDelete(null)}
+                  disabled={isDeletingOrg}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  {locale === "ar" ? "إلغاء" : "Annuler"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={confirmDeleteOrg}
+                  disabled={isDeletingOrg}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-md shadow-rose-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isDeletingOrg ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                  <span>{locale === "ar" ? "تأكيد الحذف النهائي" : "Supprimer définitivement"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

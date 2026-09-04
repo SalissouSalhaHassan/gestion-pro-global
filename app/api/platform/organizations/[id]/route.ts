@@ -1,16 +1,26 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { getServerSession } from '@/lib/auth_helper';
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mxairvfgklibhamkpeqq.supabase.co';
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'sb_secret_Bj4CF6U_1aAwYu3DlLQuNg_XWQwE_N0';
+
+function getAdminClient() {
+  return createClient(SUPABASE_URL, SERVICE_KEY, {
+    auth: { persistSession: false },
+  });
+}
+
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
-    const supabase = await createClient();
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+
+    const supabase = getAdminClient();
 
     const [orgRes, subRes, usersRes, facturesRes] = await Promise.all([
       supabase.from('organizations').select('*').eq('id', id).single(),
@@ -48,12 +58,25 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
-    const supabase = await createClient();
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
+    const supabase = getAdminClient();
     const body = await request.json();
-    const { is_active, name, country, currency, phone, email, plan, status, max_users, max_depots, extend_days } = body;
+    const {
+      is_active,
+      name,
+      country,
+      currency,
+      phone,
+      email,
+      plan,
+      status,
+      max_users,
+      max_depots,
+      extend_days,
+      new_admin_password,
+    } = body;
 
     // 1. Update Organization Table if fields provided
     const orgUpdates: any = {};
@@ -89,7 +112,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     if (Object.keys(subUpdates).length > 0) {
       subUpdates.updated_at = new Date().toISOString();
-      // Check if subscription row exists
       const { data: existingSub } = await supabase
         .from('subscriptions')
         .select('id')
@@ -113,9 +135,91 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       }
     }
 
+    // 3. Optional update of admin user password
+    if (new_admin_password && new_admin_password.trim().length >= 4) {
+      await supabase
+        .from('users')
+        .update({ mot_de_passe: new_admin_password.trim() })
+        .eq('organization_id', id);
+    }
+
     return NextResponse.json({ success: true, message: "Organisation mise à jour avec succès" });
   } catch (error: any) {
     console.error("Platform org PATCH error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await context.params;
+    const session = await getServerSession();
+    if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+
+    const supabase = getAdminClient();
+
+    // 1. Fetch organization to verify it exists and is not root
+    const { data: org, error: fetchErr } = await supabase
+      .from('organizations')
+      .select('id, name, slug')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr || !org) {
+      return NextResponse.json({ error: "Organisation introuvable" }, { status: 404 });
+    }
+
+    // 2. Protect primary root organization
+    const isRoot =
+      id === '00000000-0000-0000-0000-000000000001' ||
+      org.slug === 'gestion-pro-global' ||
+      org.name?.toLowerCase().includes('gestion pro global');
+
+    if (isRoot) {
+      return NextResponse.json(
+        { error: "Impossible de supprimer l'organisation principale du système." },
+        { status: 403 }
+      );
+    }
+
+    // 3. Cascade cleanup of dependent tables
+    const { data: users } = await supabase
+      .from('users')
+      .select('id')
+      .eq('organization_id', id);
+
+    if (users && users.length > 0) {
+      const userIds = users.map((u: any) => u.id);
+      await supabase.from('user_warehouses').delete().in('user_id', userIds);
+      await supabase.from('activity_log').delete().in('user_id', userIds);
+      await supabase.from('users').delete().eq('organization_id', id);
+    }
+
+    await supabase.from('subscriptions').delete().eq('organization_id', id);
+    await supabase.from('depots').delete().eq('organization_id', id);
+    await supabase.from('informations_entreprise').delete().eq('organization_id', id);
+    await supabase.from('activity_log').delete().eq('organization_id', id);
+
+    try { await supabase.from('articles').delete().eq('organization_id', id); } catch (e) {}
+    try { await supabase.from('factures').delete().eq('organization_id', id); } catch (e) {}
+    try { await supabase.from('clients').delete().eq('organization_id', id); } catch (e) {}
+    try { await supabase.from('fournisseurs').delete().eq('organization_id', id); } catch (e) {}
+    try { await supabase.from('bons_commande').delete().eq('organization_id', id); } catch (e) {}
+    try { await supabase.from('cheques_et_effets').delete().eq('organization_id', id); } catch (e) {}
+
+    const { error: delError } = await supabase
+      .from('organizations')
+      .delete()
+      .eq('id', id);
+
+    if (delError) throw delError;
+
+    return NextResponse.json({
+      success: true,
+      message: `Organisation ${org.name} supprimée avec succès.`,
+    });
+  } catch (error: any) {
+    console.error("Platform org DELETE error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

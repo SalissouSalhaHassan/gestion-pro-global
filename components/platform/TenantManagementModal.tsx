@@ -1,5 +1,3 @@
-"use client";
-
 import { useState } from "react";
 import {
   X,
@@ -15,7 +13,10 @@ import {
   Save,
   Power,
   Sparkles,
-  Loader2
+  Loader2,
+  Trash2,
+  Lock,
+  Globe
 } from "lucide-react";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
 import { openWhatsAppDirect } from "@/lib/utils/whatsapp";
@@ -27,13 +28,25 @@ type TenantManagementModalProps = {
 };
 
 export default function TenantManagementModal({ org, onClose, onUpdated }: TenantManagementModalProps) {
+  const [name, setName] = useState<string>(org.name || "");
+  const [country, setCountry] = useState<string>(org.country || "Niger");
+  const [currency, setCurrency] = useState<string>(org.currency || "FCFA");
   const [isActive, setIsActive] = useState<boolean>(org.is_active ?? true);
   const [plan, setPlan] = useState<string>(org.subscription?.plan || "pro");
   const [maxUsers, setMaxUsers] = useState<number>(org.subscription?.max_users || 15);
   const [maxDepots, setMaxDepots] = useState<number>(org.subscription?.max_depots || 5);
   const [phone, setPhone] = useState<string>(org.phone || "");
+  const [email, setEmail] = useState<string>(org.email || "");
+  const [newAdminPassword, setNewAdminPassword] = useState<string>("");
   const [extendDays, setExtendDays] = useState<number>(30);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const isRoot =
+    org.id === "00000000-0000-0000-0000-000000000001" ||
+    org.slug === "gestion-pro-global" ||
+    org.name?.toLowerCase().includes("gestion pro global");
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,12 +56,17 @@ export default function TenantManagementModal({ org, onClose, onUpdated }: Tenan
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          name,
+          country,
+          currency,
           is_active: isActive,
           plan,
           max_users: maxUsers,
           max_depots: maxDepots,
           phone,
+          email,
           extend_days: extendDays,
+          new_admin_password: newAdminPassword || undefined,
         }),
       });
 
@@ -61,6 +79,26 @@ export default function TenantManagementModal({ org, onClose, onUpdated }: Tenan
       alert(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (isRoot) return;
+    try {
+      setDeleting(true);
+      const res = await fetch(`/api/platform/organizations/${org.id}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Échec de suppression");
+
+      onUpdated();
+      onClose();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -115,6 +153,59 @@ export default function TenantManagementModal({ org, onClose, onUpdated }: Tenan
 
         {/* Form */}
         <form onSubmit={handleSave} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+          {/* Organization General Info */}
+          <div className="space-y-4">
+            <h4 className="text-xs font-black uppercase text-slate-800 flex items-center gap-2">
+              <Building2 size={15} className="text-indigo-600" />
+              <span>Informations de l'Organisation</span>
+            </h4>
+
+            <div>
+              <label className="text-[11px] font-black uppercase text-slate-600 block mb-1">
+                Nom de l'Organisation *
+              </label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[11px] font-black uppercase text-slate-600 block mb-1">
+                  Pays
+                </label>
+                <input
+                  type="text"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-black uppercase text-slate-600 block mb-1">
+                  Devise Principale
+                </label>
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold text-slate-800 bg-white"
+                >
+                  <option value="FCFA">FCFA (XOF/XAF)</option>
+                  <option value="GNF">GNF (Guinée)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="MAD">MAD (Maroc)</option>
+                  <option value="NGN">NGN (Naira)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           {/* Status Toggle Card */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
             <div className="space-y-0.5">
@@ -221,6 +312,35 @@ export default function TenantManagementModal({ org, onClose, onUpdated }: Tenan
             </div>
           </div>
 
+          {/* Admin Password Reset */}
+          <div className="space-y-3 border-t border-slate-100 pt-4">
+            <h4 className="text-xs font-black uppercase text-slate-800 flex items-center gap-2">
+              <Lock size={15} className="text-indigo-600" />
+              <span>Sécurité & Mot de Passe Admin</span>
+            </h4>
+            <div>
+              <label className="text-[11px] font-black uppercase text-slate-600 block mb-1">
+                Nouveau Mot de Passe Admin (Optionnel)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Laisser vide pour ne pas modifier"
+                  value={newAdminPassword}
+                  onChange={(e) => setNewAdminPassword(e.target.value)}
+                  className="flex-1 px-3.5 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold text-slate-800"
+                />
+                <button
+                  type="button"
+                  onClick={() => setNewAdminPassword("Pass@" + Math.floor(1000 + Math.random() * 9000))}
+                  className="px-3 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"
+                >
+                  🎲 Générer
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* WhatsApp Direct Notification */}
           <div className="space-y-2 border-t border-slate-100 pt-4">
             <label className="text-[11px] font-black uppercase text-slate-600 block">
@@ -245,8 +365,57 @@ export default function TenantManagementModal({ org, onClose, onUpdated }: Tenan
             </div>
           </div>
 
+          {/* Danger Zone: Delete Organization */}
+          <div className="border-t border-rose-200 pt-4 mt-6">
+            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-black text-rose-900 flex items-center gap-1.5">
+                    <Trash2 size={15} className="text-rose-600" />
+                    Zone de Danger : Suppression de l'Organisation
+                  </span>
+                  <p className="text-[11px] text-rose-600 font-medium mt-0.5">
+                    Supprime définitivement cette entreprise, ses utilisateurs et son espace cloud.
+                  </p>
+                </div>
+                {isRoot ? (
+                  <span className="px-3 py-1 rounded-xl bg-slate-200 text-slate-600 text-[10px] font-bold">
+                    Organisation Principale Protégée
+                  </span>
+                ) : !showDeleteConfirm ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black transition-all shadow-xs cursor-pointer"
+                  >
+                    Supprimer l'organisation
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={deleting}
+                      onClick={handleDelete}
+                      className="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs font-black transition-all flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                    >
+                      {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                      <span>Confirmer Suppression</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="px-3 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}
