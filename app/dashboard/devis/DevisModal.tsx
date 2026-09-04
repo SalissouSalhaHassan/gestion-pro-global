@@ -17,10 +17,12 @@ import {
   AlertCircle,
   Clock,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  MessageSquare
 } from "lucide-react";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
 import { useLanguage } from "@/lib/i18n/context";
+import { generateDevisWhatsAppMessage, openWhatsAppDirect } from "@/lib/utils/whatsapp";
 
 type DevisModalProps = {
   devisId: number;
@@ -79,6 +81,31 @@ export default function DevisModal({
     }
   };
 
+  const handleWhatsAppSend = () => {
+    const phone = devis?.client_tel || devis?.clients?.tel || "";
+    if (!phone) {
+      alert(locale === "ar" ? "لا يوجد رقم هاتف مسجل لهذا العميل." : "Aucun numéro de téléphone enregistré pour ce client.");
+      return;
+    }
+
+    const message = generateDevisWhatsAppMessage({
+      companyName: company?.nom_entreprise || "GESTION PRO GLOBAL",
+      devisNumber: devis?.numero_devis || "DEVIS",
+      clientName: devis?.client_nom || "Client",
+      totalTTC: Number(devis?.total_ttc) || 0,
+      dateDevis: devis?.date_devis || new Date().toISOString().split("T")[0],
+      dateValidite: devis?.date_validite || undefined,
+      items: items.map((it: any) => ({
+        description: it.description || it.reference || "Article",
+        qte: Number(it.qte) || 1,
+        total_ligne_ttc: Number(it.total_ligne_ttc || it.total_ligne_ht) || 0,
+      })),
+      locale: locale as any,
+    });
+
+    openWhatsAppDirect(phone, message);
+  };
+
   const devis = data?.devis;
   const company = data?.company;
   const items = devis?.devis_items || [];
@@ -123,9 +150,19 @@ export default function DevisModal({
             )}
 
             <button
+              onClick={handleWhatsAppSend}
+              disabled={loading}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              title="Envoyer le devis sur WhatsApp"
+            >
+              <MessageSquare size={15} />
+              <span>WhatsApp</span>
+            </button>
+
+            <button
               onClick={handlePrint}
               disabled={loading}
-              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Printer size={15} />
               <span>{locale === "ar" ? "طباعة A4" : "Imprimer A4"}</span>

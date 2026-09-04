@@ -240,3 +240,67 @@ export function generateCashClosureWhatsAppMessage(params: {
     `*Généré automatiquement par Gestion Pro Global 4K*`
   );
 }
+
+export interface DevisWhatsAppDetails {
+  companyName: string;
+  devisNumber: string;
+  clientName: string;
+  totalTTC: number;
+  dateDevis: string;
+  dateValidite?: string;
+  items?: Array<{ description: string; qte: number; total_ligne_ttc?: number }>;
+  currency?: string;
+  locale?: Locale;
+}
+
+export function generateDevisWhatsAppMessage(details: DevisWhatsAppDetails): string {
+  const {
+    companyName,
+    devisNumber,
+    clientName,
+    totalTTC,
+    dateDevis,
+    dateValidite,
+    items = [],
+    currency = "FCFA",
+    locale = "fr",
+  } = details;
+
+  const formattedTotal = formatCurrencyAmount(totalTTC, currency, locale);
+
+  if (locale === "ar") {
+    let msg = `*📋 عرض أسعار جديد (Devis / Proforma) من ${companyName}*\n\n`;
+    msg += `مرحباً بك عزيزنا *${clientName}*،\n`;
+    msg += `يسعدنا تقديم عرض السعر الرسمي رقم: *${devisNumber}*\n\n`;
+    msg += `📅 *تاريخ العرض:* ${dateDevis}\n`;
+    if (dateValidite) msg += `⏳ *صلاحية العرض حتى:* ${dateValidite}\n`;
+    msg += `💰 *المبلغ الإجمالي (TTC):* *${formattedTotal}*\n\n`;
+    if (items.length > 0) {
+      msg += `*📦 تفاصيل الأصناف المقترحة:*\n`;
+      items.slice(0, 10).forEach((it) => {
+        msg += `• ${it.description} (الكمية: ${it.qte})\n`;
+      });
+      if (items.length > 10) msg += `• ... و ${items.length - 10} صنف إضافي\n`;
+      msg += `\n`;
+    }
+    msg += `للموافقة والتحويل إلى فاتورة مبيعات، يرجى الرد على هذه الرسالة.\n\nمع تحيات إدارة المبيعات،\n*${companyName}*`;
+    return msg;
+  }
+
+  let msg = `*📋 Devis / Facture Proforma N° ${devisNumber}*\n\n`;
+  msg += `Bonjour *${clientName}*,\n`;
+  msg += `Veuillez trouver ci-dessous notre proposition commerciale émise par *${companyName}* :\n\n`;
+  msg += `📅 *Date :* ${dateDevis}\n`;
+  if (dateValidite) msg += `⏳ *Validité :* jusqu'au ${dateValidite}\n`;
+  msg += `💰 *Total TTC :* *${formattedTotal}*\n\n`;
+  if (items.length > 0) {
+    msg += `*Détail des articles :*\n`;
+    items.slice(0, 10).forEach((it) => {
+      msg += `• ${it.description} (x${it.qte})\n`;
+    });
+    if (items.length > 10) msg += `• ... et ${items.length - 10} autre(s) article(s)\n`;
+    msg += `\n`;
+  }
+  msg += `Pour valider cette proposition ou pour tout complément d'information, n'hésitez pas à nous contacter.\n\nCordialement,\n*Direction Commerciale - ${companyName}*`;
+  return msg;
+}
