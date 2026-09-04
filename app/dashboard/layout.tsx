@@ -32,7 +32,8 @@ import {
   Crown,
   Sparkles,
   Bot,
-  Headphones
+  Headphones,
+  CreditCard
 } from "lucide-react";
 import UnifiedSearch from "@/components/UnifiedSearch";
 import NotificationBell from "@/components/NotificationBell";
@@ -93,6 +94,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/reports/commissions", label: t("nav_commissions", "Commissions Vendeurs"), icon: Crown, perm: "report.finance" },
     { href: "/dashboard/finance", label: t("nav_finance", "Gestion Financière"), icon: Landmark, perm: "report.finance" },
     { href: "/dashboard/finance/forex", label: t("nav_forex", "Forex & Devises"), icon: Coins, perm: "report.finance" },
+    { href: "/dashboard/finance/cheques", label: t("nav_cheques", "Chèques & Effets"), icon: CreditCard, perm: "report.finance" },
     { href: "/dashboard/data-hub", label: t("nav_data_hub", "Export & Sauvegarde"), icon: Database, perm: "admin.settings" },
     { href: "/dashboard/audit", label: t("nav_fraud_radar", "Radar Anti-Fraude"), icon: ShieldAlert, perm: "report.activity_log" },
     { href: "/dashboard/advances", label: t("nav_advances", "Dépôts & Avances"), icon: Wallet, perm: "deposit.access" },

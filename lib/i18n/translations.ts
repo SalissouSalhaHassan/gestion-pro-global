@@ -43,6 +43,7 @@ export const translations: TranslationDict = {
   nav_commissions: { fr: "Commissions Vendeurs", ar: "أهداف وعمولات الموظفين", en: "Sales Commissions" },
   nav_finance: { fr: "Gestion Financière", ar: "الإدارة المالية والتقارير", en: "Financial Reports" },
   nav_forex: { fr: "Forex & Devises", ar: "العملات والضرائب (Forex)", en: "Forex & Currencies" },
+  nav_cheques: { fr: "Chèques & Effets", ar: "الشيكات والأوراق التجارية", en: "Checks & Commercial Papers" },
   nav_data_hub: { fr: "Export & Sauvegarde", ar: "التصدير والنسخ الاحتياطي", en: "Export & Backup" },
   nav_fraud_radar: { fr: "Radar Anti-Fraude", ar: "رادار الأمان ومكافحة التلاعب", en: "Anti-Fraud Radar" },
   nav_advances: { fr: "Dépôts & Avances", ar: "الودائع والدفعات المقدمة", en: "Deposits & Advances" },
