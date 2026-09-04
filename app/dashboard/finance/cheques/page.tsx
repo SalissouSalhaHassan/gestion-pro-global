@@ -22,12 +22,57 @@ import {
   RefreshCw,
   SlidersHorizontal,
   ChevronRight,
-  Send
+  Send,
+  Printer,
+  Copy,
+  Check,
+  Sparkles,
+  Database
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/context";
 import NewChequeModal from "@/components/cheques/NewChequeModal";
 import ChequeActionModal from "@/components/cheques/ChequeActionModal";
 import { openWhatsAppDirect } from "@/lib/utils/whatsapp";
+
+const SQL_MIGRATION_SCRIPT = `-- ==============================================================================
+-- MIGRATION: cheques_effets (Check Clearing House & Commercial Papers)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.cheques_effets (
+    id SERIAL PRIMARY KEY,
+    type_operation VARCHAR(20) NOT NULL, -- 'A_ENCAISSER' (Client), 'EMIS' (Fournisseur)
+    type_titre VARCHAR(30) NOT NULL DEFAULT 'CHEQUE', -- 'CHEQUE', 'EFFET', 'BILLET_A_ORDRE'
+    numero_piece VARCHAR(100) NOT NULL,
+    banque_emetteur VARCHAR(100) NOT NULL,
+    emetteur_nom VARCHAR(150) NOT NULL,
+    beneficiaire_nom VARCHAR(150) NOT NULL,
+    montant NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    date_emission DATE NOT NULL DEFAULT CURRENT_DATE,
+    date_echeance DATE NOT NULL,
+    statut VARCHAR(30) NOT NULL DEFAULT 'EN_PORTEFEUILLE',
+    client_id INTEGER REFERENCES public.clients(id) ON DELETE SET NULL,
+    fournisseur_id INTEGER REFERENCES public.fournisseurs(id) ON DELETE SET NULL,
+    facture_id INTEGER REFERENCES public.factures(id) ON DELETE SET NULL,
+    date_encaissement TIMESTAMP WITH TIME ZONE,
+    date_depot TIMESTAMP WITH TIME ZONE,
+    bordereau_remise VARCHAR(100),
+    motif_rejet TEXT,
+    notes TEXT,
+    created_by VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cheques_type_op ON public.cheques_effets (type_operation);
+CREATE INDEX IF NOT EXISTS idx_cheques_statut ON public.cheques_effets (statut);
+CREATE INDEX IF NOT EXISTS idx_cheques_date_echeance ON public.cheques_effets (date_echeance);
+CREATE INDEX IF NOT EXISTS idx_cheques_client ON public.cheques_effets (client_id);
+CREATE INDEX IF NOT EXISTS idx_cheques_created_at ON public.cheques_effets (created_at DESC);
+
+ALTER TABLE public.cheques_effets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable read for all authenticated on cheques_effets"
+  ON public.cheques_effets FOR SELECT USING (true);
+CREATE POLICY "Enable write for all authenticated on cheques_effets"
+  ON public.cheques_effets FOR ALL USING (true);
+NOTIFY pgrst, 'reload schema';`;
 
 interface ChequeItem {
   id: number;
@@ -54,6 +99,12 @@ export default function ChequesEffetsPage() {
   const { t, dir } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [cheques, setCheques] = useState<ChequeItem[]>([]);
+  const [dbNeedsSetup, setDbNeedsSetup] = useState(false);
+  const [sqlCopied, setSqlCopied] = useState(false);
+  const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
+  const [isBordereauModalOpen, setIsBordereauModalOpen] = useState(false);
+  const [selectedBankForBordereau, setSelectedBankForBordereau] = useState<string>("ALL");
+
   const [kpis, setKpis] = useState({
     totalEnPortefeuille: 0,
     countEnPortefeuille: 0,
@@ -82,6 +133,11 @@ export default function ChequesEffetsPage() {
       if (res.ok) {
         setCheques(data.cheques || []);
         if (data.kpis) setKpis(data.kpis);
+        setDbNeedsSetup(false);
+      } else {
+        if (data.error && (data.error.includes("cheques_effets") || data.error.includes("does not exist") || data.error.includes("42P01"))) {
+          setDbNeedsSetup(true);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch cheques:", err);
@@ -93,6 +149,59 @@ export default function ChequesEffetsPage() {
   useEffect(() => {
     fetchCheques();
   }, [typeFilter, statusFilter]);
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SQL_MIGRATION_SCRIPT);
+    setSqlCopied(true);
+    setTimeout(() => setSqlCopied(false), 3000);
+  };
+
+  const exportToCSV = () => {
+    if (filteredCheques.length === 0) return;
+    const headers = [
+      "ID",
+      "Type Opération",
+      "Titre",
+      "Numéro Pièce",
+      "Banque",
+      "Tireur (Émetteur)",
+      "Bénéficiaire",
+      "Montant Nominal (FCFA)",
+      "Date Émission",
+      "Date Échéance",
+      "Statut",
+      "Bordereau Remise",
+      "Motif Rejet"
+    ];
+
+    const rows = filteredCheques.map((c) => [
+      c.id,
+      c.type_operation,
+      c.type_titre,
+      `"${(c.numero_piece || "").replace(/"/g, '""')}"`,
+      `"${(c.banque_emetteur || "").replace(/"/g, '""')}"`,
+      `"${(c.emetteur_nom || "").replace(/"/g, '""')}"`,
+      `"${(c.beneficiaire_nom || "").replace(/"/g, '""')}"`,
+      c.montant,
+      c.date_emission,
+      c.date_echeance,
+      c.statut,
+      `"${(c.bordereau_remise || "").replace(/"/g, '""')}"`,
+      `"${(c.motif_rejet || "").replace(/"/g, '""')}"`
+    ]);
+
+    const csvContent =
+      "data:text/csv;charset=utf-8,\uFEFF" +
+      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `registre_cheques_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -142,8 +251,56 @@ export default function ChequesEffetsPage() {
     );
   }, [cheques, searchQuery]);
 
+  // Cheques for remittance slip
+  const bordereauCheques = useMemo(() => {
+    return cheques.filter((c) => {
+      const isBankMatch = selectedBankForBordereau === "ALL" || c.banque_emetteur === selectedBankForBordereau;
+      const isStatusMatch = c.statut === "EN_PORTEFEUILLE" || c.statut === "DEPOSE_BANQUE";
+      return isBankMatch && isStatusMatch && c.type_operation === "A_ENCAISSER";
+    });
+  }, [cheques, selectedBankForBordereau]);
+
+  const uniqueBanks = useMemo(() => {
+    const list = cheques.map((c) => c.banque_emetteur).filter(Boolean);
+    return Array.from(new Set(list));
+  }, [cheques]);
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16" dir={dir}>
+      {/* Database Missing Banner if needed */}
+      {dbNeedsSetup && (
+        <div className="p-5 rounded-[28px] bg-gradient-to-r from-amber-500/15 via-indigo-500/10 to-transparent border border-amber-500/30 dark:border-amber-500/20 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-fadeIn">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/30 shrink-0">
+              <Database size={24} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Module Chèques & Effets : Table en attente d'initialisation
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                La table <code className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 font-mono text-amber-800 dark:text-amber-300">cheques_effets</code> n'est pas encore créée dans votre base Supabase. Copiez le script SQL en 1-clic pour l'exécuter dans votre console.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleCopySql}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-amber-600/20 transition-all"
+            >
+              {sqlCopied ? <Check size={16} /> : <Copy size={16} />}
+              <span>{sqlCopied ? "SQL Copié !" : "Copier SQL (1-Clic)"}</span>
+            </button>
+            <button
+              onClick={() => setIsSqlModalOpen(true)}
+              className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 transition-colors"
+            >
+              Voir le script
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl p-6 rounded-[32px] border border-slate-200/80 dark:border-slate-800 shadow-sm">
         <div className="flex items-center gap-4">
@@ -160,7 +317,7 @@ export default function ChequesEffetsPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={fetchCheques}
             disabled={loading}
@@ -169,12 +326,32 @@ export default function ChequesEffetsPage() {
           >
             <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
           </button>
+
+          <button
+            onClick={exportToCSV}
+            disabled={filteredCheques.length === 0}
+            className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 font-bold text-sm shadow-sm transition-all disabled:opacity-50"
+            title="Exporter en CSV"
+          >
+            <Download size={17} />
+            <span className="hidden sm:inline">Exporter CSV</span>
+          </button>
+
+          <button
+            onClick={() => setIsBordereauModalOpen(true)}
+            disabled={cheques.length === 0}
+            className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-sm shadow-sm transition-all disabled:opacity-50"
+          >
+            <Printer size={17} />
+            <span>Bordereau de Remise</span>
+          </button>
+
           <button
             onClick={() => setIsNewModalOpen(true)}
             className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-sm shadow-md shadow-indigo-600/30 transition-all"
           >
             <Plus size={18} />
-            <span>Nouveau Chèque / Traite</span>
+            <span>Nouveau Chèque</span>
           </button>
         </div>
       </div>
@@ -477,6 +654,203 @@ export default function ChequesEffetsPage() {
           onClose={() => setSelectedCheque(null)}
           onSuccess={fetchCheques}
         />
+      )}
+
+      {/* SQL Migration Helper Modal */}
+      {isSqlModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn" dir={dir}>
+          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-[28px] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-amber-50 to-indigo-50/30 dark:from-slate-900 dark:to-indigo-950/20">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/30">
+                  <Database size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                    Script SQL : Module Chèques & Effets
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Copiez et collez ce script dans l'Éditeur SQL de votre tableau de bord Supabase
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSqlModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 font-mono text-xs bg-slate-950 text-slate-200">
+              <pre className="whitespace-pre-wrap">{SQL_MIGRATION_SCRIPT}</pre>
+            </div>
+
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-900">
+              <span className="text-xs text-slate-500">
+                Fichier source : migrations/20260904_cheques_and_effets.sql
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCopySql}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md transition-all"
+                >
+                  {sqlCopied ? <Check size={16} /> : <Copy size={16} />}
+                  <span>{sqlCopied ? "Copié avec succès !" : "Copier le Script SQL"}</span>
+                </button>
+                <button
+                  onClick={() => setIsSqlModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold text-xs"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bordereau de Remise Bancaire Printable Modal */}
+      {isBordereauModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn" dir={dir}>
+          <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-[28px] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-slate-900 dark:to-indigo-950/30 no-print">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/30">
+                  <Printer size={22} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                    Bordereau de Remise de Chèques
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Bordereau officiel d'encaissement bancaire prêt pour impression A4
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedBankForBordereau}
+                  onChange={(e) => setSelectedBankForBordereau(e.target.value)}
+                  className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="ALL">Toutes les banques</option>
+                  {uniqueBanks.map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all"
+                >
+                  <Printer size={16} />
+                  <span>Imprimer Bordereau</span>
+                </button>
+
+                <button
+                  onClick={() => setIsBordereauModalOpen(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Remittance Sheet */}
+            <div className="p-8 overflow-y-auto flex-1 bg-white text-slate-900 print:p-0 print:m-0" id="printable-bordereau">
+              <div className="border-2 border-slate-900 p-6 rounded-2xl mb-6">
+                <div className="flex items-start justify-between border-b border-slate-300 pb-4 mb-4">
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-wider text-slate-900">
+                      BORDEREAU DE REMISE DE CHÈQUES
+                    </h2>
+                    <p className="text-xs font-semibold text-slate-600 mt-0.5">
+                      DÉPÔT POUR ENCAISSEMENT / COMPTE BANCAIRE
+                    </p>
+                  </div>
+                  <div className="text-right text-xs">
+                    <p className="font-bold text-slate-900">Date : {new Date().toLocaleDateString("fr-FR")}</p>
+                    <p className="text-slate-600">Banque Destinataire : <span className="font-black text-indigo-700">{selectedBankForBordereau === "ALL" ? "TOUTES BANQUES" : selectedBankForBordereau}</span></p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-xs mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <div>
+                    <span className="font-bold text-slate-500 uppercase">Titulaire du Compte :</span>
+                    <p className="font-black text-slate-900 text-sm">GESTION PRO GLOBAL / ENTREPRISE</p>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-500 uppercase">Nombre total de chèques :</span>
+                    <p className="font-black text-indigo-700 text-sm">{bordereauCheques.length} pièce(s)</p>
+                  </div>
+                </div>
+
+                <table className="w-full text-xs text-left border-collapse border border-slate-300 mb-6">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300">
+                      <th className="p-2 border border-slate-300 text-center w-10">N°</th>
+                      <th className="p-2 border border-slate-300">N° de Chèque</th>
+                      <th className="p-2 border border-slate-300">Banque du Tireur</th>
+                      <th className="p-2 border border-slate-300">Tireur (Émetteur)</th>
+                      <th className="p-2 border border-slate-300">Échéance</th>
+                      <th className="p-2 border border-slate-300 text-right">Montant (FCFA)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bordereauCheques.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-6 text-center text-slate-400">
+                          Aucun chèque en portefeuille ou déposé pour cette sélection
+                        </td>
+                      </tr>
+                    ) : (
+                      bordereauCheques.map((item, idx) => (
+                        <tr key={item.id} className="border-b border-slate-200">
+                          <td className="p-2 border border-slate-300 text-center font-semibold">{idx + 1}</td>
+                          <td className="p-2 border border-slate-300 font-mono font-bold text-slate-900">{item.numero_piece}</td>
+                          <td className="p-2 border border-slate-300 font-semibold">{item.banque_emetteur}</td>
+                          <td className="p-2 border border-slate-300 font-medium">{item.emetteur_nom}</td>
+                          <td className="p-2 border border-slate-300 text-slate-600">{new Date(item.date_echeance).toLocaleDateString("fr-FR")}</td>
+                          <td className="p-2 border border-slate-300 text-right font-mono font-black text-slate-900">
+                            {Number(item.montant).toLocaleString("fr-FR")}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-400">
+                      <td colSpan={5} className="p-2.5 text-right uppercase border border-slate-300">
+                        Total Général Remis :
+                      </td>
+                      <td className="p-2.5 text-right font-mono text-sm text-indigo-800 border border-slate-300">
+                        {bordereauCheques.reduce((sum, c) => sum + (Number(c.montant) || 0), 0).toLocaleString("fr-FR")} FCFA
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+
+                {/* Signatures */}
+                <div className="grid grid-cols-2 gap-8 pt-6 border-t border-slate-300 text-xs">
+                  <div className="border border-slate-300 p-4 rounded-xl min-h-[110px] flex flex-col justify-between">
+                    <span className="font-bold text-slate-700 uppercase tracking-wider">
+                      Signature et Visa du Déposant :
+                    </span>
+                    <span className="text-[10px] text-slate-400 italic">Signature précédée de la mention "Bon pour remise"</span>
+                  </div>
+                  <div className="border border-slate-300 p-4 rounded-xl min-h-[110px] flex flex-col justify-between">
+                    <span className="font-bold text-slate-700 uppercase tracking-wider">
+                      Cachet et Visa de la Banque Réceptrice :
+                    </span>
+                    <span className="text-[10px] text-slate-400 italic">Reçu sous réserve d'encaissement effectif</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
