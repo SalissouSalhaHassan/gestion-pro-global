@@ -590,7 +590,7 @@ export default function DevisPage() {
                                 currency: "FCFA",
                                 locale: locale as any,
                               });
-                              openWhatsAppDirect(devis.client_tel, msg);
+                              openWhatsAppDirect(devis.client_tel || "", msg);
                             }}
                             title={locale === "ar" ? "إرسال عرض السعر عبر واتساب" : "Envoyer devis par WhatsApp"}
                             className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all cursor-pointer font-bold"

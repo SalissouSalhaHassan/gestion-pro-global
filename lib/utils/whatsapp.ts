@@ -82,9 +82,9 @@ export function generateInvoiceWhatsAppMessage(details: InvoiceWhatsAppDetails):
 /**
  * Opens WhatsApp Web or WhatsApp Mobile app with pre-filled text
  */
-export function openWhatsAppDirect(phone: string, message: string) {
-  const cleanPhone = formatPhoneForWhatsApp(phone);
-  const encodedText = encodeURIComponent(message);
+export function openWhatsAppDirect(phone?: string | null, message: string = "") {
+  const cleanPhone = phone ? formatPhoneForWhatsApp(phone) : "";
+  const encodedText = encodeURIComponent(message || "");
   
   const url = cleanPhone
     ? `https://wa.me/${cleanPhone}?text=${encodedText}`
