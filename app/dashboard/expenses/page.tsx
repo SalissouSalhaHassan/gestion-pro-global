@@ -21,11 +21,16 @@ import {
   Printer
 } from "lucide-react";
 import ExpenseJournalModal from "./ExpenseJournalModal";
+import { createClient } from "@/lib/supabase/client";
+
+const supabase = createClient();
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ start: "", end: "", oper: "Tous" });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [operators, setOperators] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,10 +88,33 @@ export default function ExpensesPage() {
       try {
         const session = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
         setUserSession(session);
+        const currentUser = session?.username || "ADMIN";
+        setForm(prev => ({
+          ...prev,
+          operateur: currentUser,
+          autorise_par: currentUser
+        }));
         const isAdmin = session?.admin === "Oui" || session?.role === 1 || session?.role === "1";
         if (!isAdmin) {
           setFilters(f => ({ ...f, oper: session.username || "Tous" }));
         }
+
+        async function loadOperators() {
+          try {
+            let q = supabase.from("users").select("utilisateur, nom_prenom");
+            if (session?.organization_id) {
+              q = q.eq("organization_id", session.organization_id);
+            }
+            const { data } = await q;
+            if (data && data.length > 0) {
+              const names = data.map((u: any) => u.utilisateur || u.nom_prenom).filter(Boolean);
+              setOperators(Array.from(new Set(names)));
+            }
+          } catch (e) {
+            console.error("Failed to load operators:", e);
+          }
+        }
+        loadOperators();
       } catch (e) { console.error(e); }
     }
   }, []);
@@ -150,7 +178,17 @@ export default function ExpensesPage() {
     setIsModalOpen(true);
   };
 
-  const totalExpenses = Array.isArray(expenses) ? expenses.reduce((sum, e) => sum + Number(e.montant || 0), 0) : 0;
+  const filteredExpenses = (expenses || []).filter((exp: any) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    const lib = (exp.libelle || "").toLowerCase();
+    const caisse = (exp.no_caisse || "").toLowerCase();
+    const op = (exp.operateur || "").toLowerCase();
+    const aut = (exp.autorise_par || "").toLowerCase();
+    return lib.includes(term) || caisse.includes(term) || op.includes(term) || aut.includes(term);
+  });
+
+  const totalExpenses = Array.isArray(filteredExpenses) ? filteredExpenses.reduce((sum, e) => sum + Number(e.montant || 0), 0) : 0;
 
 
   return (
@@ -215,10 +253,27 @@ export default function ExpensesPage() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20} />
             <input 
               type="text" 
-              placeholder="Rechercher par libellé..." 
-              className="w-full pl-12 pr-4 py-3 bg-slate-50/50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-indigo-500/5 outline-none font-bold transition-all"
+              placeholder="Rechercher par libellé, référence, opérateur..." 
+              className="w-full pl-12 pr-4 py-3 bg-slate-50/50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-indigo-500/5 outline-none font-bold transition-all text-slate-800"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
          </div>
+         {(userSession?.admin === "Oui" || userSession?.role === 1 || userSession?.role === "1") && operators.length > 0 && (
+           <div className="flex items-center gap-2 bg-white border border-slate-100 rounded-xl px-4 py-3 shadow-sm">
+             <User size={16} className="text-slate-400" />
+             <select 
+               className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer"
+               value={filters.oper}
+               onChange={(e) => setFilters({ ...filters, oper: e.target.value })}
+             >
+               <option value="Tous">Tous les opérateurs</option>
+               {operators.map((op) => (
+                 <option key={op} value={op}>{op}</option>
+               ))}
+             </select>
+           </div>
+         )}
          <div className="flex items-center gap-2">
             <Calendar className="text-slate-400" size={18} />
             <input 
@@ -258,7 +313,7 @@ export default function ExpensesPage() {
                         <p className="text-slate-400 font-bold">Chargement du journal...</p>
                       </td>
                     </tr>
-                  ) : expenses.length === 0 ? (
+                  ) : filteredExpenses.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="py-20 text-center">
                         <AlertCircle className="w-12 h-12 text-slate-200 mx-auto mb-4" />
@@ -266,7 +321,7 @@ export default function ExpensesPage() {
                       </td>
                     </tr>
                   ) : (
-                    expenses.map((exp) => (
+                    filteredExpenses.map((exp) => (
                       <tr key={exp.id} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-8 py-6">
                            <p className="font-extrabold text-slate-900">{new Date(exp.date_depense).toLocaleDateString('fr-FR')}</p>
@@ -418,9 +473,13 @@ export default function ExpensesPage() {
                             value={form.operateur}
                             onChange={(e) => setForm({...form, operateur: e.target.value})}
                           >
-                             <option value="ADRR">ADRR</option>
-                             <option value="ADMIN">ADMIN</option>
-                             <option value="SYSTEME">SYSTEME</option>
+                            {operators.length > 0 ? (
+                              operators.map((op) => (
+                                <option key={op} value={op}>{op}</option>
+                              ))
+                            ) : (
+                              <option value={userSession?.username || "ADMIN"}>{userSession?.username || "ADMIN"}</option>
+                            )}
                           </select>
                        </div>
                     </div>

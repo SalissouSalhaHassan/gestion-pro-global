@@ -18,6 +18,8 @@ export async function GET(request: Request) {
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
+    const orgId = session.organization_id || '00000000-0000-0000-0000-000000000001';
+
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type") || "invoices";
     const format = searchParams.get("format") || "csv";
@@ -28,6 +30,30 @@ export async function GET(request: Request) {
     // 1. FULL DATABASE SNAPSHOT (JSON)
     // ═════════════════════════════════════════════════════════════════
     if (type === "full_snapshot") {
+      let compQ = supabase.from("informations_entreprise").select("*");
+      let artQ = supabase.from("articles").select("*").eq("is_deleted", false);
+      let cliQ = supabase.from("clients").select("*").eq("is_deleted", false);
+      let fourQ = supabase.from("fournisseurs").select("*").eq("is_deleted", false);
+      let facQ = supabase.from("factures").select("*").eq("is_deleted", false);
+      let facItQ = supabase.from("facture_items").select("*");
+      let achQ = supabase.from("achats").select("*").eq("is_deleted", false);
+      let depQ = supabase.from("depenses").select("*");
+      let stQ = supabase.from("stocks").select("*");
+      let mouvQ = supabase.from("mouvements").select("*").limit(2000);
+
+      if (orgId) {
+        compQ = compQ.eq("organization_id", orgId);
+        artQ = artQ.eq("organization_id", orgId);
+        cliQ = cliQ.eq("organization_id", orgId);
+        fourQ = fourQ.eq("organization_id", orgId);
+        facQ = facQ.eq("organization_id", orgId);
+        facItQ = facItQ.eq("organization_id", orgId);
+        achQ = achQ.eq("organization_id", orgId);
+        depQ = depQ.eq("organization_id", orgId);
+        stQ = stQ.eq("organization_id", orgId);
+        mouvQ = mouvQ.eq("organization_id", orgId);
+      }
+
       const [
         company,
         articles,
@@ -40,16 +66,16 @@ export async function GET(request: Request) {
         stocks,
         mouvements,
       ] = await Promise.all([
-        supabase.from("informations_entreprise").select("*").maybeSingle(),
-        supabase.from("articles").select("*").eq("is_deleted", false),
-        supabase.from("clients").select("*").eq("is_deleted", false),
-        supabase.from("fournisseurs").select("*").eq("is_deleted", false),
-        supabase.from("factures").select("*").eq("is_deleted", false),
-        supabase.from("facture_items").select("*"),
-        supabase.from("achats").select("*").eq("is_deleted", false),
-        supabase.from("depenses").select("*"),
-        supabase.from("stocks").select("*"),
-        supabase.from("mouvements").select("*").limit(2000),
+        compQ.maybeSingle(),
+        artQ,
+        cliQ,
+        fourQ,
+        facQ,
+        facItQ,
+        achQ,
+        depQ,
+        stQ,
+        mouvQ,
       ]);
 
       const snapshot = {
@@ -94,6 +120,7 @@ export async function GET(request: Request) {
         .eq("is_deleted", false)
         .order("date_facture", { ascending: false });
 
+      if (orgId) q = q.eq("organization_id", orgId);
       if (start) q = q.gte("date_facture", start);
       if (end) q = q.lte("date_facture", end);
 
@@ -147,11 +174,14 @@ export async function GET(request: Request) {
     // 3. ARTICLES & INVENTORY
     // ═════════════════════════════════════════════════════════════════
     if (type === "articles") {
-      const { data: arts, error } = await supabase
+      let artQ = supabase
         .from("articles")
         .select("*, stocks(quantite)")
         .eq("is_deleted", false)
         .order("designation");
+
+      if (orgId) artQ = artQ.eq("organization_id", orgId);
+      const { data: arts, error } = await artQ;
 
       if (error) throw error;
 
@@ -202,11 +232,14 @@ export async function GET(request: Request) {
     // 4. CLIENTS & CRÉANCES
     // ═════════════════════════════════════════════════════════════════
     if (type === "clients") {
-      const { data: clients, error } = await supabase
+      let cliQ = supabase
         .from("clients")
         .select("*")
         .eq("is_deleted", false)
         .order("nom");
+
+      if (orgId) cliQ = cliQ.eq("organization_id", orgId);
+      const { data: clients, error } = await cliQ;
 
       if (error) throw error;
 
@@ -257,6 +290,7 @@ export async function GET(request: Request) {
         .eq("is_deleted", false)
         .order("date_achat", { ascending: false });
 
+      if (orgId) q = q.eq("organization_id", orgId);
       if (start) q = q.gte("date_achat", start);
       if (end) q = q.lte("date_achat", end);
 
@@ -305,6 +339,7 @@ export async function GET(request: Request) {
         .select("*")
         .order("date_depense", { ascending: false });
 
+      if (orgId) q = q.eq("organization_id", orgId);
       if (start) q = q.gte("date_depense", start);
       if (end) q = q.lte("date_depense", end);
 

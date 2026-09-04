@@ -33,11 +33,20 @@ export default function ExpenseJournalModal({ filters, onClose }: ExpenseJournal
       try {
         setLoading(true);
         
-        const { data: comp } = await supabase
-          .from("informations_entreprise")
-          .select("*")
-          .limit(1)
-          .single();
+        const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
+        let orgId: string | null = null;
+        if (cookie) {
+          try {
+            const session = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
+            orgId = session?.organization_id || null;
+          } catch (e) {}
+        }
+
+        let compQuery = supabase.from("informations_entreprise").select("*");
+        if (orgId) {
+          compQuery = compQuery.eq("organization_id", orgId);
+        }
+        const { data: comp } = await compQuery.limit(1).maybeSingle();
         setCompany(comp);
 
         const q = new URLSearchParams(filters).toString();
@@ -122,9 +131,9 @@ export default function ExpenseJournalModal({ filters, onClose }: ExpenseJournal
              pageSize === 'Ticket' ? 'flex-col items-center text-center gap-4' : ''
           }`}>
             <div className={pageSize === 'Ticket' ? 'text-center' : 'text-left'}>
-              <h1 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{company?.nom_entreprise || "ETS SOUNO"}</h1>
+              <h1 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{company?.nom_entreprise || "GESTION PRO"}</h1>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">
-                {company?.adresse || "MARADI, NIGER"}
+                {company?.adresse || ""}
               </p>
             </div>
             <div className="text-right">
