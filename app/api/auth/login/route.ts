@@ -61,6 +61,7 @@ export async function POST(request: Request) {
       admin: isAdmin ? 'Oui' : 'Non',
       emplacement: primaryDepot,
       depots: depotsString,
+      organization_id: userRecord.organization_id || '00000000-0000-0000-0000-000000000001',
       permissions: permissionKeys,
     };
 
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
       user_id: userRecord.id,
       depots: sessionData.depots,
       emplacement: sessionData.emplacement,
+      organization_id: sessionData.organization_id,
       permissions: permissionKeys,
       isAdmin: isAdmin
     });
