@@ -90,6 +90,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/expenses", label: t("nav_expenses", "Dépenses"), icon: TrendingDown, perm: "expense.access" },
     { href: "/dashboard/reports/cash-balance", label: t("nav_cash_balance", "Bilan de Caisse"), icon: Scale, perm: "expense.cash_balance" },
     { href: "/dashboard/reports/profit-loss", label: t("nav_profit_loss", "Pertes & Profits (P&L)"), icon: BarChart3, perm: "report.finance" },
+    { href: "/dashboard/reports/commissions", label: t("nav_commissions", "Commissions Vendeurs"), icon: Crown, perm: "report.finance" },
     { href: "/dashboard/finance", label: t("nav_finance", "Gestion Financière"), icon: Landmark, perm: "report.finance" },
     { href: "/dashboard/finance/forex", label: t("nav_forex", "Forex & Devises"), icon: Coins, perm: "report.finance" },
     { href: "/dashboard/data-hub", label: t("nav_data_hub", "Export & Sauvegarde"), icon: Database, perm: "admin.settings" },
