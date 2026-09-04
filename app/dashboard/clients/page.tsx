@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Users, Search, Plus, UserCircle2, ArrowUpDown, Banknote, ShieldAlert, Loader2, X, Save, FileText, Printer, MessageCircle } from "lucide-react";
+import { Users, Search, Plus, UserCircle2, ArrowUpDown, Banknote, ShieldAlert, Loader2, X, Save, FileText, Printer, MessageCircle, Receipt } from "lucide-react";
 import ClientListModal from "./ClientListModal";
 import WhatsAppDebtModal from "@/components/WhatsAppDebtModal";
+import ClientStatementModal from "@/components/clients/ClientStatementModal";
 import { createClient } from "@/lib/supabase/client";
 import { getClientSessionFromCookie, isAdminOrManagerSession, DEFAULT_CLIENT_ID } from "@/lib/client_helpers";
 
@@ -47,6 +48,7 @@ export default function ClientsPage() {
   const [clientInvoices, setClientInvoices] = useState<any[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [statementClient, setStatementClient] = useState<Client | null>(null);
 
   const sendWhatsAppReminder = (client: Client) => {
     setWhatsAppDebtClient(client);
@@ -425,6 +427,13 @@ export default function ClientsPage() {
                             </button>
                           )}
                           <button
+                            onClick={() => setStatementClient(client)}
+                            className="p-2 rounded-xl transition-all shadow-sm group border bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-600 hover:text-white"
+                            title="Relevé de Compte 4K & Balance Âgée"
+                          >
+                            <Receipt size={18} className="group-hover:scale-110 transition-transform" />
+                          </button>
+                          <button
                             onClick={() => fetchClientInvoices(client)}
                             className={`p-2 rounded-xl transition-all shadow-sm group border ${
                               hasDebt 
@@ -480,6 +489,18 @@ export default function ClientsPage() {
                   <FileText size={28} />
                 </div>
               </div>
+
+              <button
+                onClick={() => {
+                  const cl = selectedClientForDebt;
+                  setSelectedClientForDebt(null);
+                  setStatementClient(cl);
+                }}
+                className="mb-8 w-full py-3.5 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white font-bold text-xs shadow-md shadow-indigo-600/25 transition-all flex items-center justify-center gap-2"
+              >
+                <Receipt size={18} />
+                <span>Ouvrir le Relevé de Compte 4K & Balance Âgée</span>
+              </button>
 
               {loadingInvoices ? (
                 <div className="flex flex-col items-center justify-center py-20 grayscale opacity-40">
@@ -646,6 +667,17 @@ export default function ClientsPage() {
         <WhatsAppDebtModal
           client={whatsAppDebtClient}
           onClose={() => setWhatsAppDebtClient(null)}
+        />
+      )}
+
+      {/* Client Statement & Aging Balance Studio Modal */}
+      {statementClient && (
+        <ClientStatementModal
+          isOpen={Boolean(statementClient)}
+          clientId={statementClient.id}
+          clientNom={statementClient.nom}
+          clientTel={statementClient.tel}
+          onClose={() => setStatementClient(null)}
         />
       )}
 
