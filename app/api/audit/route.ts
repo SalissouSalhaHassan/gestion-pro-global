@@ -24,6 +24,10 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: false })
       .limit(limit);
 
+    if (session.organization_id) {
+      query = query.eq("organization_id", session.organization_id);
+    }
+
     if (severity && severity !== "ALL") query = query.eq("severity", severity);
     if (module && module !== "ALL") query = query.eq("module", module);
     if (actionType && actionType !== "ALL") query = query.eq("action_type", actionType);
@@ -79,6 +83,7 @@ export async function POST(request: Request) {
         target_id: target_id ? String(target_id) : null,
         user_id: session.id ? Number(session.id) : null,
         username: session.username || "Système",
+        organization_id: session.organization_id || "00000000-0000-0000-0000-000000000001",
         created_at: new Date().toISOString(),
       })
       .select()

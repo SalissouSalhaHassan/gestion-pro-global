@@ -20,6 +20,10 @@ export async function GET(request: Request) {
       .select('*, client:clients(nom, tel), fournisseur:fournisseurs(nom, tel)')
       .order('date_echeance', { ascending: true });
 
+    if (session.organization_id) {
+      query = query.eq('organization_id', session.organization_id);
+    }
+
     if (typeOp && typeOp !== 'ALL') {
       query = query.eq('type_operation', typeOp);
     }
@@ -112,6 +116,7 @@ export async function POST(request: Request) {
         facture_id: facture_id ? Number(facture_id) : null,
         notes: notes || null,
         created_by: session.username || "Admin",
+        organization_id: session.organization_id || "00000000-0000-0000-0000-000000000001",
       })
       .select()
       .single();

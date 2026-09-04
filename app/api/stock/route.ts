@@ -63,6 +63,10 @@ export async function GET(request: Request) {
     `)
     .eq("is_deleted", false);
 
+  if (user.organization_id) {
+    query = query.eq("organization_id", user.organization_id);
+  }
+
   if (search) {
     query = query.or(`reference.ilike.%${search}%,designation.ilike.%${search}%`);
   }

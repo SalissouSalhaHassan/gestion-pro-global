@@ -35,6 +35,10 @@ export async function GET(request: Request) {
       `)
       .eq("is_deleted", false);
 
+    if (user.organization_id) {
+      articlesQuery = articlesQuery.eq("organization_id", user.organization_id);
+    }
+
     if (categoryId && categoryId !== "all") {
       articlesQuery = articlesQuery.eq("categorie_id", categoryId);
     }
@@ -50,6 +54,10 @@ export async function GET(request: Request) {
       .from("stocks")
       .select("article_id, quantite, depot_nom")
       .in("article_id", articleIds);
+
+    if (user.organization_id) {
+      stocksQuery = stocksQuery.eq("organization_id", user.organization_id);
+    }
 
     const { data: stocksData, error: stocksErr } = await stocksQuery;
     if (stocksErr) throw stocksErr;

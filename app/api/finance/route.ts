@@ -36,6 +36,10 @@ export async function GET(request: Request) {
       .eq("is_deleted", false)
       .order("id", { ascending: false });
 
+    if (session.organization_id) {
+      invoiceQuery = invoiceQuery.eq("organization_id", session.organization_id);
+    }
+
     if (start && end) {
       invoiceQuery = invoiceQuery.gte("date_facture", start).lte("date_facture", end);
     }
@@ -58,6 +62,9 @@ export async function GET(request: Request) {
         .from("paiements")
         .select("id, date_operation, montant_regle, moyen_reglement, reference_paiement, factures(id, bl_number, total_ttc, clients(nom))")
         .order("id", { ascending: false });
+      if (session.organization_id) {
+        paymentQuery = paymentQuery.eq("organization_id", session.organization_id);
+      }
       if (start && end) {
         paymentQuery = paymentQuery.gte("date_operation", start).lte("date_operation", `${end}T23:59:59.999Z`);
       }
@@ -73,6 +80,9 @@ export async function GET(request: Request) {
       let expQuery = supabase
         .from("depenses")
         .select("id, date_depense, montant, operateur, no_caisse");
+      if (session.organization_id) {
+        expQuery = expQuery.eq("organization_id", session.organization_id);
+      }
       if (start && end) {
         expQuery = expQuery.gte("date_depense", start).lte("date_depense", `${end}T23:59:59.999Z`);
       }
@@ -86,10 +96,14 @@ export async function GET(request: Request) {
     }
 
     // 4. Fetch Clients for debt analysis
-    const { data: clientsRaw } = await supabase
+    let clientsQuery = supabase
       .from("clients")
       .select("id, nom, tel, credit_facture, credit_bl")
       .eq("is_deleted", false);
+    if (session.organization_id) {
+      clientsQuery = clientsQuery.eq("organization_id", session.organization_id);
+    }
+    const { data: clientsRaw } = await clientsQuery;
 
     const clients = clientsRaw || [];
 

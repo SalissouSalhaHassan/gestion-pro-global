@@ -111,6 +111,23 @@ export default function ArticlesPage() {
   const [allDepots, setAllDepots] = useState<string[]>([]);
   const [selectedFilterDepot, setSelectedFilterDepot] = useState<string>("Tous");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [currentOrgId, setCurrentOrgId] = useState<string>("");
+
+  useEffect(() => {
+    try {
+      const match = document.cookie.split("; ").find((c) => c.startsWith("gp_session="));
+      if (match) {
+        const decoded = decodeURIComponent(match.split("=")[1]);
+        const data = JSON.parse(decoded);
+        if (data.organization_id) {
+          setCurrentOrgId(data.organization_id);
+          loadData(data.organization_id);
+          return;
+        }
+      }
+    } catch {}
+    loadData();
+  }, []);
 
   useEffect(() => {
     if (toast) {
@@ -119,34 +136,51 @@ export default function ArticlesPage() {
     }
   }, [toast]);
 
-  const loadData = async () => {
+  const loadData = async (orgIdOverride?: string) => {
+    const activeOrg = orgIdOverride || currentOrgId;
     try {
       setLoading(true);
 
-      // 1. Fetch auxiliary data
-      const [catRes, supRes, unitRes, depotRes] = await Promise.all([
-        supabase.from("categories").select("nom").eq("is_deleted", false),
-        supabase.from("fournisseurs").select("nom").eq("is_deleted", false),
-        supabase.from("unites").select("nom").eq("is_deleted", false),
-        supabase.from("depots").select("nom").eq("is_deleted", false),
-      ]);
+      // 1. Fetch auxiliary data scoped by organization
+      let catQ = supabase.from("categories").select("nom").eq("is_deleted", false);
+      let supQ = supabase.from("fournisseurs").select("nom").eq("is_deleted", false);
+      let unitQ = supabase.from("unites").select("nom").eq("is_deleted", false);
+      let depotQ = supabase.from("depots").select("nom").eq("is_deleted", false);
+
+      if (activeOrg) {
+        catQ = catQ.eq("organization_id", activeOrg);
+        supQ = supQ.eq("organization_id", activeOrg);
+        unitQ = unitQ.eq("organization_id", activeOrg);
+        depotQ = depotQ.eq("organization_id", activeOrg);
+      }
+
+      const [catRes, supRes, unitRes, depotRes] = await Promise.all([catQ, supQ, unitQ, depotQ]);
 
       if (catRes.data) setCategories(catRes.data.map((c: any) => c.nom));
       if (supRes.data) setSuppliers(supRes.data.map((s: any) => s.nom));
       if (unitRes.data) setUnits(unitRes.data.map((u: any) => u.nom));
       if (depotRes.data) setAllDepots(depotRes.data.map((d: any) => d.nom));
 
-      // 2. Fetch articles
-      const { data: artsData, error: artsErr } = await supabase
+      // 2. Fetch articles scoped by organization
+      let artsQ = supabase
         .from("articles")
         .select("*")
-        .eq("is_deleted", false)
-        .order("designation");
+        .eq("is_deleted", false);
+
+      if (activeOrg) {
+        artsQ = artsQ.eq("organization_id", activeOrg);
+      }
+
+      const { data: artsData, error: artsErr } = await artsQ.order("designation");
 
       if (artsErr) throw artsErr;
 
-      // 3. Fetch stocks
-      const { data: stockData } = await supabase.from("stocks").select("article_id, depot_nom, quantite");
+      // 3. Fetch stocks scoped by organization
+      let stockQ = supabase.from("stocks").select("article_id, depot_nom, quantite");
+      if (activeOrg) {
+        stockQ = stockQ.eq("organization_id", activeOrg);
+      }
+      const { data: stockData } = await stockQ;
 
       const stockMap: Record<string | number, number> = {};
       if (stockData) {
@@ -181,10 +215,6 @@ export default function ArticlesPage() {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   const handleOpenAddModal = () => {
     setFormData({
@@ -274,16 +304,24 @@ export default function ArticlesPage() {
         updated_at: new Date().toISOString(),
       };
 
+      if (currentOrgId) {
+        payload.organization_id = currentOrgId;
+      }
+
       let savedId = formData.id;
 
       if (isEditing && savedId) {
-        let { error } = await supabase.from("articles").update(payload).eq("id", savedId);
+        let updateQ = supabase.from("articles").update(payload).eq("id", savedId);
+        if (currentOrgId) updateQ = updateQ.eq("organization_id", currentOrgId);
+        let { error } = await updateQ;
         // Resilient fallback if prix_gros or prix_special are not yet added in database schema
         if (error && (error.message?.includes("prix_gros") || error.message?.includes("prix_special") || error.code === "PGRST204" || error.message?.includes("schema cache"))) {
           const fallback = { ...payload };
           delete fallback.prix_gros;
           delete fallback.prix_special;
-          const retry = await supabase.from("articles").update(fallback).eq("id", savedId);
+          let retryQ = supabase.from("articles").update(fallback).eq("id", savedId);
+          if (currentOrgId) retryQ = retryQ.eq("organization_id", currentOrgId);
+          const retry = await retryQ;
           error = retry.error;
         }
         if (error) throw error;
@@ -311,6 +349,7 @@ export default function ArticlesPage() {
               article_id: savedId,
               depot_nom: formData.depot_nom || "BOUTIQUE",
               quantite: stockInitial,
+              organization_id: currentOrgId || "00000000-0000-0000-0000-000000000001",
             },
           ]);
         }
@@ -333,7 +372,9 @@ export default function ArticlesPage() {
   const handleDelete = async (id: string | number, name: string) => {
     if (!confirm(`Voulez-vous vraiment supprimer l'article "${name}" ?`)) return;
     try {
-      const { error } = await supabase.from("articles").update({ is_deleted: true }).eq("id", id);
+      let delQ = supabase.from("articles").update({ is_deleted: true }).eq("id", id);
+      if (currentOrgId) delQ = delQ.eq("organization_id", currentOrgId);
+      const { error } = await delQ;
       if (error) throw error;
       setToast({ message: "Article supprimé", type: "success" });
       loadData();
@@ -435,7 +476,7 @@ export default function ArticlesPage() {
             </button>
 
             <button
-              onClick={loadData}
+              onClick={() => loadData()}
               className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
             >
               <RefreshCw size={15} />

@@ -79,13 +79,18 @@ export class ContractService {
 
   // ── Contracts ──
 
-  async loadContracts(): Promise<Contract[]> {
+  async loadContracts(organizationId?: string): Promise<Contract[]> {
     // First get all active contracts
-    const { data: contracts, error } = await this.supabase
+    let query = this.supabase
       .from('contrats')
       .select('*')
-      .eq('is_deleted', false)
-      .order('id', { ascending: false });
+      .eq('is_deleted', false);
+
+    if (organizationId) {
+      query = query.eq('organization_id', organizationId);
+    }
+
+    const { data: contracts, error } = await query.order('id', { ascending: false });
 
     if (error) throw new Error(error.message);
     if (!contracts || contracts.length === 0) return [];
@@ -206,8 +211,12 @@ export class ContractService {
     return data;
   }
 
-  async saveContract(formData: ContractFormData, contractId?: number): Promise<boolean> {
+  async saveContract(formData: ContractFormData, contractId?: number, organizationId?: string): Promise<boolean> {
     const payload: Record<string, any> = { ...formData };
+
+    if (organizationId) {
+      payload.organization_id = organizationId;
+    }
 
     // Convert date_naissance from dd/mm/yyyy to yyyy-mm-dd if present
     if (payload.date_naissance) {
@@ -301,7 +310,7 @@ export class ContractService {
 
   // ── Payments ──
 
-  async loadPayments(filters?: PaymentFilters): Promise<Payment[]> {
+  async loadPayments(filters?: PaymentFilters, organizationId?: string): Promise<Payment[]> {
     let query = this.supabase
       .from('contrat_paiements')
       .select(`
@@ -311,10 +320,15 @@ export class ContractService {
         contrats!inner (
           locataire_nom_complet,
           bien_loue_details,
-          ref_locataire
+          ref_locataire,
+          organization_id
         )
       `)
       .order('id', { ascending: false });
+
+    if (organizationId) {
+      query = query.eq('contrats.organization_id', organizationId);
+    }
 
     if (filters) {
       if (filters.locataire) {

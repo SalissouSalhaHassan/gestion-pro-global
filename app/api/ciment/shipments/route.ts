@@ -22,6 +22,10 @@ export async function GET(request: Request) {
       .select("*")
       .order("created_at", { ascending: false });
 
+    if (user.organization_id) {
+      query = query.eq("organization_id", user.organization_id);
+    }
+
     if (clientTel) {
       query = query.ilike("client_tel", `%${clientTel}%`);
     }
@@ -117,15 +121,20 @@ export async function POST(request: Request) {
       total,
       utilisateur: user.username,
       user_id: user.id,
+      organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
       updated_at: new Date().toISOString()
     };
 
     if (id) {
       // Update
-      const { data, error } = await supabase
+      let updateQuery = supabase
         .from("gestion_ciment")
         .update(payload)
-        .eq("id", id)
+        .eq("id", id);
+      if (user.organization_id) {
+        updateQuery = updateQuery.eq("organization_id", user.organization_id);
+      }
+      const { data, error } = await updateQuery
         .select()
         .single();
       

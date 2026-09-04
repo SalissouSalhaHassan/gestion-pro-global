@@ -23,6 +23,10 @@ export async function GET(request: Request) {
       .order("date_devis", { ascending: false })
       .order("id", { ascending: false });
 
+    if (session.organization_id) {
+      query = query.eq("organization_id", session.organization_id);
+    }
+
     if (search) {
       query = query.or(`numero_devis.ilike.%${search}%,client_nom.ilike.%${search}%`);
     }
@@ -104,6 +108,7 @@ export async function POST(request: Request) {
         vendeur: session.username || "Commercial",
         notes: devisData.notes || "",
         conditions_reglement: devisData.conditions_reglement || "Paiement à la commande",
+        organization_id: session.organization_id || "00000000-0000-0000-0000-000000000001",
       })
       .select()
       .single();
@@ -132,6 +137,7 @@ export async function POST(request: Request) {
         taux_tva: tauxTva,
         total_ligne_ht: ligneHT,
         total_ligne_ttc: ligneTTC,
+        organization_id: session.organization_id || "00000000-0000-0000-0000-000000000001",
       };
     });
 

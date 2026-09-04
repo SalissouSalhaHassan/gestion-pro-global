@@ -11,10 +11,16 @@ export async function GET() {
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
-    const { data: runs, error } = await supabase
+    let query = supabase
       .from('tournees_livraison')
       .select('*, colis:colis_livraison(*)')
       .order('created_at', { ascending: false });
+
+    if (session.organization_id) {
+      query = query.eq('organization_id', session.organization_id);
+    }
+
+    const { data: runs, error } = await query;
 
     if (error) throw error;
 
@@ -59,6 +65,7 @@ export async function POST(request: Request) {
         total_colis: items.length,
         total_montant_a_encaisser: totalMontantCOD,
         created_by: session.username || "Admin",
+        organization_id: session.organization_id || "00000000-0000-0000-0000-000000000001",
       })
       .select()
       .single();
@@ -75,6 +82,7 @@ export async function POST(request: Request) {
         adresse_livraison: c.adresse_livraison || "À préciser",
         montant_a_encaisser: Number(c.montant_a_encaisser) || 0,
         statut_livraison: 'EN_ATTENTE',
+        organization_id: session.organization_id || "00000000-0000-0000-0000-000000000001",
       }));
 
       const { error: itemsErr } = await supabase

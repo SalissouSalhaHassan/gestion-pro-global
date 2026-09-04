@@ -20,6 +20,10 @@ export async function GET(request: Request) {
       .select('*, items:bon_commande_items(*)')
       .order('created_at', { ascending: false });
 
+    if (session.organization_id) {
+      query = query.eq('organization_id', session.organization_id);
+    }
+
     if (statut && statut !== 'ALL') {
       query = query.eq('statut', statut);
     }
@@ -58,9 +62,13 @@ export async function POST(request: Request) {
 
     // Auto-generate BC number (e.g., BC-2026-0001)
     const year = new Date().getFullYear();
-    const { count } = await supabase
+    let countQuery = supabase
       .from('bons_commande')
       .select('*', { count: 'exact', head: true });
+    if (session.organization_id) {
+      countQuery = countQuery.eq('organization_id', session.organization_id);
+    }
+    const { count } = await countQuery;
 
     const nextSeq = (count || 0) + 1;
     const numero_bc = `BC-${year}-${String(nextSeq).padStart(4, '0')}`;
@@ -83,6 +91,7 @@ export async function POST(request: Request) {
         notes: notes || '',
         depot_id: depot_id || null,
         created_by: session.username || 'Admin',
+        organization_id: session.organization_id || '00000000-0000-0000-0000-000000000001',
       })
       .select()
       .single();
@@ -106,6 +115,7 @@ export async function POST(request: Request) {
       quantite: Number(it.quantite) || 1,
       prix_achat_unitaire: Number(it.prix_achat_unitaire) || 0,
       total_ligne: (Number(it.quantite) || 1) * (Number(it.prix_achat_unitaire) || 0),
+      organization_id: session.organization_id || '00000000-0000-0000-0000-000000000001',
     }));
 
     const { error: itemsErr } = await supabase

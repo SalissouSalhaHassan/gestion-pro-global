@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth_helper';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -10,8 +11,13 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     
     const supabase = await createClient();
+    const session = await getServerSession();
     let query = supabase.from('voitures').select('*').eq('is_deleted', false);
     
+    if (session?.organization_id) {
+      query = query.eq('organization_id', session.organization_id);
+    }
+
     if (search) {
       query = query.or(`matricule.ilike.%${search}%,marque.ilike.%${search}%,modele.ilike.%${search}%,chauffeur.ilike.%${search}%`);
     }
@@ -33,11 +39,13 @@ export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
     const supabase = await createClient();
+    const session = await getServerSession();
     
     const { data: result, error } = await supabase
       .from('voitures')
       .upsert({
         ...data,
+        organization_id: session?.organization_id || "00000000-0000-0000-0000-000000000001",
         updated_at: new Date().toISOString()
       })
       .select()

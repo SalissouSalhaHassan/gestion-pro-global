@@ -343,6 +343,7 @@ async function logPriceChangeAudit(params: {
       type: "MODIF_PRIX_POS",
       utilisateur: username || entry.changedBy || "Système",
       user_id: userId == null ? null : Number(userId),
+      organization_id: (params as any).organizationId || "00000000-0000-0000-0000-000000000001",
     };
 
     let insertError: any = null;
@@ -455,21 +456,28 @@ export async function POST(request: Request) {
 
     // ─── SELF-HEALING: ENSURE DEFAULT CLIENT AND DEPOT EXIST ───
     if (clientId === 1) {
-      const { data: c1 } = await supabase.from("clients").select("id").eq("id", 1).single();
+      let c1Q = supabase.from("clients").select("id").eq("id", 1);
+      if (user.organization_id) c1Q = c1Q.eq("organization_id", user.organization_id);
+      const { data: c1 } = await c1Q.single();
       if (!c1) {
         await supabase.from("clients").insert({
           id: 1, 
           nom: "CLIENT COMPTANT", 
           ref_client: "COMPTANT", 
-          is_deleted: false 
+          is_deleted: false,
+          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
         });
       }
     }
     
-    const { data: depotsRows } = await supabase
+    let depotsQuery = supabase
       .from("depots")
       .select("id, nom, emplacement")
       .eq("is_active", true);
+    if (user.organization_id) {
+      depotsQuery = depotsQuery.eq("organization_id", user.organization_id);
+    }
+    const { data: depotsRows } = await depotsQuery;
 
     const matchedDepot = Array.isArray(depotsRows)
       ? (depotsRows as DepotRow[]).find((d) => normalizeDepotName(String(d.nom || "")) === requestedDepotKey)
@@ -485,10 +493,16 @@ export async function POST(request: Request) {
     let originalInvoiceItems: EditInvoiceItemRow[] = [];
 
     if (requestedInvoiceId) {
-      const { data: invoiceItems, error: invoiceItemsError } = await supabase
+      let invItemsQ = supabase
         .from("facture_items")
         .select("article_id, qte, depot_origine") // Reverted to depot_origine
         .eq("facture_id", requestedInvoiceId);
+
+      if (user.organization_id) {
+        invItemsQ = invItemsQ.eq("organization_id", user.organization_id);
+      }
+
+      const { data: invoiceItems, error: invoiceItemsError } = await invItemsQ;
 
       if (invoiceItemsError) {
         throw invoiceItemsError;
@@ -502,7 +516,8 @@ export async function POST(request: Request) {
       const { data: newDepot, error: insErr } = await supabase.from("depots").insert({ 
         nom: canonicalDepotName, 
         emplacement: "Point de vente", 
-        is_active: true 
+        is_active: true,
+        organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
       }).select("id").single();
       
       if (!insErr && newDepot) {
@@ -514,11 +529,17 @@ export async function POST(request: Request) {
     const itemIds = items.map(it => it.id);
     
     // Fetch current stock for these items in the specific depot
-    const { data: stockLevels, error: stockErr } = await supabase
+    let stockLevelsQuery = supabase
       .from("stocks")
       .select("article_id, quantite, depot_nom")
       .in("article_id", itemIds)
       .ilike("depot_nom", canonicalDepotName);
+
+    if (user.organization_id) {
+      stockLevelsQuery = stockLevelsQuery.eq("organization_id", user.organization_id);
+    }
+
+    const { data: stockLevels, error: stockErr } = await stockLevelsQuery;
 
     if (stockErr) console.error("Stock check error:", stockErr);
 
@@ -713,6 +734,7 @@ export async function POST(request: Request) {
             bl_number: blNumber,
             date_facture: new Date().toISOString(),
             is_deleted: false,
+            organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
           }])
           .select("id")
           .single();
@@ -727,6 +749,7 @@ export async function POST(request: Request) {
           const itemsPayload = lineItemsToInsert.map((li: any) => ({
             ...li,
             facture_id: createdInvoice.id,
+            organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
           }));
           await supabase.from("facture_items").insert(itemsPayload);
         }
@@ -734,19 +757,26 @@ export async function POST(request: Request) {
         // 4. Update Stocks in depot
         for (const item of items) {
           const qte = Number(item.quantite || 1);
-          const { data: curStock } = await supabase
+          let curStockQ = supabase
             .from("stocks")
             .select("id, quantite")
             .eq("article_id", Number(item.id))
-            .eq("depot_nom", canonicalDepotName)
-            .maybeSingle();
+            .eq("depot_nom", canonicalDepotName);
+          if (user.organization_id) {
+            curStockQ = curStockQ.eq("organization_id", user.organization_id);
+          }
+          const { data: curStock } = await curStockQ.maybeSingle();
 
           if (curStock) {
             const currentQty = Number(curStock.quantite || 0);
-            await supabase
+            let updateStockQ = supabase
               .from("stocks")
               .update({ quantite: currentQty - qte })
               .eq("id", curStock.id);
+            if (user.organization_id) {
+              updateStockQ = updateStockQ.eq("organization_id", user.organization_id);
+            }
+            await updateStockQ;
           } else {
             await supabase
               .from("stocks")
@@ -754,6 +784,7 @@ export async function POST(request: Request) {
                 article_id: Number(item.id),
                 depot_nom: canonicalDepotName,
                 quantite: -qte,
+                organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
               }]);
           }
 
@@ -770,6 +801,7 @@ export async function POST(request: Request) {
               pv: item.prix || 0,
               type: "VENTE_POS",
               utilisateur: user.username ?? "Caisse",
+              organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
             }]);
           } catch (mvtErr) {
             // Mouvements is optional
@@ -784,6 +816,7 @@ export async function POST(request: Request) {
             montant_regle: initialPaye,
             moyen_reglement: isDebt ? "Cash" : normalizedPaymentMethod,
             reference_paiement: `REG-${createdInvoice.id}`,
+            organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
           }]);
         }
       }

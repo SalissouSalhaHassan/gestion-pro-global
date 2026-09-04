@@ -33,11 +33,17 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fetch all non-deleted articles with their stock records
-    const { data, error } = await supabase
+    // Fetch all non-deleted articles with their stock records (scoped by organization)
+    let artQuery = supabase
       .from("articles")
       .select("*, stocks(quantite, depot_nom)")
       .eq("is_deleted", false);
+
+    if (user.organization_id) {
+      artQuery = artQuery.eq("organization_id", user.organization_id);
+    }
+
+    const { data, error } = await artQuery;
 
     if (error) throw error;
 
@@ -140,7 +146,8 @@ export async function POST(request: Request) {
         p_vente_ttc: Number(p_vente_ttc) || 0,
         unite: unite || "Unité",
         categorie_id: categorie_id || null,
-        is_deleted: false
+        is_deleted: false,
+        organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001"
       })
       .select()
       .single();
@@ -170,7 +177,8 @@ export async function POST(request: Request) {
         .insert({
           article_id: article.id,
           depot_nom: targetDepot,
-          quantite: Number(initial_stock) || 0
+          quantite: Number(initial_stock) || 0,
+          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001"
         });
 
       if (stockError) {
@@ -187,10 +195,13 @@ export async function POST(request: Request) {
         stock_avant: 0,
         stock_apres: Number(initial_stock),
         depot: targetDepot,
+        motif: "Stock initial à la création",
+        document_ref: article.reference,
         utilisateur: user.username,
         user_id: user.id,
         nr_doc: `INIT-${article.id}`,
-        fournisseur_client: "Stock Initial"
+        fournisseur_client: "Stock Initial",
+        organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001"
       });
     }
 

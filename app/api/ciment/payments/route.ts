@@ -15,11 +15,17 @@ export async function GET(request: Request) {
     
     if (!shipmentId) return NextResponse.json({ error: "shipmentId manquant" }, { status: 400 });
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("ciment_paiements")
       .select("*")
       .eq("ciment_id", shipmentId)
       .order("date_paiement", { ascending: false });
+
+    if (user.organization_id) {
+      query = query.eq("organization_id", user.organization_id);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
     return NextResponse.json(data || []);
@@ -113,7 +119,8 @@ export async function POST(request: Request) {
             moyen_reglement: "Usage",
             reference_paiement: `CIM-PAY-${paymentId.slice(0, 8)}`,
             utilisateur: user.username,
-            notes: `Paiement Chargement Ciment ID: ${shipmentId}`
+            notes: `Paiement Chargement Ciment ID: ${shipmentId}`,
+            organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
           });
         if (errUsage) throw errUsage;
 
@@ -122,15 +129,23 @@ export async function POST(request: Request) {
     }
 
     // Recalculate Totals before adding
-    const { data: allPaysBefore, error: errAllBefore } = await supabase
+    let allBeforeQuery = supabase
       .from("ciment_paiements")
       .select("montant")
       .eq("ciment_id", shipmentId);
+    if (user.organization_id) {
+      allBeforeQuery = allBeforeQuery.eq("organization_id", user.organization_id);
+    }
+    const { data: allPaysBefore, error: errAllBefore } = await allBeforeQuery;
     
     if (errAllBefore) throw errAllBefore;
     const totalPaidBefore = (allPaysBefore || []).reduce((sum, p) => sum + Number(p.montant || 0), 0);
 
-    const { data: ship2 } = await supabase.from("gestion_ciment").select("total").eq("id", shipmentId).single();
+    let shipQuery = supabase.from("gestion_ciment").select("total").eq("id", shipmentId);
+    if (user.organization_id) {
+      shipQuery = shipQuery.eq("organization_id", user.organization_id);
+    }
+    const { data: ship2 } = await shipQuery.single();
     const totalShipment = Number(ship2?.total || 0);
     const remainder = totalShipment - totalPaidBefore;
 
@@ -149,7 +164,8 @@ export async function POST(request: Request) {
         moyen_paiement: moyen,
         reference: reference || "",
         utilisateur: user.username,
-        user_id: user.id
+        user_id: user.id,
+        organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
       });
     
     if (errPay) throw errPay;

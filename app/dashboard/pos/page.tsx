@@ -1393,8 +1393,12 @@ function PosPage() {
       setError(null);
 
       try {
+        const posSession = getClientSessionFromCookie();
+        const posOrgId = posSession?.organization_id;
+        const posIsAdmin = isAdminOrManagerSession(posSession);
+
         /* ── 1. Articles with aggregated stock ── */
-        const { data: articlesRaw, error: artErr } = await supabase
+        let articlesQuery = supabase
           .from("articles")
           .select(`
             id, reference, code_barre, designation, nom,
@@ -1402,7 +1406,13 @@ function PosPage() {
             is_deleted,
             stocks ( quantite, depot_nom )
           `)
-          .eq("is_deleted", false)
+          .eq("is_deleted", false);
+
+        if (posOrgId) {
+          articlesQuery = articlesQuery.eq("organization_id", posOrgId);
+        }
+
+        const { data: articlesRaw, error: artErr } = await articlesQuery
           .order("designation", { ascending: true })
           .limit(500);
 
@@ -1416,22 +1426,25 @@ function PosPage() {
         let clientQueryBuilder = supabase
           .from("clients")
           .select("id, ref_client, nom, tel, credit_facture, is_deleted, type_client, prix_client")
-          .eq("is_deleted", false)
-          .order("nom", { ascending: true });
+          .eq("is_deleted", false);
 
-        // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client (with safe fallback) ──
-        const posSession = getClientSessionFromCookie();
-        const posIsAdmin = isAdminOrManagerSession(posSession);
+        if (posOrgId) {
+          clientQueryBuilder = clientQueryBuilder.eq("organization_id", posOrgId);
+        }
+
+        clientQueryBuilder = clientQueryBuilder.order("nom", { ascending: true });
         
         let clientsRaw: any[] | null = null;
         let cliErr: any = null;
 
         if (!posIsAdmin && posSession?.id) {
           try {
-            const isolatedRes = await supabase
+            let isolatedQuery = supabase
               .from("clients")
               .select("id, ref_client, nom, tel, credit_facture, is_deleted, type_client, prix_client")
-              .eq("is_deleted", false)
+              .eq("is_deleted", false);
+            if (posOrgId) isolatedQuery = isolatedQuery.eq("organization_id", posOrgId);
+            const isolatedRes = await isolatedQuery
               .or(`created_by.eq.${posSession.id},id.eq.${DEFAULT_CLIENT_ID}`)
               .order("nom", { ascending: true })
               .limit(500);
@@ -1461,17 +1474,29 @@ function PosPage() {
         }
 
         /* ── 3. Depots ── */
-        const { data: depotsRaw, error: depErr } = await supabase
+        let depotsQuery = supabase
           .from("depots")
           .select("id, nom, emplacement")
           .eq("is_deleted", false)
           .eq("is_active", true);
 
+        if (posOrgId) {
+          depotsQuery = depotsQuery.eq("organization_id", posOrgId);
+        }
+
+        const { data: depotsRaw, error: depErr } = await depotsQuery;
+
         /* ── 4. Company Info ── */
-        const { data: companyRaw } = await supabase
+        let companyQuery = supabase
           .from("informations_entreprise")
-          .select("nom_entreprise, telephone")
-          .eq("id", 1)
+          .select("nom_entreprise, telephone");
+
+        if (posOrgId) {
+          companyQuery = companyQuery.eq("organization_id", posOrgId);
+        }
+
+        const { data: companyRaw } = await companyQuery
+          .limit(1)
           .maybeSingle();
 
         if (!alive) return;

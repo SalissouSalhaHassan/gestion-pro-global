@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth_helper';
 import { ContractService } from '@/lib/services/loyer.service';
 
 // GET /api/loyers — Load all contracts
 export async function GET() {
   try {
     const supabase = await createClient();
+    const session = await getServerSession();
     const service = new ContractService(supabase);
-    const contracts = await service.loadContracts();
+    const contracts = await service.loadContracts(session?.organization_id);
     return NextResponse.json(contracts);
   } catch (error: any) {
     console.error('GET /api/loyers error:', error);
@@ -20,8 +22,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const supabase = await createClient();
+    const session = await getServerSession();
     const service = new ContractService(supabase);
-    await service.saveContract(body);
+    await service.saveContract(body, undefined, session?.organization_id);
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error: any) {
     console.error('POST /api/loyers error:', error);

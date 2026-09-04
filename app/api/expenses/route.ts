@@ -21,6 +21,11 @@ export async function GET(request: Request) {
       .order("date_depense", { ascending: false })
       .order("id", { ascending: false });
 
+    // Strict multi-tenant isolation
+    if (user.organization_id) {
+      query = query.eq("organization_id", user.organization_id);
+    }
+
     // Filter by depot/emplacement for non-admin users instead of created_by
     if (!isAdmin && user.emplacement) {
       query = query.eq("emplacement", user.emplacement);
@@ -69,27 +74,37 @@ export async function POST(request: Request) {
       expenseData.emplacement = user.emplacement;
     }
 
+    if (user.organization_id) {
+      expenseData.organization_id = user.organization_id;
+    }
+
     if (id) {
       const isAdmin = await isAdminOrManager(user);
       
       // Non-admins can only edit if they own the depot record
       if (!isAdmin) {
-        const { data: existing } = await supabase
+        let checkQuery = supabase
           .from("depenses")
           .select("emplacement")
-          .eq("id", id)
-          .single();
+          .eq("id", id);
+        if (user.organization_id) {
+          checkQuery = checkQuery.eq("organization_id", user.organization_id);
+        }
+        const { data: existing } = await checkQuery.single();
         
         if (existing?.emplacement && existing.emplacement !== user.emplacement) {
           return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
         }
       }
 
-      const { data, error } = await supabase
+      let updateQuery = supabase
         .from("depenses")
         .update(expenseData)
-        .eq("id", id)
-        .select();
+        .eq("id", id);
+      if (user.organization_id) {
+        updateQuery = updateQuery.eq("organization_id", user.organization_id);
+      }
+      const { data, error } = await updateQuery.select();
       
       if (error) throw error;
       return NextResponse.json({ message: "Dépense mise à jour", data });
@@ -122,21 +137,28 @@ export async function DELETE(request: Request) {
 
     const isAdmin = await isAdminOrManager(user);
     if (!isAdmin) {
-      const { data: existing } = await supabase
+      let checkQuery = supabase
         .from("depenses")
         .select("emplacement")
-        .eq("id", id)
-        .single();
+        .eq("id", id);
+      if (user.organization_id) {
+        checkQuery = checkQuery.eq("organization_id", user.organization_id);
+      }
+      const { data: existing } = await checkQuery.single();
 
       if (existing?.emplacement && existing.emplacement !== user.emplacement) {
         return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
       }
     }
 
-    const { error } = await supabase
+    let deleteQuery = supabase
       .from("depenses")
       .delete()
       .eq("id", id);
+    if (user.organization_id) {
+      deleteQuery = deleteQuery.eq("organization_id", user.organization_id);
+    }
+    const { error } = await deleteQuery;
 
     if (error) throw error;
 
