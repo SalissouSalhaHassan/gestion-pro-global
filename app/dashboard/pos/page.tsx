@@ -31,6 +31,9 @@ import {
   ArrowLeft,
   Info,
   Camera,
+  PauseCircle,
+  Layers,
+  Tag,
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
@@ -120,6 +123,22 @@ type PendingPriceChange = {
   oldPrice: number;
   newPrice: number;
   quantity: number;
+};
+
+type ParkedCart = {
+  id: string;
+  time: string;
+  timestamp?: number;
+  note?: string;
+  cart: CartItem[];
+  clientId: string | number;
+  clientNom?: string;
+  totalAmount?: number;
+  selectedDepot: string;
+  pricingTier?: "Détail" | "Gros" | "Revendeur";
+  invoiceId: string | number | null;
+  priceChanges: PriceChangeLogEntry[];
+  priceDrafts: Record<string, string>;
 };
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -939,16 +958,36 @@ function PosPage() {
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
 
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [parkedCarts, setParkedCarts] = useState<{
-    id: string;
-    time: string;
-    cart: CartItem[];
-    clientId: string | number;
-    selectedDepot: string;
-    invoiceId: string | number | null;
-    priceChanges: PriceChangeLogEntry[];
-    priceDrafts: Record<string, string>;
-  }[]>([]);
+  const [parkedCarts, setParkedCarts] = useState<ParkedCart[]>([]);
+  const [isParkedCartsModalOpen, setIsParkedCartsModalOpen] = useState(false);
+  const [parkNotePromptOpen, setParkNotePromptOpen] = useState(false);
+  const [parkNoteInput, setParkNoteInput] = useState("");
+  const [previewParkedCart, setPreviewParkedCart] = useState<ParkedCart | null>(null);
+
+  // Load parked carts from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("pos_parked_carts_v2");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setParkedCarts(parsed);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load parked carts from localStorage", e);
+    }
+  }, []);
+
+  // Save parked carts to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("pos_parked_carts_v2", JSON.stringify(parkedCarts));
+    } catch (e) {
+      console.error("Failed to sync parked carts to localStorage", e);
+    }
+  }, [parkedCarts]);
+
   const [query, setQuery] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | number>(1);
@@ -1181,60 +1220,165 @@ function PosPage() {
     return () => clearInterval(t);
   }, []);
 
-  /* ── Parked Carts Logic ── */
-  const parkCurrentCart = () => {
+  /* ── 4K Parked Carts / Multi-Tab Logic ── */
+  const parkCurrentCart = (noteText?: string) => {
     if (cart.length === 0) return;
-    const newTab = {
-      id: Math.random().toString(36).substring(7),
-      time: new Date().toLocaleTimeString("fr-FR", {hour: '2-digit', minute:'2-digit'}),
+    const clientObj = clients.find(c => String(c.id) === String(selectedClientId));
+    const clientName = clientObj?.nom || (String(selectedClientId) === "1" ? "Client Passant" : `Client #${selectedClientId}`);
+    const currentTotal = cart.reduce((sum, it) => sum + (Number(it.p_vente_ttc) || 0) * (Number(it.quantite) || 1), 0);
+
+    const finalNote = (noteText !== undefined ? noteText : parkNoteInput).trim();
+
+    const newTab: ParkedCart = {
+      id: "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
+      time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+      timestamp: Date.now(),
+      note: finalNote || undefined,
       cart: [...cart],
       clientId: selectedClientId,
+      clientNom: clientName,
+      totalAmount: currentTotal,
       selectedDepot,
+      pricingTier,
       invoiceId: editInvoiceId,
       priceChanges: [...currentPriceChanges],
       priceDrafts: { ...priceDrafts },
     };
-    setParkedCarts([...parkedCarts, newTab]);
+
+    setParkedCarts(prev => [newTab, ...prev]);
     setCart([]);
     setCurrentPriceChanges([]);
     setPriceDrafts({});
     setPendingPriceChange(null);
     setPriceChangeReason("");
     setSelectedClientId(1);
+    setPricingTier("Détail");
     setEditInvoiceId(null);
+    setParkNoteInput("");
+    setParkNotePromptOpen(false);
+
+    setSuccess(`✅ Panier "${clientName}" mis en attente (${newTab.cart.length} art. • ${formatAmount(currentTotal)} F CFA)`);
+    setTimeout(() => setSuccess(null), 3000);
+  };
+
+  const deleteParkedCart = (tabId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!confirm("Voulez-vous vraiment supprimer ce ticket en attente ?")) return;
+    setParkedCarts(prev => prev.filter(t => t.id !== tabId));
+    if (previewParkedCart?.id === tabId) setPreviewParkedCart(null);
+    setSuccess("Ticket supprimé avec succès.");
+    setTimeout(() => setSuccess(null), 2000);
   };
 
   const restoreParkedCart = (tabId: string) => {
     const tabToRestore = parkedCarts.find(t => t.id === tabId);
     if (!tabToRestore) return;
 
-    const activeCartSnapshot = cart.length > 0
-      ? {
-          id: Math.random().toString(36).substring(7),
-          time: new Date().toLocaleTimeString("fr-FR", {hour: '2-digit', minute:'2-digit'}),
-          cart: [...cart],
-          clientId: selectedClientId,
-          selectedDepot,
-          invoiceId: editInvoiceId,
-          priceChanges: [...currentPriceChanges],
-          priceDrafts: { ...priceDrafts },
-        }
-      : null;
+    let activeCartSnapshot: ParkedCart | null = null;
+    if (cart.length > 0) {
+      const activeClient = clients.find(c => String(c.id) === String(selectedClientId));
+      const activeTotal = cart.reduce((sum, it) => sum + (Number(it.p_vente_ttc) || 0) * (Number(it.quantite) || 1), 0);
+      activeCartSnapshot = {
+        id: "tab_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
+        time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+        timestamp: Date.now(),
+        note: "Panier précédent mis en attente",
+        cart: [...cart],
+        clientId: selectedClientId,
+        clientNom: activeClient?.nom || (String(selectedClientId) === "1" ? "Client Passant" : `Client #${selectedClientId}`),
+        totalAmount: activeTotal,
+        selectedDepot,
+        pricingTier,
+        invoiceId: editInvoiceId,
+        priceChanges: [...currentPriceChanges],
+        priceDrafts: { ...priceDrafts },
+      };
+    }
 
     setParkedCarts((prev) => {
       const remaining = prev.filter((tab) => tab.id !== tabId);
-      return activeCartSnapshot ? [...remaining, activeCartSnapshot] : remaining;
+      return activeCartSnapshot ? [activeCartSnapshot, ...remaining] : remaining;
     });
 
     setCart(tabToRestore.cart);
     setSelectedClientId(tabToRestore.clientId);
-    setSelectedDepot(tabToRestore.selectedDepot || "");
+    if (tabToRestore.pricingTier) setPricingTier(tabToRestore.pricingTier);
+    if (tabToRestore.selectedDepot) setSelectedDepot(tabToRestore.selectedDepot);
     setEditInvoiceId(tabToRestore.invoiceId ?? null);
     setCurrentPriceChanges(tabToRestore.priceChanges || []);
     setPriceDrafts(tabToRestore.priceDrafts || {});
     setPendingPriceChange(null);
     setPriceChangeReason("");
     setSelectedItemId(tabToRestore.cart[0]?.id ?? null);
+    setIsParkedCartsModalOpen(false);
+    setPreviewParkedCart(null);
+
+    setSuccess(`✅ Ticket "${tabToRestore.clientNom || 'En attente'}" rechargé (${formatAmount(tabToRestore.totalAmount || 0)} F CFA).`);
+    setTimeout(() => setSuccess(null), 2500);
+  };
+
+  const printHoldingSlip = (tab: ParkedCart, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const printWindow = window.open("", "_blank", "width=380,height=600");
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Ticket d'attente #${tab.id}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 16px; font-size: 13px; color: #000; line-height: 1.4; }
+            .center { text-align: center; }
+            .bold { font-weight: 900; }
+            .line { border-bottom: 1px dashed #555; margin: 10px 0; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            td, th { padding: 4px 0; }
+            .pill { display: inline-block; background: #eee; padding: 2px 8px; border-radius: 6px; font-size: 11px; }
+          </style>
+        </head>
+        <body>
+          <div class="center bold" style="font-size: 16px; letter-spacing: 1px;">TICKET EN ATTENTE (HOLD)</div>
+          <div class="center" style="font-size: 11px; color: #555; margin-top: 2px;">Date: ${new Date(tab.timestamp || Date.now()).toLocaleString("fr-FR")}</div>
+          <div class="line"></div>
+          <div><strong>Client:</strong> ${tab.clientNom || "Client Passant"}</div>
+          ${tab.note ? `<div style="margin-top: 3px;"><strong>Note / Repère:</strong> <span class="pill">${tab.note}</span></div>` : ""}
+          <div style="margin-top: 3px;"><strong>Dépôt:</strong> ${tab.selectedDepot || "Principal"}</div>
+          <div style="margin-top: 3px;"><strong>Articles:</strong> ${tab.cart.length} référence(s)</div>
+          <div class="line"></div>
+          <table>
+            <thead>
+              <tr style="border-bottom: 1px solid #ddd;">
+                <th align="left">Article</th>
+                <th align="center">Qté</th>
+                <th align="right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tab.cart.map(it => `
+                <tr>
+                  <td>${it.designation}</td>
+                  <td align="center">${it.quantite}</td>
+                  <td align="right">${(Number(it.p_vente_ttc) * Number(it.quantite)).toLocaleString("fr-FR")}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+          <div class="line"></div>
+          <div style="font-size: 16px; display: flex; justify-content: space-between; margin: 8px 0;">
+            <span class="bold">TOTAL TTC:</span>
+            <span class="bold">${(Number(tab.totalAmount) || 0).toLocaleString("fr-FR")} F CFA</span>
+          </div>
+          <div class="line"></div>
+          <div class="center" style="font-size: 10px; color: #666;">
+            Conservez ce ticket pour reprendre votre commande à la caisse.<br/>
+            <strong>Gestion Pro Global 4K POS</strong>
+          </div>
+          <script>
+            window.onload = function() { window.print(); window.close(); };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -2250,6 +2394,42 @@ function PosPage() {
               </select>
             </div>
 
+            {/* Parked Carts Counter / Manager Button */}
+            <button
+              onClick={() => setIsParkedCartsModalOpen(true)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                background: parkedCarts.length > 0 ? "rgba(245, 158, 11, 0.25)" : "rgba(255,255,255,0.08)",
+                border: parkedCarts.length > 0 ? "1px solid rgba(245, 158, 11, 0.6)" : "1px solid rgba(255,255,255,0.15)",
+                padding: "6px 12px",
+                borderRadius: "10px",
+                color: parkedCarts.length > 0 ? "#fef3c7" : "#cbd5e1",
+                cursor: "pointer",
+                fontWeight: 800,
+                fontSize: 13,
+                transition: "all 0.2s",
+              }}
+              className="hover:brightness-125"
+              title="Voir et gérer tous les tickets en attente"
+            >
+              <PauseCircle size={17} className={parkedCarts.length > 0 ? "text-amber-400 animate-pulse" : "text-slate-400"} />
+              <span>En attente</span>
+              {parkedCarts.length > 0 && (
+                <span style={{
+                  background: "#f59e0b",
+                  color: "#78350f",
+                  fontWeight: 900,
+                  fontSize: 11,
+                  padding: "1px 6px",
+                  borderRadius: 8,
+                }}>
+                  {parkedCarts.length}
+                </span>
+              )}
+            </button>
+
             <div style={S.headerCashier}>
               <UserRound size={18} />
               <span>Caissier: {cashierName}</span>
@@ -2267,27 +2447,147 @@ function PosPage() {
           <OfflinePOSBar />
         </div>
 
-        {/* ════════════════════ TABS / PARKED CARTS ════════════════════ */}
-        {parkedCarts.length > 0 && (
-          <div style={{ padding: "10px 24px", display: "flex", gap: "10px", overflowX: "auto", background: "rgba(15, 23, 42, 0.04)", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-             {parkedCarts.map((pCart, idx) => (
-               <button 
-                 key={pCart.id} 
-                 onClick={() => restoreParkedCart(pCart.id)}
-                 style={{ 
-                   display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", 
-                   background: "#fff", borderRadius: "12px", border: "1px solid #cbd5e1", 
-                   color: "#334155", fontWeight: "bold", fontSize: "14px", cursor: "pointer",
-                   boxShadow: "0 2px 4px rgba(0,0,0,0.05)", flexShrink: 0
-                 }}
-               >
-                 <Clock size={16} className="text-indigo-500" />
-                 Ticket en attente #{idx + 1} <span style={{color: "#94a3b8", fontSize: 12}}>({pCart.time})</span>
-                 <span style={{background: "#e0e7ff", color: "#4338ca", padding: "2px 6px", borderRadius: 6, fontSize: 12, marginLeft: 4}}>
-                   {pCart.cart.length} art.
-                 </span>
-               </button>
-             ))}
+        {/* ════════════════════ 4K MULTI-CART / PARKED TABS BAR ════════════════════ */}
+        {(parkedCarts.length > 0 || cart.length > 0) && (
+          <div style={{
+            padding: "8px 24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            background: "rgba(15, 23, 42, 0.03)",
+            borderBottom: "1px solid rgba(0,0,0,0.06)",
+            overflowX: "auto"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, overflowX: "auto" }}>
+              {/* Active Current Cart Pill */}
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "7px 14px",
+                background: "linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)",
+                borderRadius: 12,
+                color: "#fff",
+                fontWeight: 800,
+                fontSize: 13,
+                boxShadow: "0 2px 6px rgba(79, 70, 229, 0.3)",
+                flexShrink: 0
+              }}>
+                <ShoppingCart size={15} />
+                <span>Panier Actif</span>
+                <span style={{ background: "rgba(255,255,255,0.2)", padding: "1px 7px", borderRadius: 6, fontSize: 11 }}>
+                  {cart.length} art. • {formatAmount(ticketTotal)} F
+                </span>
+              </div>
+
+              {/* Parked Carts Tabs */}
+              {parkedCarts.map((pCart, idx) => (
+                <div
+                  key={pCart.id}
+                  onClick={() => restoreParkedCart(pCart.id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 12px",
+                    background: "#fff",
+                    borderRadius: 12,
+                    border: "1px solid #cbd5e1",
+                    color: "#1e293b",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: "pointer",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                    flexShrink: 0,
+                    transition: "all 0.15s",
+                  }}
+                  className="hover:border-indigo-400 hover:shadow-md group"
+                  title="Cliquer pour reprendre ce ticket"
+                >
+                  <Clock size={15} className="text-amber-500 flex-shrink-0" />
+                  <span>#{idx + 1}</span>
+                  <span style={{ color: "#475569", fontWeight: 800 }}>{pCart.clientNom || "Passant"}</span>
+                  {pCart.note && (
+                    <span style={{ background: "#fef3c7", color: "#92400e", padding: "1px 6px", borderRadius: 4, fontSize: 10, maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {pCart.note}
+                    </span>
+                  )}
+                  <span style={{ background: "#f1f5f9", color: "#475569", padding: "1px 6px", borderRadius: 6, fontSize: 11, fontFamily: "monospace" }}>
+                    {formatAmount(pCart.totalAmount || 0)} F
+                  </span>
+                  {/* Print Slip Fast Icon */}
+                  <button
+                    onClick={(e) => printHoldingSlip(pCart, e)}
+                    style={{ background: "none", border: "none", color: "#94a3b8", padding: 2, cursor: "pointer" }}
+                    className="hover:text-indigo-600"
+                    title="Imprimer ticket d'attente"
+                  >
+                    <Printer size={13} />
+                  </button>
+                  {/* Delete Fast Icon */}
+                  <button
+                    onClick={(e) => deleteParkedCart(pCart.id, e)}
+                    style={{ background: "none", border: "none", color: "#94a3b8", padding: 2, cursor: "pointer" }}
+                    className="hover:text-rose-600"
+                    title="Supprimer définitivement ce ticket"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Actions: Park current, or Manage all */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              {cart.length > 0 && (
+                <button
+                  onClick={() => setParkNotePromptOpen(true)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "6px 12px",
+                    background: "#fef3c7",
+                    border: "1px solid #f59e0b",
+                    borderRadius: 10,
+                    color: "#92400e",
+                    fontWeight: 800,
+                    fontSize: 12,
+                    cursor: "pointer"
+                  }}
+                  className="hover:bg-amber-100"
+                  title="Mettre en attente avec note optionnelle"
+                >
+                  <PauseCircle size={14} />
+                  <span>Mettre en attente</span>
+                </button>
+              )}
+
+              {parkedCarts.length > 0 && (
+                <button
+                  onClick={() => setIsParkedCartsModalOpen(true)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "6px 12px",
+                    background: "#e0e7ff",
+                    border: "1px solid #818cf8",
+                    borderRadius: 10,
+                    color: "#3730a3",
+                    fontWeight: 800,
+                    fontSize: 12,
+                    cursor: "pointer"
+                  }}
+                  className="hover:bg-indigo-100"
+                  title="Gestionnaire complet des tickets en attente"
+                >
+                  <Layers size={14} />
+                  <span>Gérer ({parkedCarts.length})</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -2935,7 +3235,7 @@ function PosPage() {
           </button>
           <button
             className="pos-footer-btn"
-            onClick={parkCurrentCart}
+            onClick={() => setParkNotePromptOpen(true)}
             disabled={cart.length === 0}
             style={{...S.footerBtn(
               "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)",
@@ -3250,6 +3550,351 @@ function PosPage() {
             router.push("/dashboard");
           }}
         />
+      )}
+
+      {/* ─── Fast Parking Note Prompt Modal ─── */}
+      {parkNotePromptOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setParkNotePromptOpen(false)}></div>
+          <div style={{
+            position: "relative",
+            width: "100%",
+            maxWidth: 480,
+            background: "#fff",
+            borderRadius: 24,
+            padding: 28,
+            boxShadow: "0 25px 50px -12px rgba(0,0,0,0.3)",
+            animation: "scaleUp 0.25s ease-out"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ background: "#fef3c7", padding: 10, borderRadius: 14, color: "#d97706" }}>
+                  <PauseCircle size={24} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 18, fontWeight: 900, color: "#0f172a" }}>Mettre le panier en attente</h3>
+                  <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>
+                    {cart.length} articles • {formatAmount(ticketTotal)} F CFA
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setParkNotePromptOpen(false)}
+                style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", padding: 4 }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 800, color: "#475569", marginBottom: 6, textTransform: "uppercase" }}>
+                  Note ou repère (Optionnel)
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={parkNoteInput}
+                  onChange={(e) => setParkNoteInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") parkCurrentCart();
+                  }}
+                  placeholder="Ex: Client parti chercher son sac, Table 3, M. Oumarou..."
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px",
+                    borderRadius: 14,
+                    border: "2px solid #e2e8f0",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    outline: "none",
+                  }}
+                />
+              </div>
+
+              <div style={{ background: "#f8fafc", padding: 12, borderRadius: 14, border: "1px solid #e2e8f0", fontSize: 12, color: "#475569" }}>
+                Client sélectionné : <strong>{clients.find(c => String(c.id) === String(selectedClientId))?.nom || "Client Passant"}</strong>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => parkCurrentCart()}
+                  style={{
+                    padding: "13px",
+                    borderRadius: 14,
+                    border: "none",
+                    background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+                    color: "#fff",
+                    fontWeight: 800,
+                    fontSize: 14,
+                    cursor: "pointer",
+                    boxShadow: "0 4px 12px rgba(217, 119, 6, 0.3)"
+                  }}
+                >
+                  Confirmer et mettre en attente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => parkCurrentCart("")}
+                  style={{
+                    padding: "10px",
+                    borderRadius: 14,
+                    border: "1px solid #e2e8f0",
+                    background: "#fff",
+                    color: "#64748b",
+                    fontWeight: 700,
+                    fontSize: 12,
+                    cursor: "pointer"
+                  }}
+                >
+                  Mettre en attente directement (Sans note)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 4K Parked Carts Manager Modal ─── */}
+      {isParkedCartsModalOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-xs" onClick={() => setIsParkedCartsModalOpen(false)}></div>
+          <div style={{
+            position: "relative",
+            width: "100%",
+            maxWidth: 820,
+            maxHeight: "88vh",
+            background: "#fff",
+            borderRadius: 28,
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "0 25px 60px -15px rgba(0,0,0,0.4)",
+            animation: "scaleUp 0.25s ease-out"
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: "20px 24px",
+              background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)",
+              color: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ background: "rgba(245, 158, 11, 0.2)", border: "1px solid rgba(245, 158, 11, 0.4)", padding: 10, borderRadius: 14, color: "#fbbf24" }}>
+                  <Layers size={22} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 18, fontWeight: 900, color: "#fff", margin: 0 }}>
+                    Gestionnaire des Tickets en Attente
+                  </h2>
+                  <p style={{ fontSize: 12, color: "#cbd5e1", margin: "2px 0 0 0" }}>
+                    {parkedCarts.length} ticket(s) en attente • Cumul: {formatAmount(parkedCarts.reduce((sum, t) => sum + (t.totalAmount || 0), 0))} F CFA
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsParkedCartsModalOpen(false)}
+                style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", borderRadius: 12, padding: 8, cursor: "pointer" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="pos-scrollbar" style={{ padding: 24, overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
+              {parkedCarts.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px 16px", color: "#94a3b8" }}>
+                  <PauseCircle size={48} style={{ margin: "0 auto 12px auto", opacity: 0.3 }} />
+                  <p style={{ fontSize: 16, fontWeight: 800, color: "#64748b" }}>Aucun ticket en attente</p>
+                  <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 4 }}>
+                    Les paniers que vous mettez en attente depuis la caisse s'afficheront ici pour reprise immédiate.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14 }}>
+                  {parkedCarts.map((pCart, idx) => (
+                    <div
+                      key={pCart.id}
+                      style={{
+                        background: "#fff",
+                        borderRadius: 18,
+                        border: "1px solid #e2e8f0",
+                        padding: 16,
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 12,
+                        transition: "all 0.2s"
+                      }}
+                      className="hover:border-indigo-300"
+                    >
+                      {/* Ticket Top Info */}
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ background: "#fef3c7", color: "#92400e", fontWeight: 900, fontSize: 12, padding: "3px 8px", borderRadius: 8 }}>
+                            #{idx + 1}
+                          </span>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>
+                            {pCart.clientNom || "Client Passant"}
+                          </span>
+                          {pCart.note && (
+                            <span style={{ background: "#eff6ff", color: "#1e40af", fontWeight: 700, fontSize: 11, padding: "2px 8px", borderRadius: 6, border: "1px solid #dbeafe" }}>
+                              🏷️ {pCart.note}
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
+                            <Clock size={14} /> {pCart.time}
+                          </span>
+                          <span style={{ fontSize: 11, background: "#f1f5f9", color: "#475569", padding: "2px 8px", borderRadius: 6, fontWeight: 700 }}>
+                            {pCart.selectedDepot || "Principal"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Items Preview Table */}
+                      <div style={{ background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                          <thead>
+                            <tr style={{ background: "#f1f5f9", borderBottom: "1px solid #e2e8f0", color: "#64748b", textTransform: "uppercase", fontSize: 10, fontWeight: 800 }}>
+                              <th style={{ padding: "6px 12px", textAlign: "left" }}>Article</th>
+                              <th style={{ padding: "6px 12px", textAlign: "center" }}>Qté</th>
+                              <th style={{ padding: "6px 12px", textAlign: "right" }}>P.U</th>
+                              <th style={{ padding: "6px 12px", textAlign: "right" }}>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pCart.cart.slice(0, 4).map((it, iIdx) => (
+                              <tr key={iIdx} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                <td style={{ padding: "6px 12px", fontWeight: 700, color: "#1e293b" }}>{it.designation}</td>
+                                <td style={{ padding: "6px 12px", textAlign: "center", fontWeight: 800, color: "#475569" }}>{it.quantite}</td>
+                                <td style={{ padding: "6px 12px", textAlign: "right", fontFamily: "monospace", color: "#64748b" }}>
+                                  {formatAmount(it.p_vente_ttc)} F
+                                </td>
+                                <td style={{ padding: "6px 12px", textAlign: "right", fontFamily: "monospace", fontWeight: 800, color: "#0f172a" }}>
+                                  {formatAmount(it.p_vente_ttc * it.quantite)} F
+                                </td>
+                              </tr>
+                            ))}
+                            {pCart.cart.length > 4 && (
+                              <tr>
+                                <td colSpan={4} style={{ padding: "6px 12px", textAlign: "center", color: "#94a3b8", fontSize: 11, fontStyle: "italic" }}>
+                                  + {pCart.cart.length - 4} autre(s) article(s)...
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Card Bottom Row: Total & Actions */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 4 }}>
+                        <div>
+                          <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>Total du ticket :</span>
+                          <span style={{ fontSize: 18, fontWeight: 900, color: "#4f46e5", marginLeft: 8, fontFamily: "monospace" }}>
+                            {formatAmount(pCart.totalAmount || 0)} F CFA
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <button
+                            onClick={(e) => printHoldingSlip(pCart, e)}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "7px 12px",
+                              background: "#f1f5f9",
+                              border: "1px solid #cbd5e1",
+                              borderRadius: 10,
+                              color: "#334155",
+                              fontWeight: 700,
+                              fontSize: 12,
+                              cursor: "pointer"
+                            }}
+                            className="hover:bg-slate-200"
+                            title="Imprimer un ticket thermique d'attente"
+                          >
+                            <Printer size={14} />
+                            <span>Imprimer Fiche</span>
+                          </button>
+
+                          <button
+                            onClick={(e) => deleteParkedCart(pCart.id, e)}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "7px 12px",
+                              background: "#fee2e2",
+                              border: "1px solid #fecaca",
+                              borderRadius: 10,
+                              color: "#ef4444",
+                              fontWeight: 700,
+                              fontSize: 12,
+                              cursor: "pointer"
+                            }}
+                            className="hover:bg-rose-200"
+                            title="Supprimer ce ticket"
+                          >
+                            <Trash2 size={14} />
+                            <span>Supprimer</span>
+                          </button>
+
+                          <button
+                            onClick={() => restoreParkedCart(pCart.id)}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "7px 16px",
+                              background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                              border: "none",
+                              borderRadius: 10,
+                              color: "#fff",
+                              fontWeight: 800,
+                              fontSize: 12,
+                              cursor: "pointer",
+                              boxShadow: "0 2px 6px rgba(16, 185, 129, 0.3)"
+                            }}
+                            className="hover:brightness-110"
+                          >
+                            <CheckCircle2 size={15} />
+                            <span>Reprendre en Caisse</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: "14px 24px", background: "#f8fafc", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setIsParkedCartsModalOpen(false)}
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: 12,
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  color: "#475569",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: "pointer"
+                }}
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <style jsx global>{`
