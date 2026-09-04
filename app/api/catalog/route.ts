@@ -73,7 +73,7 @@ export async function GET(request: Request) {
 
     // Unique categories
     const categories = Array.from(
-      new Set(products.map((p) => p.famille).filter(Boolean))
+      new Set(products.map((p: any) => p.famille).filter(Boolean))
     );
 
     return NextResponse.json({
