@@ -37,18 +37,43 @@ export async function POST(req: Request) {
 
     const supabase = getAdminClient();
 
-    // 1. Check if username is already taken in users
+    // 1. Resolve unique username for admin user
+    let finalAdminUsername = effectiveAdminUsername;
     const { data: existingUser } = await supabase
       .from('users')
       .select('id')
-      .eq('utilisateur', effectiveAdminUsername)
+      .eq('utilisateur', finalAdminUsername)
       .maybeSingle();
 
     if (existingUser) {
-      return NextResponse.json(
-        { error: 'Cet identifiant est déjà utilisé. Veuillez en choisir un autre.' },
-        { status: 409 }
-      );
+      // If the username is already taken (very common when typing "admin"),
+      // intelligently resolve it with the organization brand name
+      const words = effectiveOrgName
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .split(/\s+/)
+        .filter((w: string) => !['ets', 'ste', 'sarl', 'sa', 'eurl', 'groupe', 'cie'].includes(w) && w.length > 1);
+
+      const mainKeyword = words[0] || effectiveOrgName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10);
+      const cleanKeyword = mainKeyword.replace(/[^a-z0-9]/g, '').slice(0, 15) || 'org';
+
+      let candidate = effectiveAdminUsername.toLowerCase() === 'admin' 
+        ? `admin_${cleanKeyword}` 
+        : `${effectiveAdminUsername}_${cleanKeyword}`;
+
+      // Check if candidate is also taken
+      const { data: candidateCheck } = await supabase
+        .from('users')
+        .select('id')
+        .eq('utilisateur', candidate)
+        .maybeSingle();
+
+      if (candidateCheck) {
+        candidate = `${candidate}_${Math.floor(100 + Math.random() * 900)}`;
+      }
+
+      finalAdminUsername = candidate;
     }
 
     // 2. Create Organization
@@ -116,10 +141,10 @@ export async function POST(req: Request) {
     const { data: newUser, error: userError } = await supabase
       .from('users')
       .insert({
-        utilisateur: effectiveAdminUsername,
+        utilisateur: finalAdminUsername,
         mot_de_passe: effectivePassword,
-        nom_prenom: effectiveAdminUsername,
-        nom_complet: effectiveAdminUsername,
+        nom_prenom: finalAdminUsername,
+        nom_complet: finalAdminUsername,
         admin: 'Oui',
         role_id: 1, // Admin role
         emplacement: 'BOUTIQUE',
@@ -152,7 +177,7 @@ export async function POST(req: Request) {
       user_id: newUser.id,
       username: newUser.utilisateur,
       action: 'ORGANIZATION_REGISTER',
-      details: `Création de l’organisation ${newOrg.name} avec essai gratuit de 14 jours.`,
+      details: `Création de l’organisation ${newOrg.name} avec forfait ${plan}.`,
       organization_id: newOrg.id
     });
 
@@ -166,7 +191,7 @@ export async function POST(req: Request) {
       depots: 'BOUTIQUE',
       organization_id: newOrg.id,
       organization_name: newOrg.name,
-      plan: 'trial',
+      plan: plan || 'trial',
       permissions: ['ALL']
     };
 
@@ -174,16 +199,24 @@ export async function POST(req: Request) {
       success: true,
       organization: newOrg,
       user: { id: newUser.id, username: newUser.utilisateur },
+      credentials: {
+        orgName: newOrg.name,
+        username: newUser.utilisateur,
+        password: effectivePassword,
+        phone: phone,
+      },
       session: sessionData
     });
 
-    // Set cookie
-    res.cookies.set('gp_session', encodeURIComponent(JSON.stringify(sessionData)), {
-      path: '/',
-      maxAge: 86400,
-      sameSite: 'lax',
-      httpOnly: false
-    });
+    // Only set login cookie if not created by Super Admin from the platform console
+    if (!body.fromAdminPlatform) {
+      res.cookies.set('gp_session', encodeURIComponent(JSON.stringify(sessionData)), {
+        path: '/',
+        maxAge: 86400,
+        sameSite: 'lax',
+        httpOnly: false
+      });
+    }
 
     return res;
   } catch (err: any) {

@@ -142,15 +142,18 @@ export default function PlatformManagementPage() {
           password: generatedPass,
           phone: newOrgForm.phone,
           email: newOrgForm.email || `admin@${newOrgForm.name.toLowerCase().replace(/\s+/g, "")}.com`,
+          fromAdminPlatform: true,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Échec de création");
 
+      const finalUsername = data.user?.username || data.credentials?.username || generatedUser;
+
       setCreatedCredentials({
         orgName: newOrgForm.name,
-        username: generatedUser,
+        username: finalUsername,
         password: generatedPass,
         phone: newOrgForm.phone,
         plan: newOrgForm.plan,
@@ -158,7 +161,7 @@ export default function PlatformManagementPage() {
       });
 
       setToast({
-        message: locale === "ar" ? "تم إنشاء المؤسسة السحابية وحساب المدير بنجاح!" : "Organisation SaaS créée avec succès !",
+        message: locale === "ar" ? `تم إنشاء المؤسسة السحابية بنجاح! المعرف: ${finalUsername}` : `Organisation créée avec succès ! Identifiant: ${finalUsername}`,
         type: "success",
       });
       loadData();
@@ -660,32 +663,79 @@ export default function PlatformManagementPage() {
                   <input
                     type="text"
                     required
-                    placeholder="Ex: ETS AL-BARAKA NIGER"
+                    placeholder="Ex: ETS TASSIOU KOMMA"
                     value={newOrgForm.name}
-                    onChange={(e) => setNewOrgForm({ ...newOrgForm, name: e.target.value })}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      const words = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/\s+/).filter(w => !['ets', 'ste', 'sarl', 'sa', 'eurl', 'groupe', 'cie'].includes(w) && w.length > 1);
+                      const key = (words[0] || name.toLowerCase().replace(/[^a-z0-9]/g, '')).slice(0, 15);
+                      const suggested = key ? `admin_${key}` : "";
+                      setNewOrgForm(prev => ({
+                        ...prev,
+                        name,
+                        adminUsername: (!prev.adminUsername || prev.adminUsername === "admin" || prev.adminUsername.startsWith("admin_")) ? (suggested || prev.adminUsername) : prev.adminUsername
+                      }));
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      {locale === "ar" ? "اسم مستخدم المدير" : "Identifiant Admin"} *
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700">
+                        {locale === "ar" ? "اسم مستخدم المدير" : "Identifiant Admin"} *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const words = newOrgForm.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/\s+/).filter(w => !['ets', 'ste', 'sarl', 'sa', 'eurl', 'groupe'].includes(w) && w.length > 1);
+                          const key = (words[0] || newOrgForm.name.toLowerCase().replace(/[^a-z0-9]/g, '')).slice(0, 12) || "org";
+                          setNewOrgForm(prev => ({ ...prev, adminUsername: `admin_${key}` }));
+                        }}
+                        className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
+                        title="Générer automatiquement"
+                      >
+                        <Sparkles size={11} />
+                        <span>{locale === "ar" ? "توليد آلي" : "Auto"}</span>
+                      </button>
+                    </div>
                     <input
                       type="text"
                       required
-                      placeholder="Ex: albaraka_admin"
+                      placeholder="Ex: admin_tassiou"
                       value={newOrgForm.adminUsername}
                       onChange={(e) => setNewOrgForm({ ...newOrgForm, adminUsername: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
+                    {newOrgForm.adminUsername.trim().toLowerCase() === "admin" && (
+                      <p className="text-[10px] text-amber-600 font-bold mt-1 flex items-center gap-1">
+                        <AlertCircle size={12} className="shrink-0" />
+                        <span>
+                          {locale === "ar"
+                            ? "ملاحظة: سيتم إضافة بادئة المنشأة تلقائياً لضمان عزل الحسابات بأمان."
+                            : "'admin' sera adapté avec le nom de l'entreprise pour un accès dédié."}
+                        </span>
+                      </p>
+                    )}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      {locale === "ar" ? "كلمة المرور" : "Mot de passe"} *
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700">
+                        {locale === "ar" ? "كلمة المرور" : "Mot de passe"} *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const randomPass = "Pass@" + Math.floor(1000 + Math.random() * 9000);
+                          setNewOrgForm(prev => ({ ...prev, adminPassword: randomPass }));
+                        }}
+                        className="text-[10px] text-slate-400 hover:text-indigo-600 font-bold cursor-pointer"
+                      >
+                        🎲 {locale === "ar" ? "عشوائي" : "Générer"}
+                      </button>
+                    </div>
                     <input
                       type="text"
                       required
