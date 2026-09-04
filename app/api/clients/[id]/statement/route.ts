@@ -25,28 +25,38 @@ export async function GET(
     const endDate = searchParams.get("end") || "";
 
     // 1. Fetch Client Details
-    const { data: client, error: clientErr } = await supabase
+    let clientQuery = supabase
       .from("clients")
       .select("*")
-      .eq("id", clientId)
-      .single();
+      .eq("id", clientId);
+    if (session.organization_id) {
+      clientQuery = clientQuery.eq("organization_id", session.organization_id);
+    }
+    const { data: client, error: clientErr } = await clientQuery.single();
 
     if (clientErr || !client) {
       return NextResponse.json({ error: "Client introuvable" }, { status: 404 });
     }
 
     // 1.1 Fetch Company Details
-    const { data: company } = await supabase
+    let compQuery = supabase
       .from("informations_entreprise")
       .select("*")
-      .limit(1)
-      .single();
+      .limit(1);
+    if (session.organization_id) {
+      compQuery = compQuery.eq("organization_id", session.organization_id);
+    }
+    const { data: company } = await compQuery.maybeSingle();
 
     // 2. Fetch Client Advances
-    const { data: advances, error: advErr } = await supabase
+    let advQuery = supabase
       .from("avances_clients")
       .select("*")
       .eq("client_id", clientId);
+    if (session.organization_id) {
+      advQuery = advQuery.eq("organization_id", session.organization_id);
+    }
+    const { data: advances, error: advErr } = await advQuery;
 
     if (advErr) throw new Error(advErr.message);
 
@@ -69,22 +79,31 @@ export async function GET(
     }
 
     // 4. Fetch Client Invoices
-    const { data: invoices, error: invErr } = await supabase
+    let invQuery = supabase
       .from("factures")
       .select("*")
       .eq("client_id", clientId)
       .neq("statut", "Annulée");
+    if (session.organization_id) {
+      invQuery = invQuery.eq("organization_id", session.organization_id);
+    }
 
+    const { data: invoices, error: invErr } = await invQuery;
     if (invErr) throw new Error(invErr.message);
 
     // 5. Fetch Client Invoice Payments
-    const { data: payments, error: payErr } = await supabase
+    let payQuery = supabase
       .from("paiements")
       .select(`
         *,
         factures!inner(*)
       `)
       .eq("factures.client_id", clientId);
+    if (session.organization_id) {
+      payQuery = payQuery.eq("organization_id", session.organization_id);
+    }
+
+    const { data: payments, error: payErr } = await payQuery;
 
     if (payErr) throw new Error(payErr.message);
 

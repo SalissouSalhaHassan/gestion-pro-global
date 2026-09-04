@@ -164,11 +164,17 @@ export default function ClientsPage() {
     setLoadingInvoices(true);
     setToast({ message: `Chargement de l'historique de ${client.nom}...`, type: "success" });
     try {
-      const { data, error } = await supabase
+      let invQuery = supabase
         .from("factures")
         .select("id, bl_number, date_facture, total_ttc, montant_paye, montant_restant, statut")
         .eq("client_id", client.id)
-        .eq("is_deleted", false)
+        .eq("is_deleted", false);
+
+      if (userSession?.organization_id) {
+        invQuery = invQuery.eq("organization_id", userSession.organization_id);
+      }
+
+      const { data, error } = await invQuery
         .order("date_facture", { ascending: false })
         .limit(50);
 

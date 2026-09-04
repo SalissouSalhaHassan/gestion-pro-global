@@ -32,30 +32,35 @@ export default function ClientListModal({ onClose }: ClientListModalProps) {
       try {
         setLoading(true);
         
-        const { data: comp } = await supabase
-          .from("informations_entreprise")
-          .select("*")
-          .limit(1)
-          .single();
-        setCompany(comp);
-
         const session = getClientSessionFromCookie();
         const admin = isAdminOrManagerSession(session);
+        const orgId = session?.organization_id;
+
+        let compQuery = supabase
+          .from("informations_entreprise")
+          .select("*")
+          .limit(1);
+        if (orgId) compQuery = compQuery.eq("organization_id", orgId);
+        const { data: comp } = await compQuery.maybeSingle();
+        setCompany(comp);
 
         let clientQuery = supabase
           .from("clients")
           .select("id, ref_client, nom, tel, credit_facture, credit_bl")
           .eq("is_deleted", false);
+        if (orgId) clientQuery = clientQuery.eq("organization_id", orgId);
 
         let clientsData: any[] | null = null;
 
         // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
         if (!admin && session?.id) {
           try {
-            const isolatedRes = await supabase
+            let isolatedQuery = supabase
               .from("clients")
               .select("id, ref_client, nom, tel, credit_facture, credit_bl")
-              .eq("is_deleted", false)
+              .eq("is_deleted", false);
+            if (orgId) isolatedQuery = isolatedQuery.eq("organization_id", orgId);
+            const isolatedRes = await isolatedQuery
               .or(`created_by.eq.${session.id},id.eq.${DEFAULT_CLIENT_ID}`);
             if (!isolatedRes.error && isolatedRes.data) {
               clientsData = isolatedRes.data;
