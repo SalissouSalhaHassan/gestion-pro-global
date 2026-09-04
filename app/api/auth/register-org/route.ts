@@ -115,27 +115,45 @@ export async function POST(req: Request) {
     });
 
     // 4. Create Default Warehouse (BOUTIQUE)
-    const { data: newDepot } = await supabase
+    const depotName = `BOUTIQUE_${newOrg.slug.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase().slice(0, 30)}`;
+    const { data: newDepot, error: depotError } = await supabase
       .from('depots')
       .insert({
-        nom_depot: 'BOUTIQUE',
-        emplacement: 'BOUTIQUE',
+        nom: depotName,
+        emplacement: depotName,
         adresse: 'Siège Principal',
         organization_id: newOrg.id
       })
       .select()
       .single();
 
+    if (depotError) {
+      console.warn('Depot creation warning:', depotError);
+    }
+
     // 5. Setup Company Info
-    await supabase.from('informations_entreprise').insert({
-      nom_entreprise: effectiveOrgName,
-      pays: country?.trim() || 'International',
-      devise: currency?.trim() || 'FCFA',
-      telephone: phone?.trim() || null,
-      email: email?.trim() || null,
-      notes_pied_facture: 'Merci pour votre confiance.',
-      organization_id: newOrg.id
-    });
+    try {
+      const { data: maxInfo } = await supabase
+        .from('informations_entreprise')
+        .select('id')
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const nextId = ((maxInfo?.id as number) || 0) + 1;
+
+      await supabase.from('informations_entreprise').insert({
+        id: nextId,
+        nom_entreprise: effectiveOrgName,
+        pays: country?.trim() || 'International',
+        telephone: phone?.trim() || null,
+        email: email?.trim() || null,
+        notes_pied_facture: 'Merci pour votre confiance.',
+        organization_id: newOrg.id
+      });
+    } catch (infoErr) {
+      console.warn('Company info setup warning:', infoErr);
+    }
 
     // 6. Create Admin User
     const { data: newUser, error: userError } = await supabase
@@ -143,14 +161,11 @@ export async function POST(req: Request) {
       .insert({
         utilisateur: finalAdminUsername,
         mot_de_passe: effectivePassword,
-        nom_prenom: finalAdminUsername,
-        nom_complet: finalAdminUsername,
+        nom_prenom: effectiveOrgName,
         admin: 'Oui',
         role_id: 1, // Admin role
-        emplacement: 'BOUTIQUE',
-        depots: 'BOUTIQUE',
-        organization_id: newOrg.id,
-        is_active: true
+        emplacement: newDepot?.nom || 'BOUTIQUE',
+        organization_id: newOrg.id
       })
       .select()
       .single();
@@ -158,28 +173,36 @@ export async function POST(req: Request) {
     if (userError || !newUser) {
       console.error('Error creating admin user:', userError);
       return NextResponse.json(
-        { error: 'Échec de la création du compte administrateur.' },
+        { error: 'Échec de la création du compte administrateur: ' + (userError?.message || '') },
         { status: 500 }
       );
     }
 
     // 7. Link User to Primary Warehouse
-    if (newDepot) {
-      await supabase.from('user_warehouses').insert({
-        user_id: newUser.id,
-        depot_id: newDepot.id,
-        is_primary: true
-      });
+    if (newDepot && newUser) {
+      try {
+        await supabase.from('user_warehouses').insert({
+          user_id: newUser.id,
+          depot_id: newDepot.id,
+          organization_id: newOrg.id
+        });
+      } catch (uwErr) {
+        console.warn('User warehouse link warning:', uwErr);
+      }
     }
 
     // 8. Log Registration in Activity Log
-    await supabase.from('activity_log').insert({
-      user_id: newUser.id,
-      username: newUser.utilisateur,
-      action: 'ORGANIZATION_REGISTER',
-      details: `Création de l’organisation ${newOrg.name} avec forfait ${plan}.`,
-      organization_id: newOrg.id
-    });
+    try {
+      await supabase.from('activity_log').insert({
+        user_id: newUser.id,
+        username: newUser.utilisateur,
+        action: 'ORGANIZATION_REGISTER',
+        details: `Création de l’organisation ${newOrg.name} avec forfait ${plan}.`,
+        organization_id: newOrg.id
+      });
+    } catch (actErr) {
+      console.warn('Activity log warning:', actErr);
+    }
 
     // 9. Build Session Payload
     const sessionData = {
@@ -187,8 +210,8 @@ export async function POST(req: Request) {
       username: newUser.utilisateur,
       role: newUser.role_id,
       admin: newUser.admin,
-      emplacement: 'BOUTIQUE',
-      depots: 'BOUTIQUE',
+      emplacement: newDepot?.nom || 'BOUTIQUE',
+      depots: newDepot?.nom || 'BOUTIQUE',
       organization_id: newOrg.id,
       organization_name: newOrg.name,
       plan: plan || 'trial',

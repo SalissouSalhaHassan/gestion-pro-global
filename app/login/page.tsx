@@ -175,7 +175,7 @@ export default function LoginPage() {
     const { data: userRecord, error: fetchError } = await supabase
       .from("users")
       .select("*")
-      .eq("utilisateur", identifier)
+      .ilike("utilisateur", identifier)
       .eq("mot_de_passe", password)
       .maybeSingle();
 
@@ -191,22 +191,33 @@ export default function LoginPage() {
       .select("permissions(permission_key)")
       .eq("role_id", userRecord.role_id);
 
-    const permissionKeys = perms?.map((p: any) => p.permissions.permission_key) || [];
+    const permissionKeys = perms?.map((p: any) => p.permissions?.permission_key).filter(Boolean) || [];
 
     // Fetch user depots from user_warehouses as fallback
     const { data: userWarehouses } = await supabase
       .from("user_warehouses")
-      .select("depot_id, is_primary, depots(nom)")
+      .select("depot_id, depots(nom)")
       .eq("user_id", userRecord.id);
 
     const userDepotsList = userWarehouses?.map((uw: any) => uw.depots?.nom).filter(Boolean) || [];
-    const depotsString = userDepotsList.length > 0 ? userDepotsList.join(", ") : (userRecord.depots || "");
+    const depotsString = userDepotsList.length > 0 ? userDepotsList.join(", ") : (userRecord.emplacement || "BOUTIQUE");
 
     // Determine primary depot (emplacement) dynamically with safe fallback
     let primaryDepot = userRecord.emplacement || '';
-    if (!primaryDepot && userWarehouses && userWarehouses.length > 0) {
-      const primaryUw = (userWarehouses as any[]).find((uw: any) => uw.is_primary) || userWarehouses[0];
-      primaryDepot = primaryUw.depots?.nom || '';
+    if (!primaryDepot && userDepotsList.length > 0) {
+      primaryDepot = userDepotsList[0];
+    }
+    if (!primaryDepot) primaryDepot = 'BOUTIQUE';
+
+    // Fetch organization info for clean display
+    let orgName = "";
+    if (userRecord.organization_id) {
+      const { data: orgData } = await supabase
+        .from("organizations")
+        .select("name")
+        .eq("id", userRecord.organization_id)
+        .maybeSingle();
+      if (orgData?.name) orgName = orgData.name;
     }
 
     // Set custom session cookie (24 hours)
@@ -218,7 +229,8 @@ export default function LoginPage() {
       emplacement: primaryDepot,
       depots: depotsString,
       organization_id: userRecord.organization_id || "00000000-0000-0000-0000-000000000001",
-      permissions: permissionKeys
+      organization_name: orgName,
+      permissions: permissionKeys.length > 0 ? permissionKeys : ['ALL']
     };
     document.cookie = `gp_session=${encodeURIComponent(JSON.stringify(sessionData))}; path=/; max-age=86400; SameSite=Lax`;
 
