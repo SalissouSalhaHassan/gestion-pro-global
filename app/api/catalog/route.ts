@@ -40,10 +40,19 @@ export async function GET(request: Request) {
       query = query.or(`designation.ilike.%${search}%,reference.ilike.%${search}%`);
     }
 
-    const [articlesRes, stocksRes] = await Promise.all([
-      query,
-      supabase.from('stocks').select('article_id, quantite'),
-    ]);
+    let articlesRes = await query;
+    if (articlesRes.error && (articlesRes.error.message?.includes("prix_gros") || articlesRes.error.code === "PGRST204")) {
+      let fallbackQuery = supabase
+        .from('articles')
+        .select('id, reference, designation, famille, p_vente_ttc, image_path')
+        .eq('is_deleted', false)
+        .order('designation');
+      if (category && category !== 'ALL') fallbackQuery = fallbackQuery.eq('famille', category);
+      if (search) fallbackQuery = fallbackQuery.or(`designation.ilike.%${search}%,reference.ilike.%${search}%`);
+      articlesRes = await fallbackQuery;
+    }
+
+    const stocksRes = await supabase.from('stocks').select('article_id, quantite');
 
     if (articlesRes.error) throw articlesRes.error;
 

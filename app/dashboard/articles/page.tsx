@@ -275,12 +275,29 @@ export default function ArticlesPage() {
       let savedId = formData.id;
 
       if (isEditing && savedId) {
-        const { error } = await supabase.from("articles").update(payload).eq("id", savedId);
+        let { error } = await supabase.from("articles").update(payload).eq("id", savedId);
+        // Resilient fallback if prix_gros or prix_special are not yet added in database schema
+        if (error && (error.message?.includes("prix_gros") || error.message?.includes("prix_special") || error.code === "PGRST204" || error.message?.includes("schema cache"))) {
+          const fallback = { ...payload };
+          delete fallback.prix_gros;
+          delete fallback.prix_special;
+          const retry = await supabase.from("articles").update(fallback).eq("id", savedId);
+          error = retry.error;
+        }
         if (error) throw error;
       } else {
         payload.is_deleted = false;
         payload.image_path = "";
-        const { data: created, error } = await supabase.from("articles").insert([payload]).select().single();
+        let { data: created, error } = await supabase.from("articles").insert([payload]).select().single();
+        // Resilient fallback if prix_gros or prix_special are not yet added in database schema
+        if (error && (error.message?.includes("prix_gros") || error.message?.includes("prix_special") || error.code === "PGRST204" || error.message?.includes("schema cache"))) {
+          const fallback = { ...payload };
+          delete fallback.prix_gros;
+          delete fallback.prix_special;
+          const retry = await supabase.from("articles").insert([fallback]).select().single();
+          created = retry.data;
+          error = retry.error;
+        }
         if (error) throw error;
         savedId = created.id;
 

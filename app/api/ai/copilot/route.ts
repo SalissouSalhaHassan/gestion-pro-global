@@ -23,7 +23,7 @@ export async function POST(req: Request) {
       supabase.from('factures').select('id, bl_number, date_facture, total_ht, total_ttc, montant_paye, montant_restant, statut, client_nom').eq('is_deleted', false).order('date_facture', { ascending: false }).limit(300),
       supabase.from('clients').select('id, nom, tel, credit_facture, credit_bl, type_client').eq('is_deleted', false).order('credit_facture', { ascending: false }).limit(50),
       supabase.from('stocks').select('article_id, quantite, depot_nom'),
-      supabase.from('articles').select('id, reference, designation, p_achat_ht, p_vente_ttc, prix_gros').eq('is_deleted', false),
+      supabase.from('articles').select('id, reference, designation, p_achat_ht, p_vente_ttc').eq('is_deleted', false),
       supabase.from('audit_logs').select('action_type, severity, description, created_at').order('created_at', { ascending: false }).limit(20),
       supabase.from('informations_entreprise').select('nom_entreprise').maybeSingle(),
     ]);
