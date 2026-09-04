@@ -36,6 +36,7 @@ import {
   Copy,
   Check,
   MessageCircle,
+  AlertCircle,
 } from "lucide-react";
 import TenantManagementModal from "@/components/platform/TenantManagementModal";
 import { openWhatsAppDirect } from "@/lib/utils/whatsapp";
