@@ -16,10 +16,11 @@ export async function GET(request: Request) {
     const end = searchParams.get("end");
 
     // 1. Fetch Company Information
-    const { data: company } = await supabase
+    let compQuery = supabase
       .from("informations_entreprise")
-      .select("*")
-      .maybeSingle();
+      .select("*");
+    if (session.organization_id) compQuery = compQuery.eq("organization_id", session.organization_id);
+    const { data: company } = await compQuery.maybeSingle();
 
     // 2. Fetch Invoices in the period (excluding deleted and cancelled)
     let invQuery = supabase
@@ -33,6 +34,7 @@ export async function GET(request: Request) {
       .neq("statut", "Annulée")
       .eq("is_deleted", false);
 
+    if (session.organization_id) invQuery = invQuery.eq("organization_id", session.organization_id);
     if (start) invQuery = invQuery.gte("date_facture", start);
     if (end) invQuery = invQuery.lte("date_facture", `${end}T23:59:59.999Z`);
 
@@ -40,10 +42,12 @@ export async function GET(request: Request) {
     if (invErr) throw new Error(invErr.message);
 
     // 3. Fetch Articles Purchase Costs (P_ACHAT_HT)
-    const { data: articles } = await supabase
+    let artQuery = supabase
       .from("articles")
       .select("id, reference, designation, p_achat_ht, p_vente_ht")
       .eq("is_deleted", false);
+    if (session.organization_id) artQuery = artQuery.eq("organization_id", session.organization_id);
+    const { data: articles } = await artQuery;
 
     const articleMap = new Map<number, any>();
     (articles || []).forEach((art: any) => {
@@ -52,6 +56,7 @@ export async function GET(request: Request) {
 
     // 4. Fetch Expenses (Dépenses) in the period
     let depQuery = supabase.from("depenses").select("*");
+    if (session.organization_id) depQuery = depQuery.eq("organization_id", session.organization_id);
     if (start) depQuery = depQuery.gte("date_depense", start);
     if (end) depQuery = depQuery.lte("date_depense", `${end}T23:59:59.999Z`);
 

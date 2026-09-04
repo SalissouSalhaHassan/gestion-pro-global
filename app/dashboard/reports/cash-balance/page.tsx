@@ -47,6 +47,11 @@ export default function CashBalancePage() {
       }
     };
     entries: any[];
+    scoping?: {
+      isAdmin: boolean;
+      cashier: string;
+      cashiers?: string[];
+    };
   } | null>(null);
   
   const [loading, setLoading] = useState(true);
@@ -234,10 +239,10 @@ export default function CashBalancePage() {
               value={filters.cashier}
               onChange={(e) => setFilters({...filters, cashier: e.target.value})}
             >
-              <option value="Tous">Tous les caissiers</option>
-              <option value="admin">admin</option>
-              <option value="ADRR">ADRR</option>
-              <option value="KADER">KADER</option>
+              <option value="Tous">{locale === "ar" ? "جميع الصناديق / الكاشير" : "Tous les caissiers"}</option>
+              {(data?.scoping?.cashiers || []).map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
           </div>
         )}

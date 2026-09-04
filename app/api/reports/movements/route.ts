@@ -40,6 +40,10 @@ export async function GET(request: Request) {
       .order("date_mouvement", { ascending: false })
       .range(offset, offset + limit - 1);
 
+    if (user.organization_id) {
+      query = query.eq("organization_id", user.organization_id);
+    }
+
     if (articleId) query = query.eq("article_id", articleId);
     if (depotId && depotId !== "Tous") {
        // Support filtering by depot name stored in the depotId variable

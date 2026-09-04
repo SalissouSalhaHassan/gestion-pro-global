@@ -26,6 +26,8 @@ export async function GET(request: Request) {
       cashier = user.username || null;
     }
 
+    const orgId = user.organization_id;
+
     // 1. Effective Payments (Paiements) - Exclude direct Credit balance entries
     let pQuery = supabase
       .from("paiements")
@@ -35,6 +37,7 @@ export async function GET(request: Request) {
       `)
       .neq("moyen_reglement", "Crédit");
 
+    if (orgId) pQuery = pQuery.eq("organization_id", orgId);
     if (start) pQuery = pQuery.gte("date_operation", start);
     if (end) pQuery = pQuery.lte("date_operation", `${end}T23:59:59.999Z`);
     
@@ -46,6 +49,7 @@ export async function GET(request: Request) {
       .select("id, date_avance, reference_paiement, client_id, montant_initial, montant_restant, utilisateur, moyen_paiement, statut, clients(nom)")
       .neq("statut", "Annulée");
 
+    if (orgId) aQuery = aQuery.eq("organization_id", orgId);
     if (start) aQuery = aQuery.gte("date_avance", start);
     if (end) aQuery = aQuery.lte("date_avance", `${end}T23:59:59.999Z`);
     if (cashier) aQuery = aQuery.eq("utilisateur", cashier);
@@ -54,6 +58,7 @@ export async function GET(request: Request) {
 
     // 3. Expenses (Dépenses)
     let eQuery = supabase.from("depenses").select("*");
+    if (orgId) eQuery = eQuery.eq("organization_id", orgId);
     if (start) eQuery = eQuery.gte("date_depense", start);
     if (end) eQuery = eQuery.lte("date_depense", `${end}T23:59:59.999Z`);
     if (cashier) eQuery = eQuery.eq("operateur", cashier);
@@ -64,6 +69,7 @@ export async function GET(request: Request) {
     let cimData: any[] = [];
     try {
       let cimQuery = supabase.from("ciment_paiements").select("*");
+      if (orgId) cimQuery = cimQuery.eq("organization_id", orgId);
       if (start) cimQuery = cimQuery.gte("date_paiement", start);
       if (end) cimQuery = cimQuery.lte("date_paiement", `${end}T23:59:59.999Z`);
       if (cashier) cimQuery = cimQuery.eq("utilisateur", cashier);
@@ -78,11 +84,18 @@ export async function GET(request: Request) {
       .neq("statut", "Annulée")
       .eq("is_deleted", false);
 
+    if (orgId) fQuery = fQuery.eq("organization_id", orgId);
     if (start) fQuery = fQuery.gte("date_facture", start);
     if (end) fQuery = fQuery.lte("date_facture", `${end}T23:59:59.999Z`);
     if (cashier) fQuery = fQuery.eq("vendeur", cashier);
 
     const { data: fData } = await fQuery;
+
+    // 6. Organization Users / Cashiers for filtering
+    let uQuery = supabase.from("users").select("utilisateur, nom_prenom");
+    if (orgId) uQuery = uQuery.eq("organization_id", orgId);
+    const { data: uData } = await uQuery;
+    const organizationCashiers = (uData || []).map((u) => u.utilisateur).filter(Boolean);
 
     // Mapping and combining transactions
     const entries: any[] = [];
@@ -212,6 +225,7 @@ export async function GET(request: Request) {
         scoping: {
           isAdmin,
           cashier: cashier || "Tous",
+          cashiers: organizationCashiers,
         },
       },
       {
