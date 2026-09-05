@@ -68,6 +68,7 @@ export default function DepotManagementPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const [currentOrgId, setCurrentOrgId] = useState<string>("");
+  const [orgName, setOrgName] = useState<string>("");
 
   useEffect(() => {
     try {
@@ -75,11 +76,9 @@ export default function DepotManagementPage() {
       if (match) {
         const decoded = decodeURIComponent(match.split("=")[1]);
         const data = JSON.parse(decoded);
-        if (data.organization_id) {
-          setCurrentOrgId(data.organization_id);
-          loadData(data.organization_id);
-          return;
-        }
+        if (data.organization_id) setCurrentOrgId(data.organization_id);
+        if (data.organization_name) setOrgName(data.organization_name);
+        else if (data.nom_prenom) setOrgName(data.nom_prenom);
       }
     } catch {}
     loadData();
@@ -92,60 +91,18 @@ export default function DepotManagementPage() {
     }
   }, [toast]);
 
-  const loadData = async (orgIdOverride?: any) => {
+  const loadData = async () => {
     setRefreshing(true);
-    const activeOrg = typeof orgIdOverride === "string" ? orgIdOverride : currentOrgId;
     try {
-      // 1. Fetch Users for the responsible dropdown (scoped by organization)
-      let userQuery = supabase
-        .from("users")
-        .select("utilisateur, nom_prenom")
-        .order("utilisateur");
-      if (activeOrg) userQuery = userQuery.eq("organization_id", activeOrg);
-      const { data: userData } = await userQuery;
-
-      if (userData) {
-        setUsers(userData.map((u) => u.nom_prenom || u.utilisateur));
+      const res = await fetch("/api/depots", { cache: "no-store" });
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || "Erreur de chargement");
       }
-
-      // 2. Fetch Depots (scoped by organization)
-      let depotQuery = supabase
-        .from("depots")
-        .select("*")
-        .eq("is_deleted", false)
-        .order("nom");
-      if (activeOrg) depotQuery = depotQuery.eq("organization_id", activeOrg);
-      const { data: depotsData, error } = await depotQuery;
-
-      if (error) throw error;
-
-      // 3. Fetch Stock counts per depot (scoped by organization)
-      let stockQuery = supabase
-        .from("stocks")
-        .select("depot_nom, quantite, articles(prix_achat)");
-      if (activeOrg) stockQuery = stockQuery.eq("organization_id", activeOrg);
-      const { data: stockData } = await stockQuery;
-
-      const stockMap: Record<string, { count: number; value: number }> = {};
-      if (stockData) {
-        stockData.forEach((st: any) => {
-          const dNom = st.depot_nom || "BOUTIQUE";
-          if (!stockMap[dNom]) stockMap[dNom] = { count: 0, value: 0 };
-          const qty = Number(st.quantite) || 0;
-          const cost = Number(st.articles?.prix_achat) || 0;
-          stockMap[dNom].count += qty > 0 ? 1 : 0;
-          stockMap[dNom].value += qty * cost;
-        });
-      }
-
-      if (depotsData) {
-        const enriched = depotsData.map((d: any) => ({
-          ...d,
-          articles_count: stockMap[d.nom]?.count || 0,
-          total_value: stockMap[d.nom]?.value || 0,
-        }));
-        setDepots(enriched);
-      }
+      const data = await res.json();
+      if (data.currentOrgId) setCurrentOrgId(data.currentOrgId);
+      if (data.users) setUsers(data.users);
+      if (data.depots) setDepots(data.depots);
     } catch (err: any) {
       console.error("Failed to load depots:", err);
       setToast({ message: "Erreur de chargement des dépôts", type: "error" });
@@ -154,10 +111,6 @@ export default function DepotManagementPage() {
       setRefreshing(false);
     }
   };
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   const handleOpenAddModal = () => {
     setIsEditing(false);
@@ -192,22 +145,21 @@ export default function DepotManagementPage() {
 
     setIsSubmitting(true);
     try {
-      const payload: any = {
-        nom: formData.nom.toUpperCase().trim(),
-        emplacement: formData.emplacement.trim() || formData.nom.trim(),
-        responsable: formData.responsable || "Non assigné",
-        is_active: formData.is_active,
-      };
-      if (currentOrgId) {
-        payload.organization_id = currentOrgId;
-      }
+      const res = await fetch("/api/depots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: isEditing ? formData.id : undefined,
+          nom: formData.nom.toUpperCase().trim(),
+          emplacement: formData.emplacement.trim() || formData.nom.trim(),
+          responsable: formData.responsable || "Non assigné",
+          is_active: formData.is_active,
+        }),
+      });
 
-      if (isEditing && formData.id) {
-        const { error } = await supabase.from("depots").update(payload).eq("id", formData.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("depots").insert([payload]);
-        if (error) throw error;
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || "Erreur de sauvegarde");
       }
 
       setToast({
@@ -232,12 +184,11 @@ export default function DepotManagementPage() {
     if (!confirm(`Voulez-vous vraiment supprimer le dépôt "${depot.nom}" ?`)) return;
 
     try {
-      const { error } = await supabase
-        .from("depots")
-        .update({ is_deleted: true })
-        .eq("id", depot.id);
-
-      if (error) throw error;
+      const res = await fetch(`/api/depots?id=${depot.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || "Erreur de suppression");
+      }
 
       setToast({ message: "Dépôt supprimé", type: "success" });
       loadData();
@@ -287,6 +238,12 @@ export default function DepotManagementPage() {
             <span className="px-2.5 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider">
               GESTION MULTI-AGENCES
             </span>
+            {orgName && (
+              <span className="px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border border-emerald-300">
+                <Building2 size={11} />
+                {orgName} ({locale === "ar" ? "معزول" : "Isolé"})
+              </span>
+            )}
             <span className="text-xs font-bold text-slate-500">
               {locale === "ar" ? "إدارة المستودعات، المحلات، والفروع اللوجستية" : "Dépôts, Magasins & Entrepôts Centraux"}
             </span>
