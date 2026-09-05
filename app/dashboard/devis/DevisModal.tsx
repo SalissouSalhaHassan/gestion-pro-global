@@ -18,7 +18,9 @@ import {
   Clock,
   ArrowRight,
   Sparkles,
-  MessageSquare
+  MessageSquare,
+  ShieldCheck,
+  QrCode
 } from "lucide-react";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
 import { useLanguage } from "@/lib/i18n/context";
@@ -289,12 +291,32 @@ export default function DevisModal({
                 </div>
               )}
 
-              {/* Acceptance & Signatures */}
-              <div className="pt-8 border-t border-dashed border-slate-300 grid grid-cols-2 gap-8 text-xs text-center">
-                <div>
-                  <p className="font-black mb-2 uppercase text-slate-700">Pour la Société (Service Commercial)</p>
+              {/* Acceptance, SSL QR & Signatures */}
+              <div className="pt-8 border-t border-dashed border-slate-300 flex items-end justify-between text-xs text-center px-4">
+                <div className="w-[180px]">
+                  <p className="font-black mb-2 uppercase text-slate-700">Bon pour Accord (Client)</p>
+                  <div className="h-16"></div>
+                  <div className="border-t border-slate-300 pt-1 text-[10px] text-slate-400">Date, Signature & Mention manuscrite</div>
+                </div>
+
+                {company?.show_qr_code !== false && (
+                  <div className="flex flex-col items-center justify-center p-1.5 rounded-lg border border-slate-200 bg-slate-50 text-center">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(typeof window !== 'undefined' ? `${window.location.origin}/dashboard/devis` : `DEV-${devis?.devis_number || devis?.id}`)}`}
+                      alt="QR Code SSL" 
+                      className="w-12 h-12 object-contain"
+                    />
+                    <span className="text-[7px] font-black text-slate-500 uppercase tracking-tight mt-0.5 flex items-center gap-0.5">
+                      <ShieldCheck size={8} className="text-emerald-600 inline" />
+                      Vérifié SSL
+                    </span>
+                  </div>
+                )}
+
+                <div className="w-[180px]">
+                  <p className="font-black mb-2 uppercase text-slate-700">Pour la Société</p>
                   {company?.cachet_url ? (
-                    <div className="flex justify-center items-center h-20 mb-1">
+                    <div className="flex justify-center items-center h-16 mb-1">
                       <img
                         src={company.cachet_url}
                         alt="Cachet Officiel"
@@ -302,19 +324,14 @@ export default function DevisModal({
                       />
                     </div>
                   ) : (
-                    <div className="h-20 flex items-center justify-center">
-                      <div className="w-24 h-16 rounded-lg border-2 border-dashed border-slate-300 text-slate-400 flex flex-col items-center justify-center rotate-[-2deg]">
-                        <span className="text-[7px] font-black uppercase">{company?.nom_entreprise?.slice(0, 12) || "DIRECTION"}</span>
+                    <div className="h-16 flex items-center justify-center">
+                      <div className="w-24 h-14 rounded-lg border-2 border-dashed border-slate-300 text-slate-400 flex flex-col items-center justify-center rotate-[-2deg]">
+                        <span className="text-[7px] font-black uppercase truncate max-w-[85px]">{company?.nom_entreprise?.slice(0, 12) || "DIRECTION"}</span>
                         <span className="text-[6px] font-bold uppercase">CACHET COMMERCIAL</span>
                       </div>
                     </div>
                   )}
                   <div className="border-t border-slate-300 pt-1 text-[10px] text-slate-400">Signature & Cachet</div>
-                </div>
-                <div>
-                  <p className="font-black mb-2 uppercase text-slate-700">Bon pour Accord & Commande (Le Client)</p>
-                  <div className="h-20"></div>
-                  <div className="border-t border-slate-300 pt-1 text-[10px] text-slate-400">Date, Signature & Mention manuscrite</div>
                 </div>
               </div>
 

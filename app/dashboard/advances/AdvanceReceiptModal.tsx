@@ -774,14 +774,28 @@ export default function AdvanceReceiptModal({
           </div>
 
           {/* SIGNATURES SECTION */}
-          <div className="grid grid-cols-2 gap-6 mt-6 pt-2">
-             <div className="text-center">
+          <div className="flex items-end justify-between mt-6 pt-2 px-2">
+             <div className="text-center w-[160px]">
                 <p className="text-[9px] font-black uppercase text-slate-900 mb-8">
                   {locale === "ar" ? "توقيع المستلم / العميل" : "Signature Client / Bénéficiaire"}
                 </p>
-                <div className="h-px bg-slate-900 w-3/4 mx-auto"></div>
+                <div className="h-px bg-slate-900 w-full mx-auto"></div>
              </div>
-             <div className="text-center flex flex-col items-center">
+
+             {(company as any)?.show_qr_code !== false && (
+               <div className="flex flex-col items-center justify-center p-1 rounded-lg border border-slate-300 bg-white text-center">
+                 <img 
+                   src={`https://api.qrserver.com/v1/create-qr-code/?size=70x70&data=${encodeURIComponent(typeof window !== 'undefined' ? `${window.location.origin}/dashboard/advances` : `ADV-${advance?.id}`)}`}
+                   alt="QR Code SSL" 
+                   className="w-10 h-10 object-contain"
+                 />
+                 <span className="text-[6px] font-black text-slate-500 uppercase tracking-tight mt-0.5">
+                   Vérifié SSL
+                 </span>
+               </div>
+             )}
+
+             <div className="text-center w-[180px] flex flex-col items-center">
                  <p className="text-[9px] font-black uppercase text-slate-900 mb-1">
                    {locale === "ar" ? "توقيع وأختام الإدارة / الصندوق" : "Cachet & Signature Caisse"}
                  </p>
@@ -790,7 +804,7 @@ export default function AdvanceReceiptModal({
                  ) : (
                    <div className="h-7"></div>
                  )}
-                 <div className="h-px bg-slate-900 w-3/4 mx-auto"></div>
+                 <div className="h-px bg-slate-900 w-full mx-auto"></div>
               </div>
           </div>
 

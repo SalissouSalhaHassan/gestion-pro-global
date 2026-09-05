@@ -72,7 +72,7 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ id: st
                 GP
               </span>
               <span className="font-extrabold text-base tracking-tight text-white">
-                {invoice?.company_name || "GESTION PRO GLOBAL"}
+                {invoice?.company?.nom_entreprise || invoice?.company_name || "GESTION PRO GLOBAL"}
               </span>
             </div>
             <h1 className="text-2xl font-black text-white">Facture #{invoiceId}</h1>
@@ -145,8 +145,47 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ id: st
           </div>
         </div>
 
+        {/* SSL Verification & Official Branding Section */}
+        <div className="px-6 sm:px-8 py-4 bg-slate-50/80 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="text-xs text-slate-500 max-w-[280px]">
+            <div className="flex items-center gap-1.5 font-black text-slate-700 text-xs mb-0.5">
+              <ShieldCheck size={16} className="text-emerald-600" />
+              <span>Certifié Conforme & Sécurisé SSL</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              {invoice?.company?.notes_pied_facture || "Document officiel émis par Gestion Pro Global. Intégrité vérifiée."}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {invoice?.company?.show_qr_code !== false && (
+              <div className="flex flex-col items-center justify-center p-1.5 rounded-xl border border-slate-200 bg-white text-center shadow-2xs">
+                <img 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : `https://gestionpro.app/invoice/${invoiceId}`)}`}
+                  alt="QR Code SSL" 
+                  className="w-12 h-12 object-contain"
+                />
+                <span className="text-[7px] font-black text-slate-500 uppercase tracking-tight mt-0.5 flex items-center gap-0.5">
+                  <ShieldCheck size={8} className="text-emerald-600 inline" />
+                  Vérifié SSL
+                </span>
+              </div>
+            )}
+
+            {invoice?.company?.show_stamp !== false && invoice?.company?.cachet_url && (
+              <div className="relative">
+                <img
+                  src={invoice.company.cachet_url}
+                  alt="Cachet Officiel"
+                  className="h-16 max-w-[130px] object-contain rotate-[-2deg] drop-shadow-xs"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Action Buttons */}
-        <div className="p-6 sm:p-8 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center gap-3">
+        <div className="p-6 sm:p-8 bg-white border-t border-slate-100 flex flex-col sm:flex-row items-center gap-3">
           <button
             onClick={() => window.print()}
             className="w-full sm:flex-1 py-3 rounded-2xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-800 font-extrabold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"

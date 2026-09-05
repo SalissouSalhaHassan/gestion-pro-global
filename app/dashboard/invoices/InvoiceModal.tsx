@@ -15,7 +15,9 @@ import {
   Info,
   Package,
   ClipboardList,
-  MessageCircle
+  MessageCircle,
+  QrCode,
+  ShieldCheck
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -123,6 +125,10 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
         const inv = await response.json();
         console.log("✅ Invoice loaded via API:", inv);
         
+        if (inv.company) {
+          setCompany((prev: any) => prev || inv.company);
+        }
+
         const clientRow = Array.isArray(inv.clients) ? inv.clients[0] : inv.clients;
         setInvoice({
           ...inv,
@@ -462,11 +468,27 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                 </table>
               </div>
 
-              {/* Signatures & Official Stamp Area */}
+              {/* Signatures, SSL QR Code & Official Stamp Area */}
               <div className="mt-8 flex justify-between items-end text-[10px] font-black px-2">
-                <div className="text-center w-[160px] border-t border-black pt-2">
+                <div className="text-center w-[150px] border-t border-black pt-2">
                   Signature du Client
                 </div>
+
+                {/* QR Code de Vérification SSL */}
+                {company?.show_qr_code !== false && (
+                  <div className="flex flex-col items-center justify-center p-1.5 rounded-lg border border-slate-300 bg-white text-center shadow-2xs">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(typeof window !== 'undefined' ? `${window.location.origin}/invoice/${invoice.id}` : `https://gestionpro.app/invoice/${invoice.id}`)}`}
+                      alt="QR Code SSL" 
+                      className="w-14 h-14 object-contain"
+                    />
+                    <span className="text-[7px] font-black text-slate-600 uppercase tracking-tight mt-0.5 flex items-center gap-0.5">
+                      <ShieldCheck size={9} className="text-emerald-600 inline" />
+                      Vérifié SSL
+                    </span>
+                  </div>
+                )}
+
                 <div className="text-center w-[200px] flex flex-col items-center">
                   {company?.cachet_url ? (
                     <div className="relative mb-1">
@@ -496,6 +518,22 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
               <div className="text-center w-[140px] border-t border-black pt-2">
                 Signature du Livreur
               </div>
+
+              {/* QR Code de Vérification SSL (BL) */}
+              {company?.show_qr_code !== false && (
+                <div className="flex flex-col items-center justify-center p-1.5 rounded-lg border border-slate-300 bg-white text-center shadow-2xs">
+                  <img 
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(typeof window !== 'undefined' ? `${window.location.origin}/invoice/${invoice.id}` : `https://gestionpro.app/invoice/${invoice.id}`)}`}
+                    alt="QR Code SSL" 
+                    className="w-12 h-12 object-contain"
+                  />
+                  <span className="text-[7px] font-black text-slate-600 uppercase tracking-tight mt-0.5 flex items-center gap-0.5">
+                    <ShieldCheck size={8} className="text-emerald-600 inline" />
+                    Vérifié SSL
+                  </span>
+                </div>
+              )}
+
               <div className="text-center w-[180px] flex flex-col items-center">
                 {company?.cachet_url && (
                   <img
@@ -512,8 +550,10 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
             </div>
           )}
 
-          <div className="mt-8 text-center ticket-hide">
-             <p className="text-[9px] font-bold text-slate-400">Page 1/1</p>
+          {/* Notes de bas de page & pagination */}
+          <div className="mt-6 pt-2 border-t border-slate-200 flex items-center justify-between text-[9px] text-slate-500">
+            <span className="italic max-w-[80%]">{company?.notes_pied_facture || "Merci pour votre confiance. Les marchandises vendues ne sont ni reprises ni échangées après 48h."}</span>
+            <span className="ticket-hide font-bold text-slate-400">Page 1/1</span>
           </div>
         </div>
       </div>

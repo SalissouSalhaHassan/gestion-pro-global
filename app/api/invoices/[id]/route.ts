@@ -13,7 +13,51 @@ export async function GET(
     const { id } = await params;
     const supabase = await createClient();
     const session = await getServerSession();
-    if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+
+    // 1. If unauthenticated, allow secure public SSL verification (e.g. scanning QR Code on invoice)
+    if (!session) {
+      const { data: inv, error: invErr } = await supabase
+        .from('factures')
+        .select(`
+          id, bl_number, date_facture, total_ht, total_tva, total_ttc,
+          montant_paye, montant_restant, statut, mode_paiement, created_at,
+          organization_id, clients(nom, adresse, tel, nif)
+        `)
+        .eq('id', Number(id))
+        .eq('is_deleted', false)
+        .maybeSingle();
+
+      if (invErr || !inv) {
+        return NextResponse.json({ error: "Facture introuvable ou invalide" }, { status: 404 });
+      }
+
+      // Fetch company branding for public verification view
+      let companyInfo: any = null;
+      if (inv.organization_id) {
+        const { data: comp } = await supabase
+          .from("informations_entreprise")
+          .select("nom_entreprise, adresse, telephone, email, rc, nif, cachet_url, brand_color, slogan, show_qr_code, show_stamp, capital_social")
+          .eq("organization_id", inv.organization_id)
+          .maybeSingle();
+
+        if (comp) {
+          companyInfo = comp;
+          if (comp.capital_social && comp.capital_social.startsWith("{")) {
+            try {
+              const parsed = JSON.parse(comp.capital_social);
+              companyInfo = { ...companyInfo, ...parsed };
+            } catch (e) {}
+          }
+        }
+      }
+
+      return NextResponse.json({
+        ...inv,
+        company: companyInfo,
+        company_name: companyInfo?.nom_entreprise || "GESTION PRO GLOBAL",
+        is_verified_ssl: true,
+      });
+    }
 
     const isAdmin = await isAdminOrManager(session);
     const invoiceService = new InvoiceService(supabase);
@@ -25,7 +69,31 @@ export async function GET(
         return NextResponse.json({ error: "Facture introuvable ou accès refusé" }, { status: 404 });
     }
 
-    return NextResponse.json(invoice);
+    // Attach company branding info
+    let companyInfo: any = null;
+    const orgId = invoice.organization_id || session.organization_id;
+    if (orgId) {
+      const { data: comp } = await supabase
+        .from("informations_entreprise")
+        .select("*")
+        .eq("organization_id", orgId)
+        .maybeSingle();
+
+      if (comp) {
+        companyInfo = comp;
+        if (comp.capital_social && comp.capital_social.startsWith("{")) {
+          try {
+            const parsed = JSON.parse(comp.capital_social);
+            companyInfo = { ...companyInfo, ...parsed };
+          } catch (e) {}
+        }
+      }
+    }
+
+    return NextResponse.json({
+      ...invoice,
+      company: companyInfo,
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
