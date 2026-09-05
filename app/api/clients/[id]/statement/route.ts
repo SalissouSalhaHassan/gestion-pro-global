@@ -53,9 +53,7 @@ export async function GET(
       .from("avances_clients")
       .select("*")
       .eq("client_id", clientId);
-    if (session.organization_id) {
-      advQuery = advQuery.eq("organization_id", session.organization_id);
-    }
+    // Note: avances_clients is already scoped through the validated client record
     const { data: advances, error: advErr } = await advQuery;
 
     if (advErr) throw new Error(advErr.message);
@@ -91,7 +89,7 @@ export async function GET(
     const { data: invoices, error: invErr } = await invQuery;
     if (invErr) throw new Error(invErr.message);
 
-    // 5. Fetch Client Invoice Payments
+    // 5. Fetch Client Invoice Payments (Scoped via linked factures)
     let payQuery = supabase
       .from("paiements")
       .select(`
@@ -100,7 +98,7 @@ export async function GET(
       `)
       .eq("factures.client_id", clientId);
     if (session.organization_id) {
-      payQuery = payQuery.eq("organization_id", session.organization_id);
+      payQuery = payQuery.eq("factures.organization_id", session.organization_id);
     }
 
     const { data: payments, error: payErr } = await payQuery;
