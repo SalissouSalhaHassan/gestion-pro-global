@@ -56,7 +56,10 @@ export async function proxy(request: NextRequest) {
 
   if (gpSessionCookie) {
     try {
-      sessionData = JSON.parse(decodeURIComponent(gpSessionCookie))
+      let decoded = gpSessionCookie;
+      if (gpSessionCookie.includes('%')) decoded = decodeURIComponent(gpSessionCookie);
+      if (decoded.includes('%')) decoded = decodeURIComponent(decoded);
+      sessionData = JSON.parse(decoded);
     } catch (e) {
       console.error('Proxy: Failed to parse session cookie')
     }
@@ -76,14 +79,79 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // --- 3. ROLE-BASED PROTECTION ---
-  const adminRoutes = ['/dashboard/users', '/dashboard/permissions', '/dashboard/settings', '/dashboard/depots'];
-  const isTargetingAdminRoute = adminRoutes.some(path => pathname.startsWith(path));
+  // Allow unauthorized notice page itself without looping
+  if (pathname === '/dashboard/unauthorized') {
+    return supabaseResponse;
+  }
 
-  if (isTargetingAdminRoute && (!sessionData || (sessionData.admin !== "Oui" && sessionData.role !== 1))) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/dashboard/unauthorized'
-    return NextResponse.redirect(url)
+  // --- 3. DEFENSE IN DEPTH: MULTI-TIER ROUTE GUARDS ---
+  const username = (sessionData?.username || "").toLowerCase();
+  const orgId = sessionData?.organization_id;
+  const isMasterOrg = orgId === "00000000-0000-0000-0000-000000000001";
+  const isSuperAdmin = username === "superadmin" || (isMasterOrg && username === "admin");
+  const isAdmin = isSuperAdmin || sessionData?.admin === "Oui" || sessionData?.admin === "oui" || sessionData?.role === 1 || sessionData?.role === "1" || sessionData?.role === "admin";
+
+  // Tier 1: Platform Super Admin Routes (Strict Master Console)
+  const superAdminRoutes = ['/dashboard/platform', '/dashboard/super-admin', '/dashboard/permissions'];
+  if (superAdminRoutes.some(path => pathname.startsWith(path))) {
+    if (!isSuperAdmin) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/dashboard/unauthorized';
+      return NextResponse.redirect(url);
+    }
+    return supabaseResponse;
+  }
+
+  // Tier 2: Tenant Administrator Routes (Company settings, users, depots, backups)
+  const adminRoutes = ['/dashboard/users', '/dashboard/settings', '/dashboard/depots', '/dashboard/data-hub'];
+  if (adminRoutes.some(path => pathname.startsWith(path))) {
+    if (!isAdmin) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/dashboard/unauthorized';
+      return NextResponse.redirect(url);
+    }
+    return supabaseResponse;
+  }
+
+  // Tier 3: Operational RBAC Protected Routes (For non-admin staff)
+  if (!isAdmin && pathname.startsWith('/dashboard/')) {
+    const userPerms: string[] = Array.isArray(sessionData?.permissions) ? sessionData.permissions : [];
+
+    const routePermissions: Record<string, string> = {
+      '/dashboard/pos': 'pos.access',
+      '/dashboard/invoices': 'sale.invoices_view',
+      '/dashboard/devis': 'sale.proforma_create',
+      '/dashboard/articles': 'stock.articles',
+      '/dashboard/stock': 'stock.inventory',
+      '/dashboard/inventory': 'stock.inventory',
+      '/dashboard/clients': 'client.access',
+      '/dashboard/advances': 'deposit.access',
+      '/dashboard/suppliers': 'supplier.access',
+      '/dashboard/purchases': 'purchase.access',
+      '/dashboard/bons-commande': 'purchase.access',
+      '/dashboard/expenses': 'expense.access',
+      '/dashboard/reports/cash-balance': 'expense.cash_balance',
+      '/dashboard/reports/profit-loss': 'report.finance',
+      '/dashboard/reports/commissions': 'report.finance',
+      '/dashboard/finance': 'report.finance',
+      '/dashboard/audit': 'report.activity_log',
+      '/dashboard/mouvements': 'report.activity_log',
+      '/dashboard/ciment': 'cement.access',
+      '/dashboard/loyers': 'rent.access',
+      '/dashboard/vehicles': 'vehicles.access',
+      '/dashboard/deliveries': 'vehicles.access',
+    };
+
+    for (const [route, reqPerm] of Object.entries(routePermissions)) {
+      if (pathname.startsWith(route)) {
+        if (!userPerms.includes(reqPerm)) {
+          const url = request.nextUrl.clone();
+          url.pathname = '/dashboard/unauthorized';
+          return NextResponse.redirect(url);
+        }
+        break;
+      }
+    }
   }
 
   return supabaseResponse

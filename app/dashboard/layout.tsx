@@ -69,7 +69,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     router.refresh();
   };
 
-  const isAdmin = userSession?.admin === "Oui" || userSession?.role === 1 || userSession?.role === "1";
+  const isSuper = userSession?.username?.toLowerCase() === "superadmin" ||
+    (userSession?.username?.toLowerCase() === "admin" && userSession?.organization_id === "00000000-0000-0000-0000-000000000001");
+
+  const isAdmin = isSuper || userSession?.admin === "Oui" || userSession?.admin === "oui" || userSession?.role === 1 || userSession?.role === "1" || userSession?.role === "admin";
 
   const allNavItems = [
     { href: "/dashboard", label: t("nav_dashboard", "Tableau de bord"), icon: LayoutDashboard, perm: "sale.dashboard" },
@@ -110,9 +113,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/copilot", label: t("nav_copilot", "Assistant IA Copilot"), icon: Bot, highlight: true },
     { href: "/dashboard/support", label: t("nav_support", "Support & Assistance"), icon: Headphones },
   ];
-
-  const isSuper = userSession?.username?.toLowerCase() === "superadmin" ||
-    (userSession?.username?.toLowerCase() === "admin" && userSession?.organization_id === "00000000-0000-0000-0000-000000000001");
 
   const userPermissions = userSession?.permissions || [];
   const visibleNavItems = allNavItems.filter((item: any) => {
