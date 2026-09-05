@@ -292,11 +292,28 @@ export default function DevisModal({
               {/* Acceptance & Signatures */}
               <div className="pt-8 border-t border-dashed border-slate-300 grid grid-cols-2 gap-8 text-xs text-center">
                 <div>
-                  <p className="font-black mb-12 uppercase text-slate-700">Pour la Société (Service Commercial)</p>
+                  <p className="font-black mb-2 uppercase text-slate-700">Pour la Société (Service Commercial)</p>
+                  {company?.cachet_url ? (
+                    <div className="flex justify-center items-center h-20 mb-1">
+                      <img
+                        src={company.cachet_url}
+                        alt="Cachet Officiel"
+                        className="max-h-full max-w-[170px] object-contain rotate-[-2deg]"
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-20 flex items-center justify-center">
+                      <div className="w-24 h-16 rounded-lg border-2 border-dashed border-slate-300 text-slate-400 flex flex-col items-center justify-center rotate-[-2deg]">
+                        <span className="text-[7px] font-black uppercase">{company?.nom_entreprise?.slice(0, 12) || "DIRECTION"}</span>
+                        <span className="text-[6px] font-bold uppercase">CACHET COMMERCIAL</span>
+                      </div>
+                    </div>
+                  )}
                   <div className="border-t border-slate-300 pt-1 text-[10px] text-slate-400">Signature & Cachet</div>
                 </div>
                 <div>
-                  <p className="font-black mb-12 uppercase text-slate-700">Bon pour Accord & Commande (Le Client)</p>
+                  <p className="font-black mb-2 uppercase text-slate-700">Bon pour Accord & Commande (Le Client)</p>
+                  <div className="h-20"></div>
                   <div className="border-t border-slate-300 pt-1 text-[10px] text-slate-400">Date, Signature & Mention manuscrite</div>
                 </div>
               </div>

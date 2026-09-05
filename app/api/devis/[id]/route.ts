@@ -26,7 +26,25 @@ export async function GET(
 
     if (error || !devis) return NextResponse.json({ error: "Devis introuvable" }, { status: 404 });
 
-    const { data: company } = await supabase.from("informations_entreprise").select("*").maybeSingle();
+    const orgId = session.organization_id || devis.organization_id || "00000000-0000-0000-0000-000000000001";
+    let { data: company } = await supabase
+      .from("informations_entreprise")
+      .select("*")
+      .eq("organization_id", orgId)
+      .maybeSingle();
+
+    if (!company) {
+      const { data: fbComp } = await supabase.from("informations_entreprise").select("*").limit(1).maybeSingle();
+      company = fbComp;
+    }
+
+    // Merge branding JSON if present in capital_social
+    if (company?.capital_social && company.capital_social.startsWith("{")) {
+      try {
+        const branding = JSON.parse(company.capital_social);
+        company = { ...company, ...branding };
+      } catch (e) {}
+    }
 
     return NextResponse.json({ devis, company });
   } catch (error: any) {

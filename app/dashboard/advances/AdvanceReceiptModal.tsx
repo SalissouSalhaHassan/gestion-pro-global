@@ -271,12 +271,19 @@ export default function AdvanceReceiptModal({
       try {
         setLoading(true);
         
-        const { data: comp } = await supabase
-          .from("informations_entreprise")
-          .select("*")
-          .limit(1)
-          .single();
-        setCompany(comp);
+        try {
+          const compRes = await fetch("/api/settings/company");
+          if (compRes.ok) {
+            const compJson = await compRes.json();
+            if (compJson.company) setCompany(compJson.company);
+          } else {
+            const { data: comp } = await supabase.from("informations_entreprise").select("*").limit(1).single();
+            setCompany(comp);
+          }
+        } catch (e) {
+          const { data: comp } = await supabase.from("informations_entreprise").select("*").limit(1).single();
+          setCompany(comp);
+        }
 
         const { data: adv } = await supabase
           .from("avances_clients")
@@ -774,12 +781,17 @@ export default function AdvanceReceiptModal({
                 </p>
                 <div className="h-px bg-slate-900 w-3/4 mx-auto"></div>
              </div>
-             <div className="text-center">
-                <p className="text-[9px] font-black uppercase text-slate-900 mb-8">
-                  {locale === "ar" ? "توقيع وأختام الإدارة / الصندوق" : "Cachet & Signature Caisse"}
-                </p>
-                <div className="h-px bg-slate-900 w-3/4 mx-auto"></div>
-             </div>
+             <div className="text-center flex flex-col items-center">
+                 <p className="text-[9px] font-black uppercase text-slate-900 mb-1">
+                   {locale === "ar" ? "توقيع وأختام الإدارة / الصندوق" : "Cachet & Signature Caisse"}
+                 </p>
+                 {(company as any)?.cachet_url ? (
+                   <img src={(company as any).cachet_url} alt="Cachet" className="h-12 object-contain mb-1 rotate-[-2deg]" />
+                 ) : (
+                   <div className="h-7"></div>
+                 )}
+                 <div className="h-px bg-slate-900 w-3/4 mx-auto"></div>
+              </div>
           </div>
 
           {/* Date of Print Footer */}

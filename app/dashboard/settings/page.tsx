@@ -26,6 +26,8 @@ import {
   FileText,
   Eye,
   Sparkles,
+  UploadCloud,
+  Trash2
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -36,6 +38,8 @@ import { createBrowserClient } from "@supabase/ssr";
    ═══════════════════════════════════════════════════════════════ */
 
 type CompanyInfo = {
+  id?: number;
+  organization_id?: string;
   nom_entreprise: string;
   slogan?: string;
   adresse: string;
@@ -51,6 +55,7 @@ type CompanyInfo = {
   brand_color?: string;
   show_qr_code?: boolean;
   show_stamp?: boolean;
+  cachet_url?: string | null;
   chemin_logo?: string | null;
 };
 
@@ -253,6 +258,7 @@ export default function SettingsPage() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [showSupabaseConfig, setShowSupabaseConfig] = useState(false);
   const [activeTab, setActiveTab] = useState<"general" | "branding">("general");
+  const [cachetFileBase64, setCachetFileBase64] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -264,55 +270,34 @@ export default function SettingsPage() {
 
     async function loadInfo() {
       try {
-        const { data, error } = await supabase
-          .from("informations_entreprise")
-          .select("*")
-          .eq("id", 1)
-          .maybeSingle();
-
-        let brandingCache: any = {};
-        try {
-          const cached = localStorage.getItem("company_branding_settings");
-          if (cached) brandingCache = JSON.parse(cached);
-        } catch (e) {}
-
-        if (!error && data) {
-          setInfo({
-            nom_entreprise: data.nom_entreprise || "GESTION PRO GLOBAL",
-            slogan: brandingCache.slogan || "Commerce Général & Import-Export",
-            adresse: data.adresse || "Niamey, Niger",
-            telephone: data.telephone || "+227 00 00 00 00",
-            email: data.email || "contact@gestionpro.com",
-            site_web: data.site_web || "",
-            rc: data.rc || "RCCM-NI-NIA-2026-B-001",
-            nif: data.nif || "12345/P",
-            nis: data.nis || "",
-            art_impo: data.art_imposition || data.art_impo || "",
-            notes_pied_facture: data.notes_pied_facture || "Merci pour votre confiance. Les marchandises vendues ne sont ni reprises ni échangées après 48h.",
-            brand_color: brandingCache.brand_color || "#4f46e5",
-            show_qr_code: brandingCache.show_qr_code !== false,
-            show_stamp: brandingCache.show_stamp !== false,
-            chemin_logo: data.chemin_logo || null,
-          });
-        } else {
-          setInfo({
-            nom_entreprise: "GESTION PRO GLOBAL",
-            slogan: "Commerce Général & Import-Export",
-            adresse: "Niamey, Niger",
-            telephone: "+227 00 00 00 00",
-            email: "contact@gestionpro.com",
-            site_web: "",
-            rc: "RCCM-NI-NIA-2026-B-001",
-            nif: "12345/P",
-            nis: "",
-            art_impo: "",
-            notes_pied_facture: "Merci pour votre confiance. Les marchandises vendues ne sont ni reprises ni échangées après 48h.",
-            brand_color: brandingCache.brand_color || "#4f46e5",
-            show_qr_code: brandingCache.show_qr_code !== false,
-            show_stamp: brandingCache.show_stamp !== false,
-            chemin_logo: null,
-          });
+        const res = await fetch("/api/settings/company");
+        if (res.ok) {
+          const json = await res.json();
+          if (json.company) {
+            setInfo(json.company);
+            return;
+          }
         }
+
+        // Fallback to default
+        setInfo({
+          nom_entreprise: "ETS TASSIOU KOMMA",
+          slogan: "Commerce Général & Import-Export",
+          adresse: "Maradi, Niger",
+          telephone: "+227 00 00 00 00",
+          email: "contact@entreprise.com",
+          site_web: "",
+          rc: "RCCM-NI-2026-A-001",
+          nif: "12345/N",
+          nis: "",
+          art_impo: "",
+          notes_pied_facture: "Merci pour votre confiance. Les marchandises vendues ne sont ni reprises ni échangées après 48h.",
+          brand_color: "#4f46e5",
+          show_qr_code: true,
+          show_stamp: true,
+          cachet_url: null,
+          chemin_logo: null,
+        });
       } catch (err) {
         console.error("Failed to load company config", err);
       } finally {
@@ -337,43 +322,67 @@ export default function SettingsPage() {
     });
   };
 
+  const handleCachetUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 3 * 1024 * 1024) {
+      alert("L'image ne doit pas dépasser 3 Mo.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setCachetFileBase64(base64);
+      setInfo((prev) => prev ? { ...prev, cachet_url: base64 } : null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveCachet = () => {
+    setCachetFileBase64(null);
+    setInfo((prev) => prev ? { ...prev, cachet_url: null } : null);
+  };
+
   const handleSave = async () => {
     if (!info) return;
     setSaving(true);
     try {
-      // 1. Save to Supabase informations_entreprise
-      const { error } = await supabase
-        .from("informations_entreprise")
-        .upsert({
-          id: 1,
-          nom_entreprise: info.nom_entreprise,
-          adresse: info.adresse,
-          telephone: info.telephone,
-          email: info.email,
-          site_web: info.site_web || null,
-          rc: info.rc,
-          nif: info.nif,
-          art_imposition: info.art_impo || info.art_imposition || "",
-          notes_pied_facture: info.notes_pied_facture,
-        }, { onConflict: 'id' });
+      // 1. Save via secure multi-tenant API
+      const res = await fetch("/api/settings/company", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...info,
+          cachet_file_base64: cachetFileBase64,
+        }),
+      });
 
-      if (error) throw error;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur lors de la sauvegarde");
 
-      // 2. Save Branding Preferences to localStorage
+      if (data.company) {
+        setInfo(data.company);
+        setCachetFileBase64(null);
+      }
+
+      // 2. Save Branding Preferences to localStorage for instant local preview
       try {
         localStorage.setItem("company_branding_settings", JSON.stringify({
           brand_color: info.brand_color || "#4f46e5",
           slogan: info.slogan || "",
           show_qr_code: info.show_qr_code !== false,
           show_stamp: info.show_stamp !== false,
+          cachet_url: data.company?.cachet_url || info.cachet_url,
         }));
         window.dispatchEvent(new Event("company_info_updated"));
       } catch (e) {}
 
-      setToast({ message: "Informations générales et branding enregistrés avec succès !", type: "success" });
-    } catch (err) {
+      setToast({ message: "Informations générales, branding et cachet enregistrés avec succès !", type: "success" });
+    } catch (err: any) {
       console.error(err);
-      setToast({ message: "Erreur lors de la sauvegarde.", type: "error" });
+      setToast({ message: err.message || "Erreur lors de la sauvegarde.", type: "error" });
     } finally {
       setSaving(false);
       setTimeout(() => setToast(null), 3500);
@@ -685,25 +694,96 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-3 pt-2">
-                    <label className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer hover:bg-slate-100/70 transition-all">
-                      <span className="text-xs font-bold text-slate-800 flex items-center gap-2.5">
-                        <Stamp size={18} className="text-indigo-600" />
-                        Afficher le Cachet Officiel & Mention &quot;Payé&quot;
-                      </span>
-                      <input
-                        type="checkbox"
-                        checked={info?.show_stamp !== false}
-                        onChange={(e) => setInfo((prev) => prev ? { ...prev, show_stamp: e.target.checked } : null)}
-                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
-                      />
-                    </label>
+                    <div className="space-y-3 pt-2">
+                      <label className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer hover:bg-slate-100/70 transition-all">
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-2.5">
+                          <Stamp size={18} className="text-indigo-600" />
+                          Afficher le Cachet Officiel & Mention &quot;Payé&quot;
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={info?.show_stamp !== false}
+                          onChange={(e) => setInfo((prev) => prev ? { ...prev, show_stamp: e.target.checked } : null)}
+                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </label>
 
-                    <label className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer hover:bg-slate-100/70 transition-all">
-                      <span className="text-xs font-bold text-slate-800 flex items-center gap-2.5">
-                        <QrCode size={18} className="text-indigo-600" />
-                        Afficher le QR Code de Vérification SSL
-                      </span>
+                      {info?.show_stamp !== false && (
+                        <div className="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-100 space-y-3 animate-in fade-in duration-200">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-800 flex items-center gap-2">
+                              <UploadCloud size={16} className="text-indigo-600" />
+                              Image du Cachet / Tampon Officiel
+                            </span>
+                            {info?.cachet_url && (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                                <CheckCircle2 size={12} /> Cachet Actif
+                              </span>
+                            )}
+                          </div>
+
+                          {info?.cachet_url ? (
+                            <div className="flex items-center gap-4 p-3 bg-white rounded-xl border border-indigo-100 shadow-2xs">
+                              <div className="w-20 h-20 bg-slate-50 rounded-lg border border-slate-200 p-1 flex items-center justify-center shrink-0 overflow-hidden">
+                                <img
+                                  src={info.cachet_url}
+                                  alt="Cachet Officiel"
+                                  className="max-h-full max-w-full object-contain rotate-[-3deg]"
+                                />
+                              </div>
+                              <div className="flex-1 space-y-1">
+                                <p className="text-xs font-black text-slate-900">Tampon chargé & lié aux factures</p>
+                                <p className="text-[11px] text-slate-500 font-medium">Ce cachet officiel sera imprimé sur toutes vos factures, devis, reçus de caisse et rapports.</p>
+                                <div className="flex items-center gap-3 pt-1">
+                                  <label className="cursor-pointer text-[11px] font-bold text-indigo-600 hover:text-indigo-700 hover:underline flex items-center gap-1">
+                                    <UploadCloud size={12} />
+                                    <span>Remplacer l&apos;image</span>
+                                    <input
+                                      type="file"
+                                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                      className="hidden"
+                                      onChange={handleCachetUpload}
+                                    />
+                                  </label>
+                                  <span className="text-slate-300">•</span>
+                                  <button
+                                    type="button"
+                                    onClick={handleRemoveCachet}
+                                    className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer flex items-center gap-1"
+                                  >
+                                    <Trash2 size={12} />
+                                    <span>Supprimer</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <label className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-white hover:bg-indigo-50/40 rounded-2xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all group">
+                              <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 mb-2.5 group-hover:scale-110 transition-transform shadow-xs">
+                                <UploadCloud size={22} />
+                              </div>
+                              <span className="text-xs font-black text-indigo-600 group-hover:underline">
+                                Cliquez pour téléverser votre cachet / tampon officiel
+                              </span>
+                              <span className="text-[10px] text-slate-400 mt-1 font-medium">
+                                Format PNG transparent recommandé (max 3 Mo)
+                              </span>
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                className="hidden"
+                                onChange={handleCachetUpload}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      )}
+
+                      <label className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer hover:bg-slate-100/70 transition-all">
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-2.5">
+                          <QrCode size={18} className="text-indigo-600" />
+                          Afficher le QR Code de Vérification SSL
+                        </span>
                       <input
                         type="checkbox"
                         checked={info?.show_qr_code !== false}
@@ -865,14 +945,24 @@ export default function SettingsPage() {
                   )}
 
                   {info?.show_stamp !== false && (
-                    <div
-                      className="w-20 h-16 rounded-xl border-2 border-dashed flex flex-col items-center justify-center rotate-[-4deg] transition-colors duration-300"
-                      style={{ borderColor: brandColor, color: brandColor }}
-                    >
-                      <span className="text-[8px] font-black uppercase truncate max-w-[70px]">{info?.nom_entreprise?.slice(0, 10) || "ENTREPRISE"}</span>
-                      <span className="text-[7px] font-extrabold uppercase">CACHET OFFICIEL</span>
-                      <span className="text-[6px] font-bold">NIAMEY</span>
-                    </div>
+                    info?.cachet_url ? (
+                      <div className="relative group">
+                        <img
+                          src={info.cachet_url}
+                          alt="Cachet Officiel"
+                          className="w-24 h-20 object-contain rotate-[-4deg] drop-shadow-xs"
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className="w-20 h-16 rounded-xl border-2 border-dashed flex flex-col items-center justify-center rotate-[-4deg] transition-colors duration-300"
+                        style={{ borderColor: brandColor, color: brandColor }}
+                      >
+                        <span className="text-[8px] font-black uppercase truncate max-w-[70px]">{info?.nom_entreprise?.slice(0, 10) || "ENTREPRISE"}</span>
+                        <span className="text-[7px] font-extrabold uppercase">CACHET OFFICIEL</span>
+                        <span className="text-[6px] font-bold">{info?.adresse?.split(",")[0]?.toUpperCase() || "DIRECTION"}</span>
+                      </div>
+                    )
                   )}
                 </div>
               </div>

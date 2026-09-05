@@ -76,7 +76,17 @@ export default function CashClosureModal({
 
   useEffect(() => {
     async function loadCompany() {
-      const { data } = await supabase.from("informations_entreprise").select("*").maybeSingle();
+      try {
+        const res = await fetch("/api/settings/company");
+        if (res.ok) {
+          const json = await res.json();
+          if (json.company) {
+            setCompany(json.company);
+            return;
+          }
+        }
+      } catch (e) {}
+      const { data } = await supabase.from("informations_entreprise").select("*").limit(1).maybeSingle();
       if (data) setCompany(data);
     }
     loadCompany();
@@ -488,9 +498,14 @@ export default function CashClosureModal({
                   <span className="font-bold block mb-8">Le Caissier</span>
                   <div className="border-t border-slate-400 pt-1 text-[9px] text-slate-500">Signature</div>
                 </div>
-                <div>
-                  <span className="font-bold block mb-8">Visa Direction</span>
-                  <div className="border-t border-slate-400 pt-1 text-[9px] text-slate-500">Cachet & Signature</div>
+                <div className="flex flex-col items-center">
+                  <span className="font-bold block mb-1">Visa Direction</span>
+                  {(company as any)?.cachet_url ? (
+                    <img src={(company as any).cachet_url} alt="Cachet" className="h-12 object-contain mb-1 rotate-[-2deg]" />
+                  ) : (
+                    <div className="h-8"></div>
+                  )}
+                  <div className="w-full border-t border-slate-400 pt-1 text-[9px] text-slate-500">Cachet & Signature</div>
                 </div>
               </div>
 

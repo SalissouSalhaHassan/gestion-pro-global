@@ -96,12 +96,22 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
           throw new Error(`ID de facture invalide: ${invoiceId}`);
         }
 
-        // 1. Fetch Company Info
-        const { data: compData } = await supabase
-          .from("informations_entreprise")
-          .select("*")
-          .limit(1);
-        setCompany(compData && compData.length > 0 ? compData[0] : null);
+        // 1. Fetch Company Info via isolated company API
+        try {
+          const compRes = await fetch("/api/settings/company");
+          if (compRes.ok) {
+            const compJson = await compRes.json();
+            if (compJson.company) {
+              setCompany(compJson.company);
+            }
+          } else {
+            const { data: compData } = await supabase.from("informations_entreprise").select("*").limit(1);
+            setCompany(compData && compData.length > 0 ? compData[0] : null);
+          }
+        } catch (e) {
+          const { data: compData } = await supabase.from("informations_entreprise").select("*").limit(1);
+          setCompany(compData && compData.length > 0 ? compData[0] : null);
+        }
 
         // 2. Fetch Invoice Header and Details via secure API
         const response = await fetch(`/api/invoices/${numericId}`);
@@ -451,15 +461,53 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                   </tbody>
                 </table>
               </div>
+
+              {/* Signatures & Official Stamp Area */}
+              <div className="mt-8 flex justify-between items-end text-[10px] font-black px-2">
+                <div className="text-center w-[160px] border-t border-black pt-2">
+                  Signature du Client
+                </div>
+                <div className="text-center w-[200px] flex flex-col items-center">
+                  {company?.cachet_url ? (
+                    <div className="relative mb-1">
+                      <img
+                        src={company.cachet_url}
+                        alt="Cachet Officiel"
+                        className="h-20 max-w-[170px] object-contain rotate-[-3deg]"
+                      />
+                    </div>
+                  ) : company?.show_stamp !== false ? (
+                    <div className="w-24 h-16 rounded-lg border-2 border-dashed border-indigo-700 text-indigo-700 flex flex-col items-center justify-center rotate-[-3deg] mb-1">
+                      <span className="text-[7px] font-black uppercase truncate max-w-[85px]">{company?.nom_entreprise?.slice(0, 15) || "DIRECTION"}</span>
+                      <span className="text-[6px] font-extrabold uppercase">CACHET OFFICIEL</span>
+                      <span className="text-[5px] font-bold">{company?.adresse?.split(",")[0]?.toUpperCase() || "DIRECTION"}</span>
+                    </div>
+                  ) : (
+                    <div className="h-12"></div>
+                  )}
+                  <div className="w-full border-t border-black pt-1">
+                    Cachet & Direction Générale
+                  </div>
+                </div>
+              </div>
             </>
           ) : (
-            <div className="mt-12 flex justify-between items-start text-[10px] font-black px-2">
+            <div className="mt-12 flex justify-between items-end text-[10px] font-black px-2">
               <div className="text-center w-[140px] border-t border-black pt-2">
                 Signature du Livreur
               </div>
-              <div className="text-center w-[180px] border-t border-black pt-2 flex flex-col items-center">
-                <span>Cachet et Signature du Client</span>
-                <span className="italic font-bold mt-1 text-[9px]">(Reçu en bon état)</span>
+              <div className="text-center w-[180px] flex flex-col items-center">
+                {company?.cachet_url && (
+                  <img
+                    src={company.cachet_url}
+                    alt="Cachet"
+                    className="h-16 max-w-[150px] object-contain mb-1 rotate-[-2deg]"
+                  />
+                )}
+                <div className="w-full border-t border-black pt-2">
+                  <span>Cachet et Signature du Client</span>
+                  <span className="italic font-bold block mt-0.5 text-[9px]">(Reçu en bon état)</span>
+                </div>
               </div>
             </div>
           )}
