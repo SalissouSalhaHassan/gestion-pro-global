@@ -397,9 +397,9 @@ const S = {
     height: "100vh",
     display: "flex",
     flexDirection: "column" as const,
-    fontFamily: "'Outfit', sans-serif",
+    fontFamily: "'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
     color: "#0f172a",
-    background: "radial-gradient(at 0% 0%, rgba(240, 244, 255, 1) 0, transparent 50%), radial-gradient(at 100% 0%, rgba(245, 239, 255, 1) 0, transparent 50%), #f8fafc",
+    background: "linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #cbd5e1 100%)",
     overflow: "hidden",
     WebkitFontSmoothing: "antialiased" as const,
   },
@@ -410,19 +410,19 @@ const S = {
     flexDirection: "column" as const,
     gap: 8,
     padding: "12px",
-    background: "rgba(79, 70, 229, 0.03)",
+    background: "#f8fafc",
     borderRadius: 16,
-    border: "1px solid rgba(79, 70, 229, 0.1)",
+    border: "1px solid #e2e8f0",
   },
   customerSelect: {
     width: "100%",
-    padding: "10px 12px",
+    padding: "9px 12px",
     borderRadius: 12,
     border: "2px solid #e2e8f0",
     background: "#fff",
     color: "#1e293b",
     fontWeight: 700,
-    fontSize: 14,
+    fontSize: 13,
     outline: "none",
     transition: "all 0.2s",
     cursor: "pointer",
@@ -434,7 +434,7 @@ const S = {
     padding: "0 4px",
   },
   customerCreditBadge: {
-    padding: "4px 10px",
+    padding: "3px 8px",
     borderRadius: "20px",
     background: "#fee2e2",
     color: "#ef4444",
@@ -445,69 +445,75 @@ const S = {
 
   /* ── HEADER ── */
   header: {
-    height: 60,
-    background: "rgba(15, 23, 42, 0.95)",
-    backdropFilter: "blur(12px)",
-    borderBottom: "1px solid rgba(255,255,255,0.1)",
-    padding: "0 24px",
+    height: 64,
+    background: "linear-gradient(135deg, #090d16 0%, #0f172a 60%, #1e1b4b 100%)",
+    backdropFilter: "blur(16px)",
+    borderBottom: "1px solid rgba(255,255,255,0.08)",
+    padding: "0 20px",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     flexShrink: 0,
-    boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+    boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
     zIndex: 20,
   },
   headerLeft: {
     display: "flex",
     alignItems: "center",
-    gap: 16,
+    gap: 14,
   },
   btnBack: {
     display: "flex",
     alignItems: "center",
-    gap: 8,
-    background: "rgba(255,255,255,0.1)",
-    border: "1px solid rgba(255,255,255,0.2)",
-    color: "#fff",
-    padding: "8px 16px",
-    borderRadius: "12px",
-    fontWeight: 800,
-    fontSize: 14,
+    gap: 6,
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.15)",
+    color: "#e2e8f0",
+    padding: "7px 14px",
+    borderRadius: "10px",
+    fontWeight: 700,
+    fontSize: 13,
     cursor: "pointer",
-    transition: "all 0.2s",
+    transition: "all 0.15s",
     textDecoration: "none",
   },
   headerStoreName: {
     fontWeight: 900,
-    fontSize: 24,
+    fontSize: 20,
     color: "#fff",
-    letterSpacing: "-0.02em",
-    background: "linear-gradient(to right, #fff, #94a3b8)",
-    WebkitBackgroundClip: "text",
-    WebkitTextFillColor: "transparent",
+    letterSpacing: "-0.01em",
   },
   headerRight: {
     display: "flex",
     alignItems: "center",
-    gap: 32,
+    gap: 14,
     color: "#94a3b8",
     fontWeight: 600,
-    fontSize: 14,
+    fontSize: 13,
   },
   headerInfoItem: {
     display: "flex",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+    background: "rgba(255,255,255,0.06)",
+    padding: "5px 10px",
+    borderRadius: "8px",
+    border: "1px solid rgba(255,255,255,0.08)",
+    color: "#e2e8f0",
+    fontSize: 12,
+    fontWeight: 700,
   },
   headerCashier: {
     display: "flex",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     color: "#fff",
-    background: "rgba(255,255,255,0.1)",
-    padding: "6px 14px",
-    borderRadius: "12px",
-    fontWeight: 700,
+    background: "linear-gradient(135deg, rgba(79, 70, 229, 0.25) 0%, rgba(124, 58, 237, 0.25) 100%)",
+    border: "1px solid rgba(99, 102, 241, 0.35)",
+    padding: "6px 12px",
+    borderRadius: "10px",
+    fontWeight: 800,
+    fontSize: 13,
   },
 
   /* ── MAIN BODY ── */
@@ -515,30 +521,31 @@ const S = {
     flex: 1,
     display: "flex",
     overflow: "hidden",
-    padding: 16,
-    gap: 16,
+    padding: "12px 16px",
+    gap: 12,
   },
 
   /* ── SECTION PANEL ── */
   panel: {
     display: "flex",
     flexDirection: "column" as const,
-    background: "rgba(255, 255, 255, 0.6)",
-    backdropFilter: "blur(20px)",
-    border: "1px solid rgba(255,255,255,0.7)",
-    borderRadius: 24,
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 18,
     overflow: "hidden",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.04)",
+    boxShadow: "0 4px 20px -2px rgba(15, 23, 42, 0.05)",
   },
   panelHeader: {
-    background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+    background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
     color: "#fff",
     fontWeight: 800,
-    fontSize: 15,
-    padding: "10px 0",
-    textAlign: "center" as const,
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.1em",
+    fontSize: 13,
+    padding: "10px 14px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    letterSpacing: "0.04em",
+    borderBottom: "1px solid rgba(255,255,255,0.08)",
   },
 
   /* ── PRODUCTS COLUMN ── */
@@ -546,19 +553,19 @@ const S = {
     display: "flex",
     alignItems: "center",
     border: "2px solid #e2e8f0",
-    borderRadius: 16,
-    background: "#fff",
-    padding: "2px 4px",
-    transition: "all 0.2s",
-    marginBottom: 12,
+    borderRadius: 12,
+    background: "#f8fafc",
+    padding: "2px 6px",
+    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+    marginBottom: 8,
   },
   searchInput: {
     flex: 1,
-    padding: "10px 12px",
+    padding: "8px 10px",
     outline: "none",
     border: "none",
     fontWeight: 600,
-    fontSize: 15,
+    fontSize: 14,
     color: "#0f172a",
     background: "transparent",
   },
@@ -566,35 +573,37 @@ const S = {
     display: "flex",
     flexDirection: "column" as const,
     alignItems: "center",
-    background: "rgba(255, 255, 255, 0.8)",
-    border: "1px solid rgba(255,255,255,1)",
-    borderRadius: 18,
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 14,
     cursor: "pointer",
-    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
     overflow: "hidden",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.03)",
+    boxShadow: "0 2px 4px rgba(0,0,0,0.03)",
+    position: "relative" as const,
   },
   productImageBox: {
-    height: 90,
+    height: 76,
     width: "100%",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: 12,
-    background: "#fff",
-    transition: "transform 0.3s",
+    padding: 6,
+    background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
+    transition: "transform 0.2s",
   },
   productLabel: {
     width: "100%",
-    background: "rgba(248, 250, 252, 0.8)",
-    padding: "8px 6px",
+    background: "#ffffff",
+    padding: "6px 8px 8px 8px",
     textAlign: "center" as const,
+    borderTop: "1px solid #f1f5f9",
   },
   productName: {
     fontWeight: 800,
     color: "#1e293b",
     fontSize: 12,
-    lineHeight: 1.2,
+    lineHeight: 1.25,
     textTransform: "capitalize" as const,
     whiteSpace: "nowrap" as const,
     overflow: "hidden",
@@ -602,20 +611,291 @@ const S = {
   },
   productPrice: {
     fontWeight: 900,
-    color: "#4f46e5",
+    color: "#059669",
     fontSize: 13,
     marginTop: 2,
+    fontFamily: "monospace",
   },
 
   /* ── BOTTOM PRODUCT BUTTONS ── */
   btnAjouterRapide: {
     flex: 1,
+    background: "linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)",
+    color: "#fff",
+    fontWeight: 800,
+    fontSize: 14,
+    padding: "10px 0",
+    borderRadius: 12,
+    border: "none",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    transition: "all 0.15s",
+    boxShadow: "0 4px 12px rgba(79, 70, 229, 0.25)",
+  },
+  btnBarcode: (active: boolean) => ({
+    width: 54,
+    background: active
+      ? "linear-gradient(135deg, #10b981 0%, #059669 100%)"
+      : "#f1f5f9",
+    color: active ? "#fff" : "#64748b",
+    fontWeight: 700,
+    padding: "10px 0",
+    borderRadius: 12,
+    border: active ? "none" : "1px solid #cbd5e1",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "all 0.15s",
+    boxShadow: active ? "0 4px 12px rgba(16, 185, 129, 0.25)" : "none",
+  }),
+
+  /* ── TICKET TABLE ── */
+  ticketTable: {
+    width: "100%",
+    borderCollapse: "collapse" as const,
+    fontSize: 13,
+  },
+  ticketTh: {
+    padding: "8px 10px",
+    textAlign: "left" as const,
+    background: "#f8fafc",
+    color: "#64748b",
+    fontWeight: 800,
+    fontSize: 11,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.05em",
+    borderBottom: "1px solid #e2e8f0",
+  },
+  ticketThLast: {
+    padding: "8px 10px",
+    textAlign: "right" as const,
+    background: "#f8fafc",
+    color: "#64748b",
+    fontWeight: 800,
+    fontSize: 11,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.05em",
+    borderBottom: "1px solid #e2e8f0",
+  },
+  ticketTd: {
+    padding: "8px 10px",
+    fontWeight: 700,
+    borderBottom: "1px solid #f1f5f9",
+    color: "#1e293b",
+  },
+  ticketTdLast: {
+    padding: "8px 10px",
+    fontWeight: 800,
+    borderBottom: "1px solid #f1f5f9",
+    color: "#0f172a",
+    textAlign: "right" as const,
+    fontFamily: "monospace",
+  },
+  ticketRowSelected: {
+    background: "rgba(79, 70, 229, 0.07)",
+  },
+
+  /* ── TOTALS ── */
+  totalRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "6px 14px",
+    borderBottom: "1px solid #f1f5f9",
+  },
+  totalLabel: {
+    color: "#64748b",
+    fontWeight: 600,
+    fontSize: 13,
+  },
+  totalValue: {
+    fontWeight: 800,
+    color: "#1e293b",
+    fontSize: 14,
+    fontFamily: "monospace",
+  },
+  totalTTCRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "12px 14px",
+    background: "linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)",
+    borderTop: "2px solid #c7d2fe",
+  },
+  totalTTCLabel: {
+    fontWeight: 900,
+    color: "#312e81",
+    fontSize: 16,
+  },
+  totalTTCValue: {
+    fontWeight: 900,
+    color: "#3730a3",
+    fontSize: 24,
+    letterSpacing: "-0.02em",
+    fontFamily: "monospace",
+  },
+
+  /* ── TICKET ACTIONS ── */
+  btnAjouter: {
+    flex: 1,
+    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+    color: "#fff",
+    fontWeight: 800,
+    fontSize: 12,
+    padding: "8px 0",
+    borderRadius: 10,
+    border: "none",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    transition: "all 0.1s",
+    boxShadow: "0 2px 6px rgba(16, 185, 129, 0.2)",
+  },
+  btnReduire: {
+    flex: 1,
     background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
     color: "#fff",
     fontWeight: 800,
-    fontSize: 15,
-    padding: "12px 0",
-    borderRadius: 14,
+    fontSize: 12,
+    padding: "8px 0",
+    borderRadius: 10,
+    border: "none",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    transition: "all 0.1s",
+    boxShadow: "0 2px 6px rgba(59, 130, 246, 0.2)",
+  },
+  btnSupprimer: {
+    flex: 1,
+    background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+    color: "#fff",
+    fontWeight: 800,
+    fontSize: 12,
+    padding: "8px 0",
+    borderRadius: 10,
+    border: "none",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    transition: "all 0.1s",
+    boxShadow: "0 2px 6px rgba(239, 68, 68, 0.2)",
+  },
+
+  /* ── PAIEMENT COLUMN ── */
+  payTotalBox: {
+    background: "linear-gradient(135deg, #090d16 0%, #0f172a 60%, #1e1b4b 100%)",
+    padding: "16px 20px",
+    borderRadius: 16,
+    textAlign: "center" as const,
+    boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.35)",
+    border: "1px solid rgba(255, 255, 255, 0.1)",
+    position: "relative" as const,
+    overflow: "hidden",
+  },
+  payTotalLabel: {
+    fontWeight: 800,
+    fontSize: 12,
+    color: "#94a3b8",
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.15em",
+  },
+  payTotalAmount: {
+    fontWeight: 900,
+    fontSize: 30,
+    color: "#10b981",
+    display: "block",
+    marginTop: 4,
+    fontFamily: "monospace",
+    letterSpacing: "-0.02em",
+  },
+  payInputRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    margin: "6px 0",
+  },
+  payInputLabel: {
+    fontWeight: 800,
+    fontSize: 14,
+    color: "#1e293b",
+  },
+  payInput: {
+    width: 150,
+    padding: "9px 12px",
+    border: "2px solid #cbd5e1",
+    borderRadius: 12,
+    textAlign: "right" as const,
+    fontWeight: 900,
+    fontSize: 18,
+    color: "#0f172a",
+    outline: "none",
+    transition: "all 0.2s",
+    background: "#fff",
+    fontFamily: "monospace",
+  },
+  payChangeBox: {
+    width: 150,
+    padding: "9px 12px",
+    border: "2px solid #10b981",
+    background: "#f0fdf4",
+    borderRadius: 12,
+    textAlign: "right" as const,
+    fontWeight: 900,
+    fontSize: 18,
+    color: "#10b981",
+    fontFamily: "monospace",
+  },
+  btnPayment: (color: string, borderColor: string, active: boolean) => ({
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 12,
+    border: active ? "2px solid transparent" : "1px solid #e2e8f0",
+    background: active ? color : "#ffffff",
+    color: active ? "#fff" : "#334155",
+    fontWeight: 800,
+    fontSize: 14,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    transition: "all 0.2s",
+    boxShadow: active ? "0 4px 12px rgba(15, 23, 42, 0.15)" : "0 1px 3px rgba(0,0,0,0.02)",
+    transform: active ? "scale(1.01)" : "scale(1)",
+  }),
+
+  /* ── FOOTER ── */
+  footer: {
+    height: 72,
+    background: "linear-gradient(180deg, #0f172a 0%, #090d16 100%)",
+    backdropFilter: "blur(16px)",
+    borderTop: "1px solid rgba(255,255,255,0.08)",
+    display: "flex",
+    alignItems: "center",
+    padding: "10px 18px",
+    gap: 12,
+    flexShrink: 0,
+    zIndex: 30,
+    boxShadow: "0 -6px 20px rgba(0,0,0,0.25)",
+  },
+  footerBtn: (bg: string, border: string) => ({
+    flex: 1,
+    height: 48,
+    background: bg,
+    color: "#fff",
+    fontWeight: 800,
+    fontSize: 13,
+    borderRadius: 12,
     border: "none",
     cursor: "pointer",
     display: "flex",
@@ -623,252 +903,16 @@ const S = {
     justifyContent: "center",
     gap: 8,
     transition: "all 0.2s",
-    boxShadow: "0 4px 12px rgba(37, 99, 235, 0.3)",
-  },
-  btnBarcode: (active: boolean) => ({
-    width: 64,
-    background: active
-      ? "linear-gradient(135deg, #10b981 0%, #059669 100%)"
-      : "rgba(15, 23, 42, 0.1)",
-    color: active ? "#fff" : "#64748b",
-    fontWeight: 700,
-    padding: "12px 0",
-    borderRadius: 14,
-    border: "none",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    transition: "all 0.2s",
-    boxShadow: active ? "0 4px 12px rgba(16, 185, 129, 0.3)" : "none",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
   }),
-
-  /* ── TICKET TABLE ── */
-  ticketTable: {
-    width: "100%",
-    borderCollapse: "collapse" as const,
-    fontSize: 14,
-  },
-  ticketTh: {
-    padding: "12px 14px",
-    textAlign: "left" as const,
-    background: "rgba(0,0,0,0.02)",
-    color: "#64748b",
-    fontWeight: 800,
-    fontSize: 12,
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.05em",
-    borderBottom: "2px solid #f1f5f9",
-  },
-  ticketThLast: {
-    padding: "12px 14px",
-    textAlign: "right" as const,
-    background: "rgba(0,0,0,0.02)",
-    color: "#64748b",
-    fontWeight: 800,
-    fontSize: 12,
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.05em",
-    borderBottom: "2px solid #f1f5f9",
-  },
-  ticketTd: {
-    padding: "12px 14px",
-    fontWeight: 700,
-    borderBottom: "1px solid #f1f5f9",
-    color: "#1e293b",
-  },
-  ticketTdLast: {
-    padding: "12px 14px",
-    fontWeight: 800,
-    borderBottom: "1px solid #f1f5f9",
-    color: "#0f172a",
-    textAlign: "right" as const,
-  },
-  ticketRowSelected: {
-    background: "rgba(79, 70, 229, 0.08)",
-  },
-
-  /* ── TOTALS ── */
-  totalRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    padding: "8px 20px",
-    borderBottom: "1px solid #f1f5f9",
-  },
-  totalLabel: {
-    color: "#64748b",
-    fontWeight: 600,
-    fontSize: 14,
-  },
-  totalValue: {
-    fontWeight: 800,
-    color: "#1e293b",
-    fontSize: 15,
-  },
-  totalTTCRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "16px 20px",
-    background: "rgba(79, 70, 229, 0.05)",
-  },
-  totalTTCLabel: {
-    fontWeight: 900,
-    color: "#4f46e5",
-    fontSize: 20,
-  },
-  totalTTCValue: {
-    fontWeight: 900,
-    color: "#4f46e5",
-    fontSize: 32,
-    letterSpacing: "-0.02em",
-  },
-
-  /* ── TICKET ACTIONS ── */
-  btnAjouter: {
-    flex: 1,
-    background: "#10b981",
+  footerBtnValidate: {
+    flex: 2,
+    height: 50,
+    background: "linear-gradient(135deg, #059669 0%, #10b981 50%, #047857 100%)",
     color: "#fff",
-    fontWeight: 800,
-    fontSize: 13,
-    padding: "10px 0",
-    borderRadius: 12,
-    border: "none",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    transition: "all 0.1s",
-  },
-  btnReduire: {
-    flex: 1,
-    background: "#3b82f6",
-    color: "#fff",
-    fontWeight: 800,
-    fontSize: 13,
-    padding: "10px 0",
-    borderRadius: 12,
-    border: "none",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    transition: "all 0.1s",
-  },
-  btnSupprimer: {
-    flex: 1,
-    background: "#ef4444",
-    color: "#fff",
-    fontWeight: 800,
-    fontSize: 13,
-    padding: "10px 0",
-    borderRadius: 12,
-    border: "none",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    transition: "all 0.1s",
-  },
-
-  /* ── PAIEMENT COLUMN ── */
-  payTotalBox: {
-    border: "2px solid #e2e8f0",
-    background: "rgba(255,255,255,0.5)",
-    padding: "20px",
-    borderRadius: 20,
-    textAlign: "center" as const,
-  },
-  payTotalLabel: {
-    fontWeight: 800,
-    fontSize: 18,
-    color: "#64748b",
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.1em",
-  },
-  payTotalAmount: {
     fontWeight: 900,
-    fontSize: 36,
-    color: "#0f172a",
-    display: "block",
-    marginTop: 4,
-  },
-  payInputRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    margin: "8px 0",
-  },
-  payInputLabel: {
-    fontWeight: 800,
     fontSize: 16,
-    color: "#1e293b",
-  },
-  payInput: {
-    width: 160,
-    padding: "12px 16px",
-    border: "2px solid #cbd5e1",
-    borderRadius: 14,
-    textAlign: "right" as const,
-    fontWeight: 900,
-    fontSize: 22,
-    color: "#0f172a",
-    outline: "none",
-    transition: "all 0.2s",
-    background: "#fff",
-  },
-  payChangeBox: {
-    width: 160,
-    padding: "12px 16px",
-    border: "2px solid #10b981",
-    background: "#f0fdf4",
-    borderRadius: 14,
-    textAlign: "right" as const,
-    fontWeight: 900,
-    fontSize: 22,
-    color: "#10b981",
-  },
-  btnPayment: (color: string, borderColor: string, active: boolean) => ({
-    width: "100%",
-    padding: "16px 0",
-    borderRadius: 16,
-    border: "none",
-    background: active ? color : "rgba(15, 23, 42, 0.05)",
-    color: active ? "#fff" : "#64748b",
-    fontWeight: 800,
-    fontSize: 16,
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    transition: "all 0.3s",
-    boxShadow: active ? `0 8px 20px ${color}40` : "none",
-    transform: active ? "scale(1.02)" : "scale(1)",
-  }),
-
-  /* ── FOOTER ── */
-  footer: {
-    height: 80,
-    background: "rgba(255, 255, 255, 0.8)",
-    backdropFilter: "blur(12px)",
-    borderTop: "1px solid rgba(0,0,0,0.05)",
-    display: "flex",
-    padding: "12px 16px",
-    gap: 16,
-    flexShrink: 0,
-    zIndex: 30,
-  },
-  footerBtn: (bg: string, border: string) => ({
-    flex: 1,
-    background: bg,
-    color: "#fff",
-    fontWeight: 800,
-    fontSize: 15,
-    borderRadius: 16,
+    borderRadius: 12,
     border: "none",
     cursor: "pointer",
     display: "flex",
@@ -876,23 +920,7 @@ const S = {
     justifyContent: "center",
     gap: 10,
     transition: "all 0.2s",
-    boxShadow: `0 4px 12px ${bg}40`,
-  }),
-  footerBtnValidate: {
-    flex: 2,
-    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-    color: "#fff",
-    fontWeight: 900,
-    fontSize: 18,
-    borderRadius: 16,
-    border: "none",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    transition: "all 0.2s",
-    boxShadow: "0 8px 24px rgba(16, 185, 129, 0.4)",
+    boxShadow: "0 6px 20px rgba(16, 185, 129, 0.4)",
     textTransform: "uppercase" as const,
     letterSpacing: "0.05em",
   },
@@ -918,29 +946,31 @@ const S = {
     border: `1px solid ${bg}`,
   }),
   ticketPriceInput: {
-    width: 90,
-    padding: "4px 8px",
+    width: 84,
+    padding: "4px 6px",
     border: "1px solid #cbd5e1",
     borderRadius: "8px",
     fontWeight: 800,
-    fontSize: 14,
+    fontSize: 13,
     color: "#4f46e5",
     textAlign: "right" as const,
     outline: "none",
-    background: "rgba(255,255,255,0.9)",
+    background: "#fff",
+    fontFamily: "monospace",
     transition: "all 0.2s",
   },
   ticketQtyInput: {
-    width: 60,
+    width: 44,
     padding: "4px 4px",
     border: "1px solid #cbd5e1",
     borderRadius: "8px",
     fontWeight: 800,
-    fontSize: 14,
+    fontSize: 13,
     color: "#0f172a",
     textAlign: "center" as const,
     outline: "none",
-    background: "rgba(255,255,255,0.9)",
+    background: "#fff",
+    fontFamily: "monospace",
     transition: "all 0.2s",
   },
 };
@@ -2359,32 +2389,82 @@ function PosPage() {
             <button 
               onClick={() => router.push("/dashboard")}
               style={S.btnBack}
-              className="hover:bg-white/20 transition-all"
+              className="hover:bg-white/20 transition-all active:scale-95"
+              title="Retour au tableau de bord"
             >
-              <ArrowLeft size={18} />
-              <span>Retour</span>
+              <ArrowLeft size={16} />
+              <span>Tableau de bord</span>
             </button>
             
-            {/* Store Icon — blue shopping bag */}
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg">
-              <path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 16H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v12z"/>
-            </svg>
-            <span style={S.headerStoreName}>{storeName}</span>
+            {/* Store Brand Chip */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{
+                width: 38,
+                height: 38,
+                borderRadius: 12,
+                background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 4px 14px rgba(79, 70, 229, 0.4)",
+                color: "#fff",
+              }}>
+                <ShoppingCart size={20} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={S.headerStoreName}>{storeName || "GESTION PRO GLOBAL"}</span>
+                  <span style={{
+                    background: "rgba(99, 102, 241, 0.2)",
+                    color: "#a5b4fc",
+                    border: "1px solid rgba(99, 102, 241, 0.4)",
+                    fontSize: 10,
+                    fontWeight: 900,
+                    padding: "2px 7px",
+                    borderRadius: 6,
+                    letterSpacing: "0.05em",
+                    textTransform: "uppercase",
+                  }}>
+                    POS Enterprise
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div style={S.headerRight}>
+            {/* Live Cloud Sync Dot */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              background: "rgba(16, 185, 129, 0.12)",
+              border: "1px solid rgba(16, 185, 129, 0.3)",
+              padding: "4px 10px",
+              borderRadius: "8px",
+              fontSize: 12,
+              fontWeight: 800,
+              color: "#34d399",
+            }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 8px #10b981" }} className="animate-pulse" />
+              <span>En Ligne</span>
+            </div>
+
+            {/* Date & Time */}
             <div style={S.headerInfoItem}>
-              <Calendar size={18} />
+              <Calendar size={15} className="text-indigo-400" />
               <span>{currentTime.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
             </div>
             <div style={S.headerInfoItem}>
-              <Clock size={18} />
-              <span>{currentTime.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
+              <Clock size={15} className="text-indigo-400" />
+              <span style={{ fontFamily: "monospace", letterSpacing: "0.05em" }}>
+                {currentTime.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+              </span>
             </div>
             
             {/* Depot Selector */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.1)", padding: "4px 10px", borderRadius: "8px" }}>
-              <PackageSearch size={16} color="#fff" />
+            <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", padding: "4px 10px", borderRadius: "10px" }}>
+              <PackageSearch size={15} color="#cbd5e1" />
               <select
                 value={selectedDepot}
                 onChange={(e) => canChangeDepot && handleDepotChange(e.target.value)}
@@ -2396,7 +2476,7 @@ function PosPage() {
                   fontWeight: 700,
                   outline: "none",
                   cursor: canChangeDepot ? "pointer" : "not-allowed",
-                  fontSize: 14,
+                  fontSize: 13,
                   opacity: !canChangeDepot ? 0.7 : 1,
                 }}
                 title={
@@ -2426,20 +2506,20 @@ function PosPage() {
                 display: "flex",
                 alignItems: "center",
                 gap: 7,
-                background: parkedCarts.length > 0 ? "rgba(245, 158, 11, 0.25)" : "rgba(255,255,255,0.08)",
-                border: parkedCarts.length > 0 ? "1px solid rgba(245, 158, 11, 0.6)" : "1px solid rgba(255,255,255,0.15)",
+                background: parkedCarts.length > 0 ? "rgba(245, 158, 11, 0.25)" : "rgba(255,255,255,0.06)",
+                border: parkedCarts.length > 0 ? "1px solid rgba(245, 158, 11, 0.6)" : "1px solid rgba(255,255,255,0.12)",
                 padding: "6px 12px",
                 borderRadius: "10px",
                 color: parkedCarts.length > 0 ? "#fef3c7" : "#cbd5e1",
                 cursor: "pointer",
                 fontWeight: 800,
-                fontSize: 13,
+                fontSize: 12,
                 transition: "all 0.2s",
               }}
               className="hover:brightness-125"
               title="Voir et gérer tous les tickets en attente"
             >
-              <PauseCircle size={17} className={parkedCarts.length > 0 ? "text-amber-400 animate-pulse" : "text-slate-400"} />
+              <PauseCircle size={16} className={parkedCarts.length > 0 ? "text-amber-400 animate-pulse" : "text-slate-400"} />
               <span>En attente</span>
               {parkedCarts.length > 0 && (
                 <span style={{
@@ -2455,12 +2535,13 @@ function PosPage() {
               )}
             </button>
 
+            {/* Cashier Chip */}
             <div style={S.headerCashier}>
-              <UserRound size={18} />
-              <span>Caissier: {cashierName}</span>
+              <UserRound size={16} />
+              <span>{cashierName}</span>
               {!isAdmin && userEmplacement && (
-                <span style={{ marginLeft: "12px", fontSize: "12px", opacity: 0.8 }}>
-                  • Dépôt: <strong>{userEmplacement}</strong> ({articles.length} articles)
+                <span style={{ marginLeft: "6px", fontSize: "11px", opacity: 0.85 }}>
+                  • {userEmplacement} ({articles.length})
                 </span>
               )}
             </div>
@@ -2621,8 +2702,24 @@ function PosPage() {
 
           {/* ──────── COLUMN 1: PRODUITS ──────── */}
           <section style={{ ...S.panel, width: "35%" }}>
-            <div style={S.panelHeader}>Produits</div>
-            <div style={{ padding: 8, display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+            <div style={S.panelHeader}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <PackageSearch size={17} className="text-indigo-400" />
+                <span style={{ fontWeight: 900, textTransform: "uppercase" }}>Produits</span>
+              </div>
+              <span style={{
+                background: "rgba(255,255,255,0.12)",
+                color: "#e2e8f0",
+                fontSize: 11,
+                fontWeight: 800,
+                padding: "2px 8px",
+                borderRadius: 8,
+                fontFamily: "monospace",
+              }}>
+                {filteredArticles.length} art.
+              </span>
+            </div>
+            <div style={{ padding: 10, display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
               {/* Search */}
               <div style={S.searchBox}>
                 <Search size={16} style={{ marginLeft: 8, color: "#95a5a6" }} />
@@ -2632,7 +2729,7 @@ function PosPage() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={handleSearchKeyDown}
-                  placeholder="Recherche..."
+                  placeholder="Rechercher un produit... (Nom, Ref, Code-barres)"
                   style={S.searchInput}
                 />
                 <button
@@ -2698,19 +2795,36 @@ function PosPage() {
                       <button
                         key={article.id}
                         onClick={() => addItem(article)}
-                        className="pos-product-card"
+                        className="pos-product-card group hover:-translate-y-0.5 hover:border-indigo-400 hover:shadow-md active:scale-95 transition-all"
                         style={S.productCard}
                       >
+                        {/* Stock pill */}
+                        <div style={{
+                          position: "absolute",
+                          top: 4,
+                          right: 4,
+                          fontSize: 9,
+                          fontWeight: 800,
+                          padding: "1px 5px",
+                          borderRadius: 6,
+                          background: article.stock_total > 0 ? "rgba(240, 253, 244, 0.95)" : "rgba(254, 242, 242, 0.95)",
+                          color: article.stock_total > 0 ? "#15803d" : "#b91c1c",
+                          border: `1px solid ${article.stock_total > 0 ? "#bbf7d0" : "#fecaca"}`,
+                          zIndex: 1,
+                        }}>
+                          {article.stock_total > 0 ? `${article.stock_total}` : "0"}
+                        </div>
+
                         <div style={S.productImageBox}>
                           {imgSrc ? (
-                            <Image src={imgSrc} alt={article.designation} width={58} height={58} style={{ objectFit: "contain" }} />
+                            <Image src={imgSrc} alt={article.designation} width={50} height={50} style={{ objectFit: "contain" }} />
                           ) : (
-                            <div style={{ color: "#dcdde1" }}><PackageSearch size={30} /></div>
+                            <div style={{ color: "#cbd5e1" }}><PackageSearch size={26} /></div>
                           )}
                         </div>
                         <div style={S.productLabel}>
-                          <div style={S.productName}>{article.designation}</div>
-                          <div style={S.productPrice}>{formatAmount(article.p_vente_ttc)} F CFA</div>
+                          <div style={S.productName} title={article.designation}>{article.designation}</div>
+                          <div style={S.productPrice}>{formatAmount(article.p_vente_ttc)} F</div>
                         </div>
                       </button>
                     );
@@ -2719,18 +2833,19 @@ function PosPage() {
               </div>
 
               {/* Bottom Buttons */}
-              <div style={{ paddingTop: 8, borderTop: "1px solid #b2bec3", display: "flex", gap: 8 }}>
+              <div style={{ paddingTop: 8, borderTop: "1px solid #e2e8f0", display: "flex", gap: 8 }}>
                 <button 
-                  className="pos-action-btn" 
+                  className="pos-action-btn active:scale-95" 
                   onClick={() => setIsQuickAddOpen(true)}
                   style={S.btnAjouterRapide}
                 >
                   <Plus size={16} strokeWidth={3} /> Ajouter Rapide
                 </button>
                 <button
-                  className="pos-action-btn"
+                  className="pos-action-btn active:scale-95"
                   onClick={() => setBarcodeMode(!barcodeMode)}
                   style={S.btnBarcode(barcodeMode)}
+                  title={barcodeMode ? "Mode code-barres actif" : "Activer mode code-barres"}
                 >
                   <Barcode size={22} />
                 </button>
@@ -2740,10 +2855,47 @@ function PosPage() {
 
           {/* ──────── COLUMN 2: TICKET DE CAISSE ──────── */}
           <section style={{ ...S.panel, width: "35%" }}>
-            <div style={S.panelHeader}>Ticket de Caisse</div>
-            <div style={{ padding: 8, display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+            <div style={S.panelHeader}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <FileText size={17} className="text-indigo-400" />
+                <span style={{ fontWeight: 900, textTransform: "uppercase" }}>Ticket de Caisse</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{
+                  background: "rgba(255,255,255,0.12)",
+                  color: "#e2e8f0",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  padding: "2px 8px",
+                  borderRadius: 8,
+                  fontFamily: "monospace",
+                }}>
+                  {cart.length} ligne{cart.length > 1 ? "s" : ""}
+                </span>
+                {cart.length > 0 && (
+                  <button
+                    onClick={clearCart}
+                    style={{
+                      background: "rgba(239, 68, 68, 0.2)",
+                      border: "1px solid rgba(239, 68, 68, 0.4)",
+                      color: "#fca5a5",
+                      padding: "2px 7px",
+                      borderRadius: 6,
+                      fontSize: 10,
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                    className="hover:bg-red-500 hover:text-white active:scale-95 transition-all"
+                    title="Vider le panier en cours"
+                  >
+                    Vider
+                  </button>
+                )}
+              </div>
+            </div>
+            <div style={{ padding: 10, display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
               {/* Table */}
-              <div className="pos-scrollbar" style={{ flex: 1, overflowY: "auto", border: "1px solid #b2bec3", borderRadius: 3, marginBottom: 8 }}>
+              <div className="pos-scrollbar" style={{ flex: 1, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 12, marginBottom: 8, background: "#fff" }}>
                 <table style={S.ticketTable}>
                   <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
                     <tr>
@@ -2758,35 +2910,90 @@ function PosPage() {
                       <tr
                         key={item.id}
                         onClick={() => setSelectedItemId(item.id)}
-                        className="pos-ticket-row"
+                        className="pos-ticket-row hover:bg-slate-50 transition-colors"
                         style={{
                           cursor: "pointer",
                           ...(selectedItemId === item.id ? S.ticketRowSelected : {}),
                         }}
                       >
-                        <td style={S.ticketTd}>{item.designation}</td>
+                        <td style={S.ticketTd}>
+                          <div style={{ fontWeight: 800, color: "#1e293b" }}>{item.designation}</div>
+                          {item.code_barre && (
+                            <div style={{ fontSize: 10, color: "#94a3b8", fontFamily: "monospace" }}>{item.code_barre}</div>
+                          )}
+                        </td>
                         <td style={{ ...S.ticketTd, textAlign: "center" }}>
-                          <input
-                            type="number"
-                            className="pos-qty-input"
-                            value={item.quantite}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === "") {
-                                // Allow empty string temporarily while typing
-                                updateQuantity(item.id, 0); 
-                              } else {
-                                updateQuantity(item.id, parseInt(val) || 1);
-                              }
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            onFocus={(e) => e.target.select()}
-                            style={{ ...S.ticketQtyInput, border: "2px solid #4f46e5" }}
-                            min="1"
-                          />
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (item.quantite > 1) updateQuantity(item.id, item.quantite - 1);
+                                else removeItem(item.id);
+                              }}
+                              style={{
+                                width: 22,
+                                height: 22,
+                                borderRadius: 6,
+                                border: "1px solid #cbd5e1",
+                                background: "#f1f5f9",
+                                color: "#475569",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                cursor: "pointer",
+                                fontWeight: 900,
+                              }}
+                              className="hover:bg-indigo-100 hover:text-indigo-600 transition-all active:scale-90"
+                              title="Diminuer"
+                            >
+                              <Minus size={10} strokeWidth={3} />
+                            </button>
+                            <input
+                              type="number"
+                              className="pos-qty-input"
+                              value={item.quantite}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === "") {
+                                  updateQuantity(item.id, 0); 
+                                } else {
+                                  updateQuantity(item.id, parseInt(val) || 1);
+                                }
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              onFocus={(e) => e.target.select()}
+                              style={S.ticketQtyInput}
+                              min="1"
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateQuantity(item.id, item.quantite + 1);
+                              }}
+                              style={{
+                                width: 22,
+                                height: 22,
+                                borderRadius: 6,
+                                border: "1px solid #cbd5e1",
+                                background: "#f1f5f9",
+                                color: "#475569",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                cursor: "pointer",
+                                fontWeight: 900,
+                              }}
+                              className="hover:bg-indigo-100 hover:text-indigo-600 transition-all active:scale-90"
+                              title="Augmenter"
+                            >
+                              <Plus size={10} strokeWidth={3} />
+                            </button>
+                          </div>
                         </td>
                         <td style={{ ...S.ticketTd, textAlign: "right" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
                             <input
                               type="number"
                               className="pos-price-input"
@@ -2826,17 +3033,18 @@ function PosPage() {
                                   border: "none",
                                   background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
                                   color: "#fff",
-                                  width: 26,
-                                  height: 26,
-                                  borderRadius: 8,
+                                  width: 24,
+                                  height: 24,
+                                  borderRadius: 6,
                                   display: "flex",
                                   alignItems: "center",
                                   justifyContent: "center",
                                   cursor: "pointer",
-                                  boxShadow: "0 4px 10px rgba(22,163,74,0.25)",
+                                  boxShadow: "0 2px 6px rgba(22,163,74,0.25)",
                                 }}
+                                className="active:scale-90"
                               >
-                                <Save size={13} />
+                                <Save size={12} />
                               </button>
                             )}
                           </div>
@@ -2844,17 +3052,28 @@ function PosPage() {
                         <td style={{ ...S.ticketTdLast, fontWeight: 800 }}>{(item.p_vente_ttc * item.quantite).toFixed(2)}</td>
                       </tr>
                     ))}
+                    {cart.length === 0 && (
+                      <tr>
+                        <td colSpan={4} style={{ padding: "32px 16px", textAlign: "center", color: "#94a3b8" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                            <ShoppingCart size={28} className="text-slate-300" />
+                            <span style={{ fontSize: 13, fontWeight: 700 }}>Le panier est vide</span>
+                            <span style={{ fontSize: 11 }}>Cliquez sur un article ou scannez un code-barres</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
 
               {/* Totals */}
-              <div style={{ border: "1px solid #b2bec3", borderRadius: 3, overflow: "hidden", marginBottom: 8 }}>
+              <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden", marginBottom: 8, background: "#fff" }}>
                 <div style={S.totalRow}>
                   <span style={S.totalLabel}>Total HT:</span>
                   <span style={S.totalValue}>{formatAmount(totalHT)} F CFA</span>
                 </div>
-                <div style={{ ...S.totalRow, background: "#f8f9fa" }}>
+                <div style={{ ...S.totalRow, background: "#f8fafc" }}>
                   <span style={S.totalLabel}>TVA:</span>
                   <span style={S.totalValue}>{formatAmount(totalTVA)} F CFA</span>
                 </div>
@@ -2867,21 +3086,21 @@ function PosPage() {
               {/* Ticket Action Buttons */}
               <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                 <button
-                  className="pos-action-btn"
+                  className="pos-action-btn active:scale-95"
                   onClick={() => { const item = cart.find(i => i.id === selectedItemId); if(item) updateQuantity(item.id, item.quantite+1); }}
                   style={S.btnAjouter}
                 >
                   <Plus size={14} strokeWidth={4} /> Ajouter
                 </button>
                 <button
-                  className="pos-action-btn"
+                  className="pos-action-btn active:scale-95"
                   onClick={() => { const item = cart.find(i => i.id === selectedItemId); if(item && item.quantite > 1) updateQuantity(item.id, item.quantite - 1); }}
                   style={S.btnReduire}
                 >
                   <Minus size={14} strokeWidth={4} /> Réduire
                 </button>
                 <button
-                  className="pos-action-btn"
+                  className="pos-action-btn active:scale-95"
                   onClick={() => { if(selectedItemId) removeItem(selectedItemId); else clearCart(); }}
                   style={S.btnSupprimer}
                 >
@@ -2942,16 +3161,105 @@ function PosPage() {
 
           {/* ──────── COLUMN 3: PAIEMENT ──────── */}
           <section style={{ ...S.panel, width: "30%" }}>
-            <div style={S.panelHeader}>Paiement</div>
-            <div className="pos-scrollbar" style={{ padding: 16, display: "flex", flexDirection: "column", flex: 1, gap: 16, overflowY: "auto" }}>
-              {/* Big Total */}
+            <div style={S.panelHeader}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <CreditCard size={17} className="text-emerald-400" />
+                <span style={{ fontWeight: 900, textTransform: "uppercase" }}>Paiement</span>
+              </div>
+              <span style={{
+                background: "rgba(16, 185, 129, 0.2)",
+                border: "1px solid rgba(16, 185, 129, 0.4)",
+                color: "#6ee7b7",
+                fontSize: 11,
+                fontWeight: 800,
+                padding: "2px 8px",
+                borderRadius: 8,
+              }}>
+                {paymentMethod}
+              </span>
+            </div>
+            <div className="pos-scrollbar" style={{ padding: 12, display: "flex", flexDirection: "column", flex: 1, gap: 12, overflowY: "auto" }}>
+              {/* Big Total Terminal Card */}
               <div style={S.payTotalBox}>
-                <span style={S.payTotalLabel}>Total à Payer :</span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+                  <span style={S.payTotalLabel}>Total à Payer</span>
+                  <span style={{ fontSize: 10, background: "rgba(16, 185, 129, 0.2)", color: "#6ee7b7", padding: "1px 6px", borderRadius: 4, fontWeight: 800, textTransform: "uppercase" }}>
+                    TTC Net
+                  </span>
+                </div>
                 <span style={S.payTotalAmount}>{formatAmount(ticketTotal)} F CFA</span>
               </div>
 
+              {/* Quick Cash Suggestion Pills */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: -4 }}>
+                <button
+                  type="button"
+                  onClick={() => setReceivedAmount(String(ticketTotal))}
+                  disabled={ticketTotal <= 0}
+                  style={{
+                    flex: "1 1 auto",
+                    padding: "5px 8px",
+                    background: "#ecfdf5",
+                    border: "1px solid #a7f3d0",
+                    borderRadius: 8,
+                    fontSize: 11,
+                    fontWeight: 900,
+                    color: "#047857",
+                    cursor: ticketTotal > 0 ? "pointer" : "not-allowed",
+                  }}
+                  className="hover:bg-emerald-200 active:scale-95 transition-all"
+                  title="Remplir le montant exact"
+                >
+                  ✨ Exact
+                </button>
+                {[1000, 2000, 5000, 10000, 20000].map((bill) => (
+                  <button
+                    key={bill}
+                    type="button"
+                    onClick={() => {
+                      const curr = Number(receivedAmount) || 0;
+                      setReceivedAmount(String(curr + bill));
+                    }}
+                    style={{
+                      flex: "1 1 auto",
+                      padding: "5px 7px",
+                      background: "#f8fafc",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: 8,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: "#334155",
+                      cursor: "pointer",
+                    }}
+                    className="hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600 active:scale-95 transition-all"
+                  >
+                    +{bill >= 1000 ? `${bill / 1000}k` : bill}
+                  </button>
+                ))}
+                {receivedAmount && (
+                  <button
+                    type="button"
+                    onClick={() => setReceivedAmount("")}
+                    style={{
+                      padding: "5px 8px",
+                      background: "#fee2e2",
+                      border: "1px solid #fecaca",
+                      borderRadius: 8,
+                      fontSize: 11,
+                      fontWeight: 900,
+                      color: "#b91c1c",
+                      cursor: "pointer",
+                    }}
+                    className="hover:bg-rose-200 active:scale-95 transition-all"
+                    title="Effacer le montant saisi"
+                  >
+                    Effacer
+                  </button>
+                )}
+              </div>
+
               {/* Amount Inputs */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 4 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={S.payInputRow}>
                   <span style={S.payInputLabel}>Montant Reçu:</span>
                   <input
@@ -2965,19 +3273,24 @@ function PosPage() {
                 </div>
                 <div style={S.payInputRow}>
                   <span style={S.payInputLabel}>Monnaie:</span>
-                  <div style={S.payChangeBox}>
+                  <div style={{
+                    ...S.payChangeBox,
+                    background: changeAmount > 0 ? "#f0fdf4" : "#f8fafc",
+                    borderColor: changeAmount > 0 ? "#10b981" : "#cbd5e1",
+                    color: changeAmount > 0 ? "#15803d" : "#64748b",
+                  }}>
                     {formatAmount(changeAmount)} F CFA
                   </div>
                 </div>
               </div>
 
-              <div style={{ height: 1, background: "#dce1e7", margin: "4px 0" }} />
+              <div style={{ height: 1, background: "#e2e8f0", margin: "2px 0" }} />
 
               {/* Customer Selection */}
               <div style={S.customerBox}>
                 <div style={S.customerInfo}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#64748b", fontWeight: 800, fontSize: 12, textTransform: "uppercase" }}>
-                    <UserRound size={14} /> Client
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#475569", fontWeight: 800, fontSize: 12, textTransform: "uppercase" }}>
+                    <UserRound size={14} className="text-indigo-600" /> Client
                   </div>
                   {selectedClientId && clients.find(c => String(c.id) === String(selectedClientId))?.credit_facture ? (
                     <div style={S.customerCreditBadge}>
@@ -2991,7 +3304,7 @@ function PosPage() {
                   )}
                 </div>
                 {/* Client Search Input */}
-                <div style={{ display: "flex", alignItems: "center", border: "2px solid #e2e8f0", borderRadius: 12, background: "#fff", padding: "2px 10px", marginBottom: 6, transition: "border-color 0.2s" }}
+                <div style={{ display: "flex", alignItems: "center", border: "2px solid #e2e8f0", borderRadius: 12, background: "#fff", padding: "2px 10px", marginBottom: 4, transition: "border-color 0.2s" }}
                   onFocus={(e) => (e.currentTarget.style.borderColor = "#4f46e5")}
                   onBlur={(e) => (e.currentTarget.style.borderColor = "#e2e8f0")}
                 >
@@ -3006,7 +3319,7 @@ function PosPage() {
                       flex: 1,
                       border: "none",
                       outline: "none",
-                      padding: "7px 8px",
+                      padding: "6px 8px",
                       fontSize: 13,
                       fontWeight: 600,
                       color: "#0f172a",
@@ -3023,7 +3336,7 @@ function PosPage() {
                     </button>
                   )}
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 6 }}>
                   <select 
                     style={{ ...S.customerSelect, flex: 1 }}
                     value={selectedClientId}
@@ -3062,18 +3375,19 @@ function PosPage() {
                       color: "#fff",
                       border: "none",
                       borderRadius: 12,
-                      width: 42,
-                      height: 42,
+                      width: 40,
+                      height: 40,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       cursor: "pointer",
-                      boxShadow: "0 4px 12px rgba(79, 70, 229, 0.2)",
+                      boxShadow: "0 4px 10px rgba(79, 70, 229, 0.25)",
                       flexShrink: 0
                     }}
+                    className="hover:brightness-110 active:scale-95 transition-all"
                     title="Ajouter un nouveau client"
                   >
-                    <UserPlus size={20} />
+                    <UserPlus size={18} />
                   </button>
                 </div>
 
@@ -3085,7 +3399,7 @@ function PosPage() {
                   const valCFA = pts * 10;
                   const tier = currentClient.niveau_fidelite || "BRONZE";
                   return (
-                    <div style={{ marginTop: 6, display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(135deg, #fef3c7, #fde68a)", border: "1px solid #f59e0b", padding: "6px 10px", borderRadius: 10 }}>
+                    <div style={{ marginTop: 4, display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(135deg, #fef3c7, #fde68a)", border: "1px solid #f59e0b", padding: "5px 8px", borderRadius: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 800, color: "#78350f", display: "flex", alignItems: "center", gap: 4 }}>
                         ⭐ VIP [{tier}]: {pts.toLocaleString()} pts ({valCFA.toLocaleString()} F CFA)
                       </span>
@@ -3098,21 +3412,21 @@ function PosPage() {
               </div>
 
               {/* Multi-Tier Pricing Mode Switcher */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px", background: "#f1f5f9", borderRadius: 14, border: "1px solid #e2e8f0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px", background: "#f1f5f9", borderRadius: 12, border: "1px solid #e2e8f0" }}>
                 <button
                   type="button"
                   onClick={() => handlePricingTierChange("Détail")}
                   style={{
                     flex: 1,
-                    padding: "7px 4px",
+                    padding: "6px 4px",
                     fontSize: 11,
                     fontWeight: 800,
-                    borderRadius: 10,
+                    borderRadius: 8,
                     border: "none",
                     cursor: "pointer",
                     background: pricingTier === "Détail" ? "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)" : "transparent",
                     color: pricingTier === "Détail" ? "#fff" : "#64748b",
-                    boxShadow: pricingTier === "Détail" ? "0 2px 8px rgba(79, 70, 229, 0.35)" : "none",
+                    boxShadow: pricingTier === "Détail" ? "0 2px 6px rgba(79, 70, 229, 0.3)" : "none",
                     transition: "all 0.15s",
                   }}
                 >
@@ -3123,15 +3437,15 @@ function PosPage() {
                   onClick={() => handlePricingTierChange("Gros")}
                   style={{
                     flex: 1,
-                    padding: "7px 4px",
+                    padding: "6px 4px",
                     fontSize: 11,
                     fontWeight: 800,
-                    borderRadius: 10,
+                    borderRadius: 8,
                     border: "none",
                     cursor: "pointer",
                     background: pricingTier === "Gros" ? "linear-gradient(135deg, #059669 0%, #10b981 100%)" : "transparent",
                     color: pricingTier === "Gros" ? "#fff" : "#64748b",
-                    boxShadow: pricingTier === "Gros" ? "0 2px 8px rgba(5, 150, 105, 0.35)" : "none",
+                    boxShadow: pricingTier === "Gros" ? "0 2px 6px rgba(5, 150, 105, 0.3)" : "none",
                     transition: "all 0.15s",
                   }}
                 >
@@ -3142,15 +3456,15 @@ function PosPage() {
                   onClick={() => handlePricingTierChange("Revendeur")}
                   style={{
                     flex: 1,
-                    padding: "7px 4px",
+                    padding: "6px 4px",
                     fontSize: 11,
                     fontWeight: 800,
-                    borderRadius: 10,
+                    borderRadius: 8,
                     border: "none",
                     cursor: "pointer",
                     background: pricingTier === "Revendeur" ? "linear-gradient(135deg, #d97706 0%, #f59e0b 100%)" : "transparent",
                     color: pricingTier === "Revendeur" ? "#fff" : "#64748b",
-                    boxShadow: pricingTier === "Revendeur" ? "0 2px 8px rgba(217, 119, 6, 0.35)" : "none",
+                    boxShadow: pricingTier === "Revendeur" ? "0 2px 6px rgba(217, 119, 6, 0.3)" : "none",
                     transition: "all 0.15s",
                   }}
                 >
@@ -3158,85 +3472,88 @@ function PosPage() {
                 </button>
               </div>
 
-              <div style={{ height: 1, background: "#dce1e7", margin: "2px 0" }} />
-
               {/* Payment Method Buttons */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <button
-                  className="pos-action-btn"
+                  className="pos-action-btn active:scale-95"
                   onClick={() => setPaymentMethod("Espece")}
                   style={S.btnPayment(
-                    paymentMethod === "Espece"
-                      ? "linear-gradient(180deg, #2ecc71 0%, #27ae60 100%)"
-                      : "linear-gradient(180deg, #58d68d 0%, #2ecc71 100%)",
-                    paymentMethod === "Espece" ? "#196f3d" : "#229954",
+                    "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                    "#047857",
                     paymentMethod === "Espece"
                   )}
                 >
-                  <Banknote size={22} /> Cash
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Banknote size={18} /> Cash (Espèces)
+                  </span>
+                  {paymentMethod === "Espece" && <CheckCircle2 size={16} />}
                 </button>
                 <button
-                  className="pos-action-btn"
+                  className="pos-action-btn active:scale-95"
                   onClick={() => setPaymentMethod("Carte")}
                   style={S.btnPayment(
-                    paymentMethod === "Carte"
-                      ? "linear-gradient(180deg, #3498db 0%, #2980b9 100%)"
-                      : "linear-gradient(180deg, #5dade2 0%, #3498db 100%)",
-                    paymentMethod === "Carte" ? "#1a5276" : "#2471a3",
+                    "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+                    "#1d4ed8",
                     paymentMethod === "Carte"
                   )}
                 >
-                  <CreditCard size={22} /> Carte
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <CreditCard size={18} /> Carte Bancaire
+                  </span>
+                  {paymentMethod === "Carte" && <CheckCircle2 size={16} />}
                 </button>
                 <button
-                  className="pos-action-btn"
+                  className="pos-action-btn active:scale-95"
                   onClick={() => setPaymentMethod("Mobile Money")}
                   style={S.btnPayment(
-                    paymentMethod === "Mobile Money"
-                      ? "linear-gradient(180deg, #e74c3c 0%, #c0392b 100%)"
-                      : "linear-gradient(180deg, #ec7063 0%, #e74c3c 100%)",
-                    paymentMethod === "Mobile Money" ? "#922b21" : "#c0392b",
+                    "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+                    "#b91c1c",
                     paymentMethod === "Mobile Money"
                   )}
                 >
-                  <Smartphone size={22} /> Mobile Money
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Smartphone size={18} /> Mobile Money (Wave, Orange, Moov)
+                  </span>
+                  {paymentMethod === "Mobile Money" && <CheckCircle2 size={16} />}
                 </button>
                 <button
-                  className="pos-action-btn"
+                  className="pos-action-btn active:scale-95"
                   onClick={() => setPaymentMethod("Crédit")}
                   style={S.btnPayment(
-                    paymentMethod === "Crédit"
-                      ? "linear-gradient(180deg, #9b59b6 0%, #8e44ad 100%)"
-                      : "linear-gradient(180deg, #af7ac5 0%, #9b59b6 100%)",
-                    paymentMethod === "Crédit" ? "#5b2c6f" : "#8e44ad",
+                    "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)",
+                    "#6d28d9",
                     paymentMethod === "Crédit"
                   )}
                 >
-                  <Clock size={22} /> Crédit
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Clock size={18} /> À Crédit
+                  </span>
+                  {paymentMethod === "Crédit" && <CheckCircle2 size={16} />}
                 </button>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <button
-                    className="pos-action-btn"
+                    className="pos-action-btn active:scale-95"
                     onClick={() => setPaymentMethod("Avance")}
                     disabled={totalAdvanceBalance <= 0}
                     style={{
                       ...S.btnPayment(
-                        paymentMethod === "Avance"
-                          ? "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)"
-                          : "linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%)",
-                        paymentMethod === "Avance" ? "#b45309" : "#d97706",
+                        "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+                        "#b45309",
                         paymentMethod === "Avance"
                       ),
-                      opacity: totalAdvanceBalance <= 0 ? 0.5 : 1,
+                      opacity: totalAdvanceBalance <= 0 ? 0.45 : 1,
                       cursor: totalAdvanceBalance <= 0 ? "not-allowed" : "pointer"
                     }}
                   >
-                    <Banknote size={22} /> Dépôt/Avance
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Banknote size={18} /> Dépôt / Avance ({formatAmount(totalAdvanceBalance)} F)
+                    </span>
+                    {paymentMethod === "Avance" && <CheckCircle2 size={16} />}
                   </button>
                   {paymentMethod === "Avance" && (
-                    <p style={{ fontSize: 11, color: "#6366f1", marginTop: -6, marginLeft: 4 }}>
-                      ℹ️ "Montant Reçu" sera traité comme un versement Cash partiel.
+                    <p style={{ fontSize: 11, color: "#6366f1", margin: "2px 0 0 4px" }}>
+                      ℹ️ Le montant reçu sera décompté de l'avance du client.
                     </p>
                   )}
                 </div>
@@ -3246,82 +3563,116 @@ function PosPage() {
 
         </div>
 
-        {/* ════════════════════ FOOTER (5 Action Buttons) ════════════════════ */}
+        {/* ════════════════════ FOOTER (Ergonomic Executive Dock) ════════════════════ */}
         <footer style={S.footer}>
           <button
-            className="pos-footer-btn"
+            className="pos-footer-btn hover:brightness-110 active:scale-95"
             onClick={clearCart}
             style={S.footerBtn(
-              "linear-gradient(180deg, #f39c12 0%, #e67e22 100%)",
-              "#ba4a00"
+              "linear-gradient(135deg, #475569 0%, #334155 100%)",
+              "#1e293b"
             )}
+            title="Créer un nouveau ticket"
           >
-            <ShoppingCart size={18} /> Nouveau Ticket
+            <ShoppingCart size={17} /> Nouveau Ticket
           </button>
           <button
-            className="pos-footer-btn"
+            className="pos-footer-btn hover:brightness-110 active:scale-95"
             onClick={() => setParkNotePromptOpen(true)}
             disabled={cart.length === 0}
-            style={{...S.footerBtn(
-              "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)",
-              "#b45309"
-            ), opacity: cart.length === 0 ? 0.5 : 1}}
+            style={{
+              ...S.footerBtn(
+                "linear-gradient(135deg, #d97706 0%, #b45309 100%)",
+                "#78350f"
+              ),
+              opacity: cart.length === 0 ? 0.5 : 1,
+              cursor: cart.length === 0 ? "not-allowed" : "pointer",
+            }}
+            title="Mettre le ticket en attente"
           >
-            <Clock size={18} /> Mettre en attente
+            <Clock size={17} /> En attente
           </button>
           <button
-            className="pos-footer-btn"
+            className="pos-footer-btn hover:brightness-110 active:scale-95"
             onClick={clearCart}
-            style={S.footerBtn(
-              "linear-gradient(180deg, #e74c3c 0%, #c0392b 100%)",
-              "#922b21"
-            )}
+            disabled={cart.length === 0}
+            style={{
+              ...S.footerBtn(
+                "linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)",
+                "#7f1d1d"
+              ),
+              opacity: cart.length === 0 ? 0.5 : 1,
+              cursor: cart.length === 0 ? "not-allowed" : "pointer",
+            }}
+            title="Vider et supprimer le ticket"
           >
-            <Trash2 size={18} /> Supprimer Ticket
+            <Trash2 size={17} /> Supprimer
           </button>
+
+          {/* Primary CTA Hero Button */}
           <button
-            className="pos-footer-btn"
+            className="pos-footer-btn hover:brightness-110 active:scale-[0.98] transition-all"
             onClick={handleCheckout}
             disabled={submitting || cart.length === 0}
             style={{
               ...S.footerBtnValidate,
-              opacity: submitting ? 0.7 : 1,
+              opacity: submitting ? 0.7 : cart.length === 0 ? 0.6 : 1,
+              cursor: submitting || cart.length === 0 ? "not-allowed" : "pointer",
             }}
           >
             {submitting ? (
               <div style={{ width: 22, height: 22, border: "3px solid #fff", borderTop: "3px solid transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
             ) : (
-              <><CheckCircle2 size={22} /> Valider Vente</>
+              <>
+                <CheckCircle2 size={22} className="animate-pulse" />
+                <span>Valider Vente</span>
+                <span style={{
+                  background: "rgba(255,255,255,0.25)",
+                  color: "#fff",
+                  fontSize: 11,
+                  fontWeight: 900,
+                  padding: "2px 7px",
+                  borderRadius: 6,
+                  marginLeft: 4,
+                }}>
+                  [ENTRÉE]
+                </span>
+              </>
             )}
           </button>
+
           <button
-            className="pos-footer-btn"
+            className="pos-footer-btn hover:brightness-110 active:scale-95"
             onClick={() => {
-              // Open print for last success invoice ID if any
               const lastId = localStorage.getItem("last_invoice_id");
               if (lastId) setPrintInvoiceId(lastId);
               else setError("Aucune facture récente à imprimer.");
             }}
             style={S.footerBtn(
-              "linear-gradient(180deg, #3498db 0%, #2980b9 100%)",
-              "#1a5276"
+              "linear-gradient(135deg, #0284c7 0%, #0369a1 100%)",
+              "#075985"
             )}
+            title="Réimprimer la dernière facture"
           >
-            <Printer size={18} /> Imprimer Facture
+            <Printer size={17} /> Imprimer
           </button>
           <button
-            className="pos-footer-btn"
+            className="pos-footer-btn hover:brightness-110 active:scale-95"
             onClick={handleFermerCaisse}
             disabled={cashClosureLoading}
-            style={S.footerBtn(
-              "linear-gradient(180deg, #5d6d7e 0%, #4d5656 100%)",
-              "#212f3d"
-            )}
+            style={{
+              ...S.footerBtn(
+                "linear-gradient(135deg, #334155 0%, #1e293b 100%)",
+                "#0f172a"
+              ),
+              opacity: cashClosureLoading ? 0.6 : 1,
+            }}
+            title="Clôture et arrêt de caisse journalier"
           >
             {cashClosureLoading ? (
               <div style={{ width: 18, height: 18, border: "2px solid #fff", borderTop: "2px solid transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
             ) : (
-              <><Lock size={18} /> Fermer Caisse</>
+              <><Lock size={17} /> Clôture Caisse</>
             )}
           </button>
         </footer>
