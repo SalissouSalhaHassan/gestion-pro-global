@@ -18,15 +18,15 @@ export async function POST(
     return NextResponse.json({ error: `ID de facture invalide: ${rawId}` }, { status: 400 });
   }
 
-  // Ownership check using centralized scoping
-  const isAdmin = await isAdminOrManager(session);
-  if (!isAdmin) {
-    let query = supabase.from("factures").select("id").eq("id", invoiceId);
-    query = applyUserScope(query as any, session, 'factures');
-    const { data: inv } = await query.single();
-    if (!inv) {
-      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
-    }
+  // Multi-tenant organization check: ensure invoice belongs to user's organization
+  const orgId = session.organization_id;
+  let query = supabase.from("factures").select("id, organization_id").eq("id", invoiceId);
+  if (orgId) {
+    query = query.eq("organization_id", orgId);
+  }
+  const { data: inv, error: invErr } = await query.maybeSingle();
+  if (invErr || !inv) {
+    return NextResponse.json({ error: "Facture introuvable ou accès refusé" }, { status: 403 });
   }
 
   const body = await request.json();

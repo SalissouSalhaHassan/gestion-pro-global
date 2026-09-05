@@ -18,15 +18,15 @@ export async function GET(
     return NextResponse.json({ error: `ID de facture invalide: ${rawId}` }, { status: 400 });
   }
 
-  // Ownership check using centralized scoping
-  const isAdmin = await isAdminOrManager(session);
-  if (!isAdmin) {
-    let query = supabase.from("factures").select("id").eq("id", invoiceId);
-    query = applyUserScope(query as any, session, 'factures');
-    const { data: inv } = await query.single();
-    if (!inv) {
-      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
-    }
+  // Multi-tenant organization check: ensure invoice belongs to user's organization
+  const orgId = session.organization_id;
+  let query = supabase.from("factures").select("id, organization_id").eq("id", invoiceId);
+  if (orgId) {
+    query = query.eq("organization_id", orgId);
+  }
+  const { data: inv, error: invErr } = await query.maybeSingle();
+  if (invErr || !inv) {
+    return NextResponse.json({ error: "Facture introuvable ou accès refusé" }, { status: 403 });
   }
 
   const { data, error } = await supabase
@@ -54,15 +54,15 @@ export async function POST(
     return NextResponse.json({ error: `ID de facture invalide: ${rawId}` }, { status: 400 });
   }
 
-  // Ownership check using centralized scoping
-  const isAdmin = await isAdminOrManager(session);
-  if (!isAdmin) {
-    let query = supabase.from("factures").select("id").eq("id", invoiceId);
-    query = applyUserScope(query as any, session, 'factures');
-    const { data: inv } = await query.single();
-    if (!inv) {
-      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
-    }
+  // Multi-tenant organization check: ensure invoice belongs to user's organization
+  const orgId = session.organization_id;
+  let query = supabase.from("factures").select("id, organization_id, total_ttc").eq("id", invoiceId);
+  if (orgId) {
+    query = query.eq("organization_id", orgId);
+  }
+  const { data: inv, error: invErr } = await query.maybeSingle();
+  if (invErr || !inv) {
+    return NextResponse.json({ error: "Facture introuvable ou accès refusé" }, { status: 403 });
   }
 
   const body = await request.json();
@@ -79,17 +79,15 @@ export async function POST(
   } = body;
 
   // 1. Get current Authenticated User from custom session
-  const user = await getServerSession();
-  let dbUserId = null;
-  let utilisateur = "Caisse";
+  let dbUserId = Number(session.id) || null;
+  let utilisateur = session.username || "Caisse";
 
-  if (user) {
-    // Find the internal integer ID in the 'users' table
+  if (session.id) {
     const { data: userData } = await supabase
       .from("users")
       .select("id, utilisateur")
-      .eq("id", user.id)
-      .single();
+      .eq("id", session.id)
+      .maybeSingle();
     
     if (userData) {
       dbUserId = userData.id;

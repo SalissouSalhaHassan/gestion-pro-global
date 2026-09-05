@@ -33,7 +33,7 @@ export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, a
 
   // 2. Admin/Manager: sees everything within their organization
   const isAdmin = (session.admin === "Oui" || session.admin === "oui" || session.admin === "true" || (session as any).admin === true) || 
-                  (session.role === 1 || session.role === "1" || session.role === "admin");
+                  (session.role === 1 || session.role === "1" || session.role === "admin" || session.role === 2 || session.role === "2" || session.role === "manager");
   
   if (isAdmin) return query;
 
@@ -57,7 +57,16 @@ export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, a
 
   // 4. Scoping by Ownership (for sales/invoices)
   if (entityType === 'factures') {
-    // Sellers only see their own invoices or invoices in their allowed depots
+    const perms = Array.isArray(session.permissions) ? session.permissions : [];
+    const isCaissierOrFinance = session.role === 4 || session.role === "4" || session.role === 5 || session.role === "5" ||
+                               perms.includes('sale.invoices_view') || perms.includes('pos.access') || perms.includes('report.finance') || perms.includes('expense.cash_balance');
+
+    // Cashiers and financial staff need access to invoices within their organization to accept payments
+    if (isCaissierOrFinance) {
+      return query;
+    }
+
+    // Individual field sellers only see their own invoices
     let filter = `user_id.eq.${session.id}`;
     
     if (session.username) {

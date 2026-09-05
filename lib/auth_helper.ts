@@ -66,8 +66,9 @@ export async function isAdminOrManager(session?: CustomSession | null): Promise<
   // Robust check for administrative privileges
   const isAdminFlag = s.admin === "Oui" || s.admin === "oui" || s.admin === "true" || (s as any).admin === true;
   const isRoleAdmin = s.role === 1 || s.role === "1" || s.role === "admin";
+  const isRoleManager = s.role === 2 || s.role === "2" || (typeof s.role === "string" && s.role.toLowerCase() === "manager");
   
-  return isAdminFlag || isRoleAdmin;
+  return isAdminFlag || isRoleAdmin || isRoleManager;
 }
 
 /**
