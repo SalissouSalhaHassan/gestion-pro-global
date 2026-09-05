@@ -58,7 +58,7 @@ export default function SuperAdminDashboardPage() {
         const decoded = decodeURIComponent(cookie.split('=')[1]);
         const s = JSON.parse(decoded);
         const isSuper = s?.username?.toLowerCase() === "superadmin" ||
-          ((s?.username?.toLowerCase() === "admin" || s?.admin === "Oui") && s?.organization_id === "00000000-0000-0000-0000-000000000001");
+          (s?.username?.toLowerCase() === "admin" && s?.organization_id === "00000000-0000-0000-0000-000000000001");
         if (!isSuper) {
           router.replace("/dashboard");
           return;

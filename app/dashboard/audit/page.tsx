@@ -21,9 +21,49 @@ import {
   Sparkles,
   Loader2,
   AlertOctagon,
-  Info
+  Info,
+  Database,
+  Copy,
+  Check,
+  Building2,
+  X
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/context";
+
+const SQL_AUDIT_MIGRATION = `-- ==============================================================================
+-- MIGRATION: 20260903_anti_fraud_audit_trail.sql
+-- DESCRIPTION: Anti-Fraud & Forensic Audit Trail (Multi-Tenant Isolated)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+    id SERIAL PRIMARY KEY,
+    action_type VARCHAR(100) NOT NULL,
+    severity VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+    module VARCHAR(50) NOT NULL,
+    description TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    target_id VARCHAR(100),
+    user_id INTEGER,
+    username VARCHAR(100) NOT NULL,
+    organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
+    ip_address VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_org ON public.audit_logs (organization_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_severity ON public.audit_logs (severity);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action_type ON public.audit_logs (action_type);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_username ON public.audit_logs (username);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_module ON public.audit_logs (module);
+
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable read for authenticated users on audit_logs"
+  ON public.audit_logs FOR SELECT USING (true);
+CREATE POLICY "Enable insert for authenticated users on audit_logs"
+  ON public.audit_logs FOR INSERT WITH CHECK (true);
+NOTIFY pgrst, 'reload schema';`;
 
 type AuditLog = {
   id: number;
@@ -56,11 +96,27 @@ export default function AuditRadarPage() {
     priceOverrideCount: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [needsMigration, setNeedsMigration] = useState(false);
+  const [showSqlModal, setShowSqlModal] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [orgName, setOrgName] = useState("");
 
   // Filters
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [moduleFilter, setModuleFilter] = useState("ALL");
+
+  useEffect(() => {
+    const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
+    if (cookie) {
+      try {
+        const decoded = decodeURIComponent(cookie.split('=')[1]);
+        const s = JSON.parse(decoded);
+        if (s.organization_name) setOrgName(s.organization_name);
+        else if (s.nom_prenom) setOrgName(s.nom_prenom);
+      } catch (e) {}
+    }
+  }, []);
 
   const fetchAuditLogs = async () => {
     try {
@@ -73,6 +129,9 @@ export default function AuditRadarPage() {
       const res = await fetch(`/api/audit?${params.toString()}`, { cache: "no-store" });
       const data = await res.json();
       setLogs(data.logs || []);
+      if (data.needsMigration) setNeedsMigration(true);
+      else setNeedsMigration(false);
+
       setStats(data.stats || {
         totalCount: 0,
         criticalCount: 0,
@@ -85,6 +144,12 @@ export default function AuditRadarPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SQL_AUDIT_MIGRATION);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   useEffect(() => {
@@ -151,6 +216,12 @@ export default function AuditRadarPage() {
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                 SURVEILLANCE ACTIVE 24/7
               </span>
+              {orgName && (
+                <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 bg-indigo-950/60 px-3 py-1 rounded-xl border border-indigo-500/30">
+                  <Building2 size={13} />
+                  {orgName} ({locale === "ar" ? "معزول للمؤسسة" : "Isolé Tenant"})
+                </span>
+              )}
             </div>
 
             <h1 className="text-2xl lg:text-3xl font-black text-white">
@@ -163,15 +234,54 @@ export default function AuditRadarPage() {
             </p>
           </div>
 
-          <button
-            onClick={fetchAuditLogs}
-            className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm self-start md:self-auto"
-          >
-            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
-            <span>{locale === "ar" ? "تحديث السجل" : "Actualiser"}</span>
-          </button>
+          <div className="flex items-center gap-3 self-start md:self-auto flex-wrap">
+            <button
+              onClick={() => setShowSqlModal(true)}
+              className="p-3 rounded-2xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-400/30 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+              title="Script SQL Migration"
+            >
+              <Database size={15} />
+              <span>{locale === "ar" ? "سكربت ترحيل SQL" : "Script SQL"}</span>
+            </button>
+
+            <button
+              onClick={fetchAuditLogs}
+              className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+            >
+              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+              <span>{locale === "ar" ? "تحديث السجل" : "Actualiser"}</span>
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Migration Notice Banner if table missing */}
+      {needsMigration && (
+        <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-amber-900 shadow-sm animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-100 rounded-xl text-amber-700 shrink-0">
+              <AlertTriangle size={18} />
+            </div>
+            <div>
+              <p className="text-xs font-bold">
+                {locale === "ar" ? "جدول audit_logs المخصص غير مفعل بعد في قاعدة البيانات" : "La table audit_logs n'est pas encore créée dans Supabase"}
+              </p>
+              <p className="text-[11px] text-amber-700 mt-0.5">
+                {locale === "ar"
+                  ? "يتم حالياً استعراض سجلات النشاط المباشرة للمؤسسة (activity_log) كبديل تلقائي."
+                  : "Le système utilise le journal d'activité miroir de cette organisation en attendant l'exécution du script SQL."}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowSqlModal(true)}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shrink-0 transition-colors flex items-center gap-2 shadow-xs"
+          >
+            <Database size={14} />
+            <span>{locale === "ar" ? "نسخ سكربت التثبيت" : "Voir Script SQL"}</span>
+          </button>
+        </div>
+      )}
 
       {/* 4 Threat & Anomaly Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -368,6 +478,59 @@ export default function AuditRadarPage() {
           </table>
         </div>
       </div>
+
+      {/* SQL Migration Modal */}
+      {showSqlModal && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 space-y-4 shadow-2xl border border-slate-200 animate-in zoom-in-95">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-indigo-50 text-indigo-600">
+                  <Database size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">
+                    {locale === "ar" ? "سكربت إنشاء وتحديث جدول الرقابة (audit_logs)" : "Script Migration Supabase - audit_logs"}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {locale === "ar"
+                      ? "قم بتنفيذ هذا الأمر في محرر SQL في Supabase لتفعيل العزل الصارم بين المؤسسات."
+                      : "Exécutez ce script dans l'éditeur SQL de Supabase pour finaliser l'isolation RLS."}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSqlModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="relative">
+              <pre className="p-4 bg-slate-900 text-slate-200 rounded-2xl text-[11px] font-mono overflow-x-auto max-h-72 custom-scrollbar">
+                {SQL_AUDIT_MIGRATION}
+              </pre>
+              <button
+                onClick={handleCopySql}
+                className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+                <span>{copied ? (locale === "ar" ? "تم النسخ!" : "Copié !") : (locale === "ar" ? "نسخ SQL" : "Copier")}</span>
+              </button>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowSqlModal(false)}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors"
+              >
+                {locale === "ar" ? "إغلاق" : "Fermer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -16,11 +16,16 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
     target_id VARCHAR(100),
     user_id INTEGER,
     username VARCHAR(100) NOT NULL,
+    organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
     ip_address VARCHAR(100),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Support migration if table already exists without organization_id
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE;
+
 -- 2. High-performance composite indexes
+CREATE INDEX IF NOT EXISTS idx_audit_logs_org ON public.audit_logs (organization_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_severity ON public.audit_logs (severity);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action_type ON public.audit_logs (action_type);
@@ -35,3 +40,5 @@ CREATE POLICY "Enable read for authenticated users on audit_logs"
 
 CREATE POLICY "Enable insert for authenticated users on audit_logs"
   ON public.audit_logs FOR INSERT WITH CHECK (true);
+
+NOTIFY pgrst, 'reload schema';

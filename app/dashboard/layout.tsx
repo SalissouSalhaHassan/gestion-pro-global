@@ -112,7 +112,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   ];
 
   const isSuper = userSession?.username?.toLowerCase() === "superadmin" ||
-    ((userSession?.username?.toLowerCase() === "admin" || isAdmin) && userSession?.organization_id === "00000000-0000-0000-0000-000000000001");
+    (userSession?.username?.toLowerCase() === "admin" && userSession?.organization_id === "00000000-0000-0000-0000-000000000001");
 
   const userPermissions = userSession?.permissions || [];
   const visibleNavItems = allNavItems.filter((item: any) => {
