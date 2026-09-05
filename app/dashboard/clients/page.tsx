@@ -67,25 +67,23 @@ export default function ClientsPage() {
         finalRef = `CL-${year}-${randomPart}`;
       }
 
-      const { data, error } = await supabase
-        .from("clients")
-        .insert({
+      const res = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           nom: formData.nom,
           tel: formData.tel || null,
           ref_client: finalRef,
           type_client: formData.type_client || "Détail",
-          credit_facture: 0,
-          credit_bl: 0,
-          montant_plafond: 0,
-          prix_client: formData.type_client === "Gros" ? 2 : formData.type_client === "Revendeur" ? 3 : 1,
-          pre_client: false,
-          is_deleted: false,
-          organization_id: userSession?.organization_id || "00000000-0000-0000-0000-000000000001",
-        })
-        .select()
-        .single();
-        
-      if (error) throw error;
+        }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || "Erreur lors de l'ajout.");
+      }
+
+      const data = await res.json();
       
       console.log("✅ Client added:", data.id);
 
@@ -116,40 +114,25 @@ export default function ClientsPage() {
   useEffect(() => {
     async function loadClients() {
       try {
-        let clientQuery = supabase
-          .from("clients")
-          .select("id, ref_client, nom, tel, credit_facture, credit_bl")
-          .eq("is_deleted", false)
-          .order("nom");
+        const res = await fetch("/api/clients");
+        if (!res.ok) throw new Error("Erreur de chargement");
+        const data = await res.json();
+        const clientRows = Array.isArray(data) ? data : (data.clients || []);
 
-        if (userSession?.organization_id) {
-          clientQuery = clientQuery.eq("organization_id", userSession.organization_id);
-        }
-
-        const { data, error } = await clientQuery;
-
-        if (error) {
-          console.error("❌ Clients fetch error:", error.message, error.details);
-        } else {
-          console.log("✅ Clients fetched:", data?.length || 0);
-        }
-
-        if (!error && data) {
-          const mapped: Client[] = data.map((r: any) => {
-            const cf = Number(r.credit_facture) || 0;
-            const cb = Number(r.credit_bl) || 0;
-            return {
-              id: r.id,
-              ref_client: r.ref_client || null,
-              nom: String(r.nom || `Client ${r.id}`),
-              tel: r.tel || "-",
-              credit_facture: cf,
-              credit_bl: cb,
-              credit: cf + cb,
-            };
-          });
-          setClients(mapped);
-        }
+        const mapped: Client[] = clientRows.map((r: any) => {
+          const cf = Number(r.credit_facture) || 0;
+          const cb = Number(r.credit_bl) || 0;
+          return {
+            id: r.id,
+            ref_client: r.ref_client || null,
+            nom: String(r.nom || `Client ${r.id}`),
+            tel: r.tel || "-",
+            credit_facture: cf,
+            credit_bl: cb,
+            credit: cf + cb,
+          };
+        });
+        setClients(mapped);
       } catch (err) {
         console.error("Failed to load clients", err);
       } finally {
@@ -157,7 +140,7 @@ export default function ClientsPage() {
       }
     }
     loadClients();
-  }, [isAdmin, userSession]);
+  }, []);
 
   const fetchClientInvoices = async (client: Client) => {
     setSelectedClientForDebt(client);

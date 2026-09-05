@@ -10,18 +10,15 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
     const isAdmin = await isAdminOrManager(user);
+    const orgId = user.organization_id || "00000000-0000-0000-0000-000000000001";
     
     // Fetch specifically id, nom, ref_client, tel, credit_facture, and credit_bl
     let query = supabase
       .from('clients')
       .select('id, nom, ref_client, tel, credit_facture, credit_bl')
-      .eq('is_deleted', false);
-
-    if (user.organization_id) {
-      query = query.eq('organization_id', user.organization_id);
-    }
-
-    query = query.order('nom', { ascending: true });
+      .eq('organization_id', orgId)
+      .eq('is_deleted', false)
+      .order('nom', { ascending: true });
 
     // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
     if (!isAdmin) {
@@ -29,10 +26,8 @@ export async function GET() {
         let isolatedQuery = supabase
           .from('clients')
           .select('id, nom, ref_client, tel, credit_facture, credit_bl')
+          .eq('organization_id', orgId)
           .eq('is_deleted', false);
-        if (user.organization_id) {
-          isolatedQuery = isolatedQuery.eq('organization_id', user.organization_id);
-        }
         const { data, error } = await isolatedQuery.or(`created_by.eq.${user.id},id.eq.${DEFAULT_CLIENT_ID}`);
         if (!error) return NextResponse.json(data);
       } catch (e) {

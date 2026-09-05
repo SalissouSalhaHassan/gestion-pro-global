@@ -44,41 +44,11 @@ export default function ClientListModal({ onClose }: ClientListModalProps) {
         const { data: comp } = await compQuery.maybeSingle();
         setCompany(comp);
 
-        let clientQuery = supabase
-          .from("clients")
-          .select("id, ref_client, nom, tel, credit_facture, credit_bl")
-          .eq("is_deleted", false);
-        if (orgId) clientQuery = clientQuery.eq("organization_id", orgId);
+        const res = await fetch("/api/clients");
+        const clientsData = res.ok ? await res.json() : [];
 
-        let clientsData: any[] | null = null;
-
-        // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
-        if (!admin && session?.id) {
-          try {
-            let isolatedQuery = supabase
-              .from("clients")
-              .select("id, ref_client, nom, tel, credit_facture, credit_bl")
-              .eq("is_deleted", false);
-            if (orgId) isolatedQuery = isolatedQuery.eq("organization_id", orgId);
-            const isolatedRes = await isolatedQuery
-              .or(`created_by.eq.${session.id},id.eq.${DEFAULT_CLIENT_ID}`);
-            if (!isolatedRes.error && isolatedRes.data) {
-              clientsData = isolatedRes.data;
-            } else {
-              const fallbackRes = await clientQuery;
-              clientsData = fallbackRes.data;
-            }
-          } catch {
-            const fallbackRes = await clientQuery;
-            clientsData = fallbackRes.data;
-          }
-        } else {
-          const { data } = await clientQuery;
-          clientsData = data;
-        }
-
-        if (clientsData) {
-          setClients(clientsData.map(c => ({
+        if (Array.isArray(clientsData)) {
+          setClients(clientsData.map((c: any) => ({
             ...c,
             credit: (Number(c.credit_facture) || 0) + (Number(c.credit_bl) || 0)
           })));
