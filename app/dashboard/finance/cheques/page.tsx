@@ -56,11 +56,16 @@ CREATE TABLE IF NOT EXISTS public.cheques_effets (
     date_depot TIMESTAMP WITH TIME ZONE,
     bordereau_remise VARCHAR(100),
     motif_rejet TEXT,
+    organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
     notes TEXT,
     created_by VARCHAR(100),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Support migration if table already exists without organization_id
+ALTER TABLE public.cheques_effets ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_cheques_org ON public.cheques_effets (organization_id);
 CREATE INDEX IF NOT EXISTS idx_cheques_type_op ON public.cheques_effets (type_operation);
 CREATE INDEX IF NOT EXISTS idx_cheques_statut ON public.cheques_effets (statut);
 CREATE INDEX IF NOT EXISTS idx_cheques_date_echeance ON public.cheques_effets (date_echeance);

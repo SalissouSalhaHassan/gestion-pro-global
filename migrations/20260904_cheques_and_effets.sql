@@ -27,17 +27,22 @@ CREATE TABLE IF NOT EXISTS public.cheques_effets (
     motif_rejet TEXT,
     notes TEXT,
     created_by VARCHAR(100),
+    organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2. Indexes for fast filtering & alert queries
+-- 2. Add column to existing table if already created
+ALTER TABLE public.cheques_effets ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+-- 3. Indexes for fast filtering & alert queries
 CREATE INDEX IF NOT EXISTS idx_cheques_type_op ON public.cheques_effets (type_operation);
 CREATE INDEX IF NOT EXISTS idx_cheques_statut ON public.cheques_effets (statut);
 CREATE INDEX IF NOT EXISTS idx_cheques_date_echeance ON public.cheques_effets (date_echeance);
 CREATE INDEX IF NOT EXISTS idx_cheques_client ON public.cheques_effets (client_id);
+CREATE INDEX IF NOT EXISTS idx_cheques_org ON public.cheques_effets (organization_id);
 CREATE INDEX IF NOT EXISTS idx_cheques_created_at ON public.cheques_effets (created_at DESC);
 
--- 3. Row Level Security
+-- 4. Row Level Security
 ALTER TABLE public.cheques_effets ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Enable read for all authenticated on cheques_effets"

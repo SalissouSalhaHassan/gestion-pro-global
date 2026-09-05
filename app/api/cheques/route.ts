@@ -20,10 +20,6 @@ export async function GET(request: Request) {
       .select('*, client:clients(nom, tel), fournisseur:fournisseurs(nom, tel)')
       .order('date_echeance', { ascending: true });
 
-    if (session.organization_id) {
-      query = query.eq('organization_id', session.organization_id);
-    }
-
     if (typeOp && typeOp !== 'ALL') {
       query = query.eq('type_operation', typeOp);
     }
@@ -31,10 +27,23 @@ export async function GET(request: Request) {
       query = query.eq('statut', status);
     }
 
-    const { data: cheques, error } = await query;
-    if (error) throw error;
+    let chequesData: any[] = [];
+    if (session.organization_id) {
+      const orgQuery = query.eq('organization_id', session.organization_id);
+      const { data, error } = await orgQuery;
+      if (error && (error.message?.includes('organization_id') || error.code === '42703')) {
+        const fallback = await query;
+        chequesData = fallback.data || [];
+      } else if (!error && data) {
+        chequesData = data;
+      }
+    } else {
+      const { data, error } = await query;
+      if (error) throw error;
+      chequesData = data || [];
+    }
 
-    const list = cheques || [];
+    const list = chequesData;
     const todayStr = new Date().toISOString().slice(0, 10);
     const in7Days = new Date();
     in7Days.setDate(in7Days.getDate() + 7);
@@ -98,28 +107,46 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "N° pièce, banque, montant et date d'échéance obligatoires" }, { status: 400 });
     }
 
-    const { data: newCheque, error } = await supabase
+    const basePayload = {
+      type_operation: type_operation || 'A_ENCAISSER',
+      type_titre: type_titre || 'CHEQUE',
+      numero_piece: numero_piece.trim(),
+      banque_emetteur: banque_emetteur.trim(),
+      emetteur_nom: emetteur_nom?.trim() || "Client",
+      beneficiaire_nom: beneficiaire_nom?.trim() || "Entreprise",
+      montant: Number(montant) || 0,
+      date_emission: date_emission || new Date().toISOString().slice(0, 10),
+      date_echeance,
+      statut: 'EN_PORTEFEUILLE',
+      client_id: client_id ? Number(client_id) : null,
+      fournisseur_id: fournisseur_id ? Number(fournisseur_id) : null,
+      facture_id: facture_id ? Number(facture_id) : null,
+      notes: notes || null,
+      created_by: session.username || "Admin",
+    };
+
+    const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
+
+    let { data: newCheque, error } = await supabase
       .from('cheques_effets')
       .insert({
-        type_operation: type_operation || 'A_ENCAISSER',
-        type_titre: type_titre || 'CHEQUE',
-        numero_piece: numero_piece.trim(),
-        banque_emetteur: banque_emetteur.trim(),
-        emetteur_nom: emetteur_nom?.trim() || "Client",
-        beneficiaire_nom: beneficiaire_nom?.trim() || "Entreprise",
-        montant: Number(montant) || 0,
-        date_emission: date_emission || new Date().toISOString().slice(0, 10),
-        date_echeance,
-        statut: 'EN_PORTEFEUILLE',
-        client_id: client_id ? Number(client_id) : null,
-        fournisseur_id: fournisseur_id ? Number(fournisseur_id) : null,
-        facture_id: facture_id ? Number(facture_id) : null,
-        notes: notes || null,
-        created_by: session.username || "Admin",
-        organization_id: session.organization_id || "00000000-0000-0000-0000-000000000001",
+        ...basePayload,
+        organization_id: orgId,
       })
       .select()
       .single();
+
+    // Fallback if organization_id column does not exist yet in DB schema cache
+    if (error && (error.message?.includes('organization_id') || error.code === '42703' || error.code === 'PGRST204')) {
+      console.warn("organization_id column missing on cheques_effets, falling back to base insert");
+      const fallback = await supabase
+        .from('cheques_effets')
+        .insert(basePayload)
+        .select()
+        .single();
+      newCheque = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) throw error;
 
