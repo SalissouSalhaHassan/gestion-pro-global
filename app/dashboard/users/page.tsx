@@ -85,18 +85,6 @@ export default function UserManagementPage() {
   const [currentOrgId, setCurrentOrgId] = useState<string>("");
 
   useEffect(() => {
-    try {
-      const match = document.cookie.split("; ").find((c) => c.startsWith("gp_session="));
-      if (match) {
-        const decoded = decodeURIComponent(match.split("=")[1]);
-        const data = JSON.parse(decoded);
-        if (data.organization_id) {
-          setCurrentOrgId(data.organization_id);
-          loadData(data.organization_id);
-          return;
-        }
-      }
-    } catch {}
     loadData();
   }, []);
 
@@ -107,73 +95,39 @@ export default function UserManagementPage() {
     }
   }, [toast]);
 
-  const loadData = async (orgIdOverride?: any) => {
+  const loadData = async () => {
     setRefreshing(true);
-    const activeOrg = typeof orgIdOverride === "string" ? orgIdOverride : currentOrgId;
     try {
-      // 1. Fetch Roles
-      const { data: rolesData } = await supabase
-        .from("roles")
-        .select("id, role_name")
-        .order("id");
+      const res = await fetch("/api/users");
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || "Erreur de chargement");
+      }
+      const data = await res.json();
 
-      const standardRoles = [
-        { id: 1, role_name: "Admin" },
-        { id: 2, role_name: "Manager" },
-        { id: 3, role_name: "Gérant de Dépôt" },
-        { id: 4, role_name: "Caissier" },
-        { id: 5, role_name: "Comptable" },
-        { id: 6, role_name: "Livreur" },
-      ];
-
-      if (rolesData && rolesData.length >= 2) {
-        setRoles(rolesData);
-      } else {
-        setRoles(standardRoles);
+      if (data.currentOrgId) {
+        setCurrentOrgId(data.currentOrgId);
       }
 
-      // 2. Fetch available depots (scoped by organization)
-      let depotQuery = supabase
-        .from("depots")
-        .select("id, nom")
-        .eq("is_deleted", false)
-        .order("nom");
-      if (activeOrg) depotQuery = depotQuery.eq("organization_id", activeOrg);
-      const { data: depotsData } = await depotQuery;
+      if (data.roles && data.roles.length >= 2) {
+        setRoles(data.roles);
+      } else {
+        setRoles([
+          { id: 1, role_name: "Admin" },
+          { id: 2, role_name: "Manager" },
+          { id: 3, role_name: "Gérant de Dépôt" },
+          { id: 4, role_name: "Caissier" },
+          { id: 5, role_name: "Comptable" },
+          { id: 6, role_name: "Livreur" },
+        ]);
+      }
 
-      if (depotsData) setAvailableDepotsData(depotsData);
+      if (data.depots) {
+        setAvailableDepotsData(data.depots);
+      }
 
-      // 3. Fetch Users with assigned warehouses (scoped by organization)
-      let userQuery = supabase
-        .from("users")
-        .select(`
-          id,
-          utilisateur,
-          nom_prenom,
-          emplacement,
-          admin,
-          langue,
-          ref_per,
-          created_at,
-          roles!fk_users_role_id (
-            role_name
-          ),
-          user_warehouses (
-            depot_id,
-            depots (
-              nom
-            )
-          )
-        `)
-        .order("created_at", { ascending: false });
-
-      if (activeOrg) userQuery = userQuery.eq("organization_id", activeOrg);
-      const { data, error } = await userQuery;
-
-      if (error) throw error;
-
-      if (data) {
-        const mappedData: UserRecord[] = data.map((u: any) => ({
+      if (data.users) {
+        const mappedData: UserRecord[] = data.users.map((u: any) => ({
           id: u.id,
           utilisateur: u.utilisateur,
           nom_prenom: u.nom_prenom || "-",
@@ -197,10 +151,6 @@ export default function UserManagementPage() {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const handleOpenAddModal = () => {
     setIsEditing(false);
     setNewUser({
@@ -208,10 +158,10 @@ export default function UserManagementPage() {
       utilisateur: "",
       nom_prenom: "",
       mot_de_passe: "",
-      role_id: roles.length > 0 ? String(roles[0].id) : "",
-      emplacement: availableDepotsData.length > 0 ? availableDepotsData[0].nom : "BOUTIQUE",
+      role_id: roles[0] ? String(roles[0].id) : "1",
+      emplacement: availableDepotsData[0] ? availableDepotsData[0].nom : "BOUTIQUE",
       admin: "Non",
-      langue: "FR",
+      langue: "fr",
       ref_per: "",
       depots: [],
     });
@@ -224,13 +174,13 @@ export default function UserManagementPage() {
     setNewUser({
       id: u.id,
       utilisateur: u.utilisateur,
-      nom_prenom: u.nom_prenom,
+      nom_prenom: u.nom_prenom === "-" ? "" : u.nom_prenom,
       mot_de_passe: "",
-      role_id: matchedRole ? String(matchedRole.id) : "",
+      role_id: matchedRole ? String(matchedRole.id) : "1",
       emplacement: u.emplacement,
       admin: u.admin,
-      langue: u.langue,
-      ref_per: u.ref_per,
+      langue: u.langue.toLowerCase(),
+      ref_per: u.ref_per === "-" ? "" : u.ref_per,
       depots: u.depot_ids || [],
     });
     setIsModalOpen(true);
@@ -245,46 +195,26 @@ export default function UserManagementPage() {
 
     setIsSubmitting(true);
     try {
-      const userData: any = {
-        utilisateur: newUser.utilisateur,
-        nom_prenom: newUser.nom_prenom,
-        role_id: newUser.role_id ? parseInt(newUser.role_id) : null,
-        emplacement: newUser.emplacement,
-        admin: newUser.admin,
-        langue: newUser.langue,
-        ref_per: newUser.ref_per,
-      };
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: newUser.id,
+          utilisateur: newUser.utilisateur,
+          nom_prenom: newUser.nom_prenom,
+          role_id: newUser.role_id ? parseInt(newUser.role_id) : null,
+          emplacement: newUser.emplacement,
+          admin: newUser.admin,
+          langue: newUser.langue,
+          ref_per: newUser.ref_per,
+          mot_de_passe: newUser.mot_de_passe || undefined,
+          depots: newUser.depots,
+        }),
+      });
 
-      if (currentOrgId) {
-        userData.organization_id = currentOrgId;
-      }
-
-      if (newUser.mot_de_passe) {
-        userData.mot_de_passe = newUser.mot_de_passe;
-      }
-
-      let userId = newUser.id;
-
-      if (isEditing && userId) {
-        const { error } = await supabase.from("users").update(userData).eq("id", userId);
-        if (error) throw error;
-      } else {
-        const { data: created, error } = await supabase.from("users").insert([userData]).select().single();
-        if (error) throw error;
-        userId = created.id;
-      }
-
-      // Update multi-warehouses
-      if (userId) {
-        await supabase.from("user_warehouses").delete().eq("user_id", userId);
-        if (newUser.depots.length > 0) {
-          const warehouseInserts = newUser.depots.map((depotId) => ({
-            user_id: userId,
-            depot_id: depotId,
-            ...(currentOrgId ? { organization_id: currentOrgId } : {})
-          }));
-          await supabase.from("user_warehouses").insert(warehouseInserts);
-        }
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || "Erreur de sauvegarde");
       }
 
       setToast({
@@ -303,8 +233,11 @@ export default function UserManagementPage() {
   const handleDeleteUser = async (id: number, name: string) => {
     if (!confirm(`Voulez-vous vraiment supprimer l'utilisateur "${name}" ?`)) return;
     try {
-      const { error } = await supabase.from("users").delete().eq("id", id);
-      if (error) throw error;
+      const res = await fetch(`/api/users?id=${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.error || "Erreur lors de la suppression");
+      }
       setToast({ message: "Utilisateur supprimé", type: "success" });
       loadData();
     } catch (err: any) {

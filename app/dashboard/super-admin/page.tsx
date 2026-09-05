@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n/context";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
 import { formatDateTime, formatRelativeTime } from "@/lib/utils/datetime";
@@ -42,6 +43,7 @@ import {
 } from "recharts";
 
 export default function SuperAdminDashboardPage() {
+  const router = useRouter();
   const { t, locale, dir } = useLanguage();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -49,9 +51,32 @@ export default function SuperAdminDashboardPage() {
   const [backupToast, setBackupToast] = useState(false);
 
   useEffect(() => {
+    // Client-side quick security check
+    const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
+    if (cookie) {
+      try {
+        const decoded = decodeURIComponent(cookie.split('=')[1]);
+        const s = JSON.parse(decoded);
+        const isSuper = s?.username?.toLowerCase() === "superadmin" ||
+          ((s?.username?.toLowerCase() === "admin" || s?.admin === "Oui") && s?.organization_id === "00000000-0000-0000-0000-000000000001");
+        if (!isSuper) {
+          router.replace("/dashboard");
+          return;
+        }
+      } catch (e) {}
+    }
+
     fetch("/api/super-admin/dashboard")
-      .then((r) => r.json())
-      .then(setData)
+      .then((r) => {
+        if (r.status === 401 || r.status === 403) {
+          router.replace("/dashboard");
+          return null;
+        }
+        return r.json();
+      })
+      .then((res) => {
+        if (res) setData(res);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);

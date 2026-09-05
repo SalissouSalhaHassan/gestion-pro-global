@@ -96,3 +96,19 @@ export async function getAllowedDepotsAsync(): Promise<string[]> {
   return getAllowedDepots(s);
 }
 
+/**
+ * Checks if the current user is a Platform Super Admin (Master Console & SaaS Platform Access).
+ * Regular company administrators (Admin) do NOT have Super Admin privileges.
+ */
+export function isSuperAdmin(session?: CustomSession | null): boolean {
+  if (!session) return false;
+  const username = (session.username || "").toLowerCase();
+  const orgId = session.organization_id;
+  const isMasterOrg = orgId === "00000000-0000-0000-0000-000000000001";
+  
+  if (username === "superadmin") return true;
+  if (isMasterOrg && username === "admin") return true;
+  return false;
+}
+
+

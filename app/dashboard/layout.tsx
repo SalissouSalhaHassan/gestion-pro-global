@@ -105,14 +105,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/users", label: t("nav_users", "Utilisateurs"), icon: Users, adminOnly: true },
     { href: "/dashboard/permissions", label: t("nav_permissions", "Permissions"), icon: Shield, adminOnly: true },
     { href: "/dashboard/settings", label: t("nav_settings", "Paramètres"), icon: Settings, adminOnly: true },
-    { href: "/dashboard/platform", label: t("nav_platform", "Gestion de la plateforme"), icon: Landmark, adminOnly: true },
-    { href: "/dashboard/super-admin", label: t("nav_super_admin", "Tableau de bord Super Admin"), icon: Crown, adminOnly: true },
+    { href: "/dashboard/platform", label: t("nav_platform", "Gestion de la plateforme"), icon: Landmark, superAdminOnly: true },
+    { href: "/dashboard/super-admin", label: t("nav_super_admin", "Tableau de bord Super Admin"), icon: Crown, superAdminOnly: true },
     { href: "/dashboard/copilot", label: t("nav_copilot", "Assistant IA Copilot"), icon: Bot, highlight: true },
     { href: "/dashboard/support", label: t("nav_support", "Support & Assistance"), icon: Headphones },
   ];
 
+  const isSuper = userSession?.username?.toLowerCase() === "superadmin" ||
+    ((userSession?.username?.toLowerCase() === "admin" || isAdmin) && userSession?.organization_id === "00000000-0000-0000-0000-000000000001");
+
   const userPermissions = userSession?.permissions || [];
-  const visibleNavItems = allNavItems.filter(item => {
+  const visibleNavItems = allNavItems.filter((item: any) => {
+    if (item.superAdminOnly) return isSuper;
     if (isAdmin) return true;
     if (item.adminOnly) return false;
     if (item.perm) return userPermissions.includes(item.perm);

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getServerSession, isSuperAdmin } from '@/lib/auth_helper';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mxairvfgklibhamkpeqq.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'sb_secret_Bj4CF6U_1aAwYu3DlLQuNg_XWQwE_N0';
@@ -12,6 +13,14 @@ function getAdminClient() {
 
 export async function GET() {
   try {
+    const session = await getServerSession();
+    if (!isSuperAdmin(session)) {
+      return NextResponse.json(
+        { error: 'Accès refusé. Cette interface est strictement réservée au Super Administrateur Global.' },
+        { status: 403 }
+      );
+    }
+
     const supabase = getAdminClient();
 
     // 1. Fetch organizations

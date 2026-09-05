@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getServerSession } from '@/lib/auth_helper';
+import { getServerSession, isSuperAdmin } from '@/lib/auth_helper';
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -19,6 +19,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const { id } = await context.params;
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    if (!isSuperAdmin(session) && session.organization_id !== id) {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+    }
 
     const supabase = getAdminClient();
 
@@ -60,6 +63,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const { id } = await context.params;
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    
+    // Only superadmin can modify platform-level settings for any tenant
+    if (!isSuperAdmin(session)) {
+      return NextResponse.json({ error: "Accès refusé. Réservé au Super Administrateur." }, { status: 403 });
+    }
 
     const supabase = getAdminClient();
     const body = await request.json();
@@ -155,6 +163,9 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     const { id } = await context.params;
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    if (!isSuperAdmin(session)) {
+      return NextResponse.json({ error: "Accès refusé. Réservé au Super Administrateur." }, { status: 403 });
+    }
 
     const supabase = getAdminClient();
 

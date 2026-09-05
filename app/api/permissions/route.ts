@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { getServerSession, isSuperAdmin } from "@/lib/auth_helper";
 
 // GET: Fetch all roles, all permissions (grouped), and role_permissions mapping
 export async function GET() {
@@ -64,10 +65,13 @@ export async function GET() {
       rolePermMap[rp.role_id].push(rp.permission_id);
     }
 
-    // Count users per role
-    const { data: userCounts } = await supabase
-      .from("users")
-      .select("role_id");
+    // Count users per role (strictly scoped to current organization)
+    const session = await getServerSession();
+    let usersQuery = supabase.from("users").select("role_id");
+    if (session?.organization_id && !isSuperAdmin(session)) {
+      usersQuery = usersQuery.eq("organization_id", session.organization_id);
+    }
+    const { data: userCounts } = await usersQuery;
 
     const roleCounts: Record<number, number> = {};
     for (const u of userCounts || []) {
