@@ -96,21 +96,19 @@ export default function TransfersPage() {
       // Fetch transfers
       await fetchTransfers();
 
-      // Fetch depots
-      const { data: depotsData } = await supabase
-        .from("depots")
-        .select("id, nom")
-        .eq("is_active", true)
-        .order("nom");
-      if (depotsData) setDepots(depotsData);
+      // Fetch depots (Isolated by organization)
+      const resDepots = await fetch("/api/stock/depots");
+      if (resDepots.ok) {
+        const dData = await resDepots.json();
+        if (Array.isArray(dData)) setDepots(dData);
+      }
 
-      // Fetch articles
-      const { data: articlesData } = await supabase
-        .from("articles")
-        .select("id, reference, designation")
-        .eq("is_deleted", false)
-        .order("designation");
-      if (articlesData) setArticles(articlesData);
+      // Fetch articles (Isolated by organization)
+      const resArticles = await fetch("/api/articles");
+      if (resArticles.ok) {
+        const aData = await resArticles.json();
+        if (Array.isArray(aData)) setArticles(aData);
+      }
 
     } catch (err) {
       console.error("Error loading initial data:", err);

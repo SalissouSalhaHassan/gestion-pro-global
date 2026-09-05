@@ -103,9 +103,18 @@ export default function MouvementsPage() {
   const [hasMounted, setHasMounted] = useState(false);
 
   const [companyInfo, setCompanyInfo] = useState<any>(null);
+  const [currentOrgId, setCurrentOrgId] = useState<string>("");
 
   useEffect(() => {
     setHasMounted(true);
+    try {
+      const match = document.cookie.split("; ").find((c) => c.startsWith("gp_session="));
+      if (match) {
+        const decoded = decodeURIComponent(match.split("=")[1]);
+        const s = JSON.parse(decoded);
+        if (s.organization_id) setCurrentOrgId(s.organization_id);
+      }
+    } catch {}
     fetchDepots();
   }, []);
 
@@ -147,14 +156,16 @@ export default function MouvementsPage() {
   useEffect(() => {
     const getCompany = async () => {
       try {
-        const { data: ci } = await supabase.from("informations_entreprise").select("*").limit(1).single();
+        let q = supabase.from("informations_entreprise").select("*");
+        if (currentOrgId) q = q.eq("organization_id", currentOrgId);
+        const { data: ci } = await q.limit(1).maybeSingle();
         if (ci) setCompanyInfo(ci);
       } catch (e) {
         console.error("Error fetching company info:", e);
       }
     };
     getCompany();
-  }, []);
+  }, [currentOrgId]);
 
   const fetchData = useCallback(async () => {
     setRefreshing(true);
@@ -166,9 +177,14 @@ export default function MouvementsPage() {
       if (selectedDepotName) url.searchParams.set("depot", selectedDepotName);
       if (generalSearch) url.searchParams.set("search", generalSearch);
 
+      let stocksQuery = supabase.from("stocks").select("article_id, depot_nom, quantite");
+      if (currentOrgId) {
+        stocksQuery = stocksQuery.eq("organization_id", currentOrgId);
+      }
+
       const [res, stocksRes] = await Promise.all([
         fetch(url.toString()),
-        supabase.from("stocks").select("article_id, depot_nom, quantite")
+        stocksQuery
       ]);
 
       const records = await res.json();

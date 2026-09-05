@@ -30,12 +30,20 @@ export default function StockJournalModal({ filters, onClose }: StockJournalModa
         setLoading(true);
         setError(null);
         
-        // 1. Fetch Company Info
-        const { data: comp } = await supabase
-          .from("informations_entreprise")
-          .select("*")
-          .limit(1)
-          .single();
+        let orgId = "";
+        try {
+          const match = document.cookie.split("; ").find((c) => c.startsWith("gp_session="));
+          if (match) {
+            const decoded = decodeURIComponent(match.split("=")[1]);
+            const s = JSON.parse(decoded);
+            if (s.organization_id) orgId = s.organization_id;
+          }
+        } catch {}
+
+        // 1. Fetch Company Info (Scoped by organization_id)
+        let compQ = supabase.from("informations_entreprise").select("*");
+        if (orgId) compQ = compQ.eq("organization_id", orgId);
+        const { data: comp } = await compQ.limit(1).maybeSingle();
         setCompany(comp);
 
         // 2. Fetch Movements Data

@@ -28,8 +28,9 @@ export async function GET(request: Request) {
 
     const isAdmin = await isAdminOrManager(user);
     const userDepot = user.emplacement;
+    const orgId = user.organization_id || "00000000-0000-0000-0000-000000000001";
 
-    // 2. Build Query
+    // 2. Build Query (Strictly filtered by organization_id)
     let query = supabase
       .from("mouvements")
       .select(`
@@ -48,6 +49,7 @@ export async function GET(request: Request) {
         article_id,
         articles ( reference, designation, p_achat_ht, p_vente_ttc )
       `)
+      .eq("organization_id", orgId)
       .order("date_mouvement", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -93,6 +95,7 @@ export async function GET(request: Request) {
       const { data: matchedArticles } = await supabase
         .from("articles")
         .select("id")
+        .eq("organization_id", orgId)
         .or(`designation.ilike.%${search}%,reference.ilike.%${search}%`);
       
       const matchedIds = matchedArticles?.map((a: any) => a.id) || [];

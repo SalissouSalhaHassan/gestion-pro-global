@@ -63,11 +63,15 @@ export default function NewDevisModal({
     async function loadData() {
       try {
         const [cRes, aRes] = await Promise.all([
-          supabase.from("clients").select("id, nom, tel, adresse").order("nom"),
-          supabase.from("articles").select("id, reference, designation, p_vente_ht, p_vente_ttc, stocks(quantite)").eq("is_deleted", false).limit(100),
+          fetch("/api/clients"),
+          fetch("/api/articles"),
         ]);
-        setClients(cRes.data || []);
-        setArticles(aRes.data || []);
+        const [cData, aData] = await Promise.all([
+          cRes.ok ? cRes.json() : [],
+          aRes.ok ? aRes.json() : [],
+        ]);
+        setClients(Array.isArray(cData) ? cData : (cData.clients || []));
+        setArticles(Array.isArray(aData) ? aData : (aData.articles || []));
       } catch (e) {
         console.error("Error loading initial data for devis", e);
       } finally {
