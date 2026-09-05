@@ -73,7 +73,7 @@ export async function POST(request: Request) {
 
     const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
     const body = await request.json();
-    const { id, nom, code_depot, emplacement, responsable, is_active = true } = body;
+    const { id, nom, emplacement, responsable, is_active = true } = body;
 
     if (!nom || !nom.trim()) {
       return NextResponse.json({ error: "Le nom du dépôt est requis" }, { status: 400 });
@@ -81,7 +81,6 @@ export async function POST(request: Request) {
 
     const payload: any = {
       nom: nom.trim(),
-      code_depot: code_depot ? code_depot.trim().toUpperCase() : null,
       emplacement: emplacement ? emplacement.trim() : nom.trim(),
       responsable: responsable ? responsable.trim() : null,
       is_active: Boolean(is_active),
