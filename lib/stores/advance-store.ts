@@ -23,7 +23,8 @@ export const useAdvanceStore = create<AdvanceState>((set, get) => ({
       const res = await fetch('/api/advances');
       if (!res.ok) throw new Error('Failed to fetch advances');
       const data = await res.json();
-      set({ advances: data, isLoading: false });
+      const list = Array.isArray(data) ? data : (Array.isArray(data?.advances) ? data.advances : []);
+      set({ advances: list, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
     }

@@ -23,7 +23,12 @@ export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, a
 
   // 1. Mandatory Organization Scope
   if (session.organization_id) {
-    query = (query as any).eq('organization_id', session.organization_id);
+    if (entityType === 'avances') {
+      // avances_clients is linked to the tenant organization through its client
+      query = (query as any).eq('clients.organization_id', session.organization_id);
+    } else {
+      query = (query as any).eq('organization_id', session.organization_id);
+    }
   }
 
   // 2. Admin/Manager: sees everything within their organization
@@ -62,8 +67,16 @@ export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, a
     return (query as any).or(filter);
   }
 
+  // 5. Scoping for advances
   if (entityType === 'avances') {
-    return (query as any).eq('utilisateur', session.username);
+    const allowedDepotNames = getAllowedDepots(session);
+    if (allowedDepotNames.length === 0 && session.emplacement) {
+      allowedDepotNames.push(session.emplacement);
+    }
+    if (allowedDepotNames.length > 0) {
+      return (query as any).in('emplacement', allowedDepotNames);
+    }
+    return query;
   }
 
   return query;

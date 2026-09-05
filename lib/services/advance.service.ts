@@ -22,7 +22,7 @@ export class AdvanceService {
   async getAllAdvances(session?: CustomSession) {
     let query = this.supabase
       .from('avances_clients')
-      .select('*, clients(id, nom, tel, ref_client, adresse)')
+      .select('*, clients!inner(id, nom, tel, ref_client, adresse, organization_id)')
       .order('date_creation', { ascending: false });
 
     if (session) {
@@ -170,7 +170,7 @@ export class AdvanceService {
   async getActiveAdvancesByClientId(clientId: number, session?: CustomSession) {
     let query = this.supabase
       .from('avances_clients')
-      .select('*')
+      .select('*, clients!inner(id, organization_id)')
       .eq('client_id', clientId)
       .in('statut', ['Disponible', 'Partiellement utilisée'])
       .gt('montant_restant', 0)
