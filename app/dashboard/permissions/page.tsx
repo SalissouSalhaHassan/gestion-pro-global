@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n/context";
 import {
   Shield,
@@ -120,6 +121,7 @@ const DASHBOARD_INTERFACES = [
 ];
 
 export default function PermissionsPage() {
+  const router = useRouter();
   const { locale, dir } = useLanguage();
   const [roles, setRoles] = useState<Role[]>([]);
   const [grouped, setGrouped] = useState<GroupedPerms>({});
@@ -136,6 +138,31 @@ export default function PermissionsPage() {
 
   // Toast
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    // Client-side Super Admin guard
+    const cookie = document.cookie.split("; ").find((row) => row.startsWith("gp_session="));
+    if (cookie) {
+      try {
+        const decoded = decodeURIComponent(cookie.split("=")[1]);
+        const s = JSON.parse(decoded);
+        const isSuper =
+          s?.username?.toLowerCase() === "superadmin" ||
+          (s?.username?.toLowerCase() === "admin" &&
+            s?.organization_id === "00000000-0000-0000-0000-000000000001");
+        if (!isSuper) {
+          router.replace("/dashboard/unauthorized");
+          return;
+        }
+      } catch (e) {
+        router.replace("/dashboard/unauthorized");
+        return;
+      }
+    } else {
+      router.replace("/login");
+      return;
+    }
+  }, [router]);
 
   useEffect(() => {
     if (toast) {

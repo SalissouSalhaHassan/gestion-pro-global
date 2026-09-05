@@ -97,6 +97,14 @@ export async function GET() {
 // PUT: Update permissions for a role
 export async function PUT(request: Request) {
   const supabase = await createClient();
+  const session = await getServerSession();
+  if (!isSuperAdmin(session)) {
+    return NextResponse.json(
+      { error: "Accès refusé. La modification des permissions globales du système est strictement réservée au Super Administrateur." },
+      { status: 403 }
+    );
+  }
+
   const body = await request.json();
   const { role_id, permission_ids } = body;
 

@@ -103,7 +103,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/deliveries", label: t("nav_deliveries", "Tournées & Livraisons"), icon: Truck, perm: "vehicles.access" },
     { href: "/dashboard/depots", label: t("nav_depots", "Gestion des Dépôts"), icon: Warehouse, adminOnly: true },
     { href: "/dashboard/users", label: t("nav_users", "Utilisateurs"), icon: Users, adminOnly: true },
-    { href: "/dashboard/permissions", label: t("nav_permissions", "Permissions"), icon: Shield, adminOnly: true },
+    { href: "/dashboard/permissions", label: t("nav_permissions", "Permissions"), icon: Shield, superAdminOnly: true },
     { href: "/dashboard/settings", label: t("nav_settings", "Paramètres"), icon: Settings, adminOnly: true },
     { href: "/dashboard/platform", label: t("nav_platform", "Gestion de la plateforme"), icon: Landmark, superAdminOnly: true },
     { href: "/dashboard/super-admin", label: t("nav_super_admin", "Tableau de bord Super Admin"), icon: Crown, superAdminOnly: true },
