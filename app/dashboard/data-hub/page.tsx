@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Download,
   Database,
@@ -18,13 +18,27 @@ import {
   RefreshCw,
   Loader2,
   FileCheck,
-  Server
+  Server,
+  Building2
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/context";
 
 export default function DataHubPage() {
   const { locale, dir } = useLanguage();
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [orgName, setOrgName] = useState<string>("");
+
+  useEffect(() => {
+    try {
+      const match = document.cookie.match(/gp_session=([^;]+)/);
+      if (match) {
+        const parsed = JSON.parse(decodeURIComponent(match[1]));
+        if (parsed.organization_name) {
+          setOrgName(parsed.organization_name);
+        }
+      }
+    } catch (e) {}
+  }, []);
 
   // Filter dates
   const [startDate, setStartDate] = useState("");
@@ -72,11 +86,17 @@ export default function DataHubPage() {
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
               <span className="px-3 py-1 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-black tracking-wider flex items-center gap-1.5 shadow-md">
                 <Database size={14} />
                 DATA HUB & EXPORT EXCEL 4K
               </span>
+              {orgName && (
+                <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 bg-indigo-950/80 px-3 py-1 rounded-xl border border-indigo-500/30">
+                  <Building2 size={13} className="text-indigo-400" />
+                  {orgName} (Export Isolé)
+                </span>
+              )}
               <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 bg-emerald-950/60 px-3 py-1 rounded-xl border border-emerald-500/30">
                 <ShieldCheck size={13} className="text-emerald-400" />
                 {locale === "ar" ? "تصدير متوافق مع معايير Excel & UTF-8" : "Encodage UTF-8 universel"}

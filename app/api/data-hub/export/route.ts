@@ -19,6 +19,10 @@ export async function GET(request: Request) {
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
     const orgId = session.organization_id || '00000000-0000-0000-0000-000000000001';
+    const cleanOrgSlug = ((session.organization_name || (session as any).nom_prenom || "org") as string)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "_")
+      .slice(0, 15);
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type") || "invoices";
@@ -101,7 +105,7 @@ export async function GET(request: Request) {
         },
       };
 
-      const filename = `backup_gestion_pro_${new Date().toISOString().split("T")[0]}.json`;
+      const filename = `backup_gestion_pro_${cleanOrgSlug}_${new Date().toISOString().split("T")[0]}.json`;
       return new NextResponse(JSON.stringify(snapshot, null, 2), {
         headers: {
           "Content-Type": "application/json; charset=utf-8",
@@ -160,7 +164,7 @@ export async function GET(request: Request) {
       ]);
 
       const csvContent = "\uFEFF" + [headers.map(escapeCSV).join(";"), ...rows.map(r => r.join(";"))].join("\r\n");
-      const filename = `ventes_factures_${new Date().toISOString().split("T")[0]}.csv`;
+      const filename = `ventes_factures_${cleanOrgSlug}_${new Date().toISOString().split("T")[0]}.csv`;
 
       return new NextResponse(csvContent, {
         headers: {
@@ -176,14 +180,27 @@ export async function GET(request: Request) {
     if (type === "articles") {
       let artQ = supabase
         .from("articles")
-        .select("*, stocks(quantite)")
+        .select("id, reference, code_barre, designation, famille, p_achat_ht, p_vente_ttc, p_vente_ht, prix_gros, prix_special")
+        .eq("organization_id", orgId)
         .eq("is_deleted", false)
         .order("designation");
 
-      if (orgId) artQ = artQ.eq("organization_id", orgId);
-      const { data: arts, error } = await artQ;
+      const [artsRes, stocksRes] = await Promise.all([
+        artQ,
+        supabase.from("stocks").select("article_id, quantite").eq("organization_id", orgId),
+      ]);
 
-      if (error) throw error;
+      if (artsRes.error) throw artsRes.error;
+
+      const arts = artsRes.data || [];
+      const stocks = stocksRes.data || [];
+
+      // Map stock quantities strictly by this organization's stocks
+      const stockMap = new Map<number, number>();
+      for (const s of stocks) {
+        const cur = stockMap.get(s.article_id) || 0;
+        stockMap.set(s.article_id, cur + (Number(s.quantite) || 0));
+      }
 
       const headers = [
         "Référence",
@@ -198,8 +215,8 @@ export async function GET(request: Request) {
         "Valeur Stock Achat (FCFA)",
       ];
 
-      const rows = (arts || []).map((a: any) => {
-        const stockTotal = (a.stocks || []).reduce((sum: number, s: any) => sum + (Number(s.quantite) || 0), 0);
+      const rows = arts.map((a: any) => {
+        const stockTotal = stockMap.get(a.id) || 0;
         const pAchat = Number(a.p_achat_ht) || 0;
         const valeurAchat = stockTotal * pAchat;
 
@@ -218,7 +235,7 @@ export async function GET(request: Request) {
       });
 
       const csvContent = "\uFEFF" + [headers.map(escapeCSV).join(";"), ...rows.map(r => r.join(";"))].join("\r\n");
-      const filename = `catalogue_articles_stocks_${new Date().toISOString().split("T")[0]}.csv`;
+      const filename = `catalogue_articles_stocks_${cleanOrgSlug}_${new Date().toISOString().split("T")[0]}.csv`;
 
       return new NextResponse(csvContent, {
         headers: {
@@ -270,7 +287,7 @@ export async function GET(request: Request) {
       });
 
       const csvContent = "\uFEFF" + [headers.map(escapeCSV).join(";"), ...rows.map(r => r.join(";"))].join("\r\n");
-      const filename = `fichier_clients_creances_${new Date().toISOString().split("T")[0]}.csv`;
+      const filename = `fichier_clients_creances_${cleanOrgSlug}_${new Date().toISOString().split("T")[0]}.csv`;
 
       return new NextResponse(csvContent, {
         headers: {
@@ -320,7 +337,7 @@ export async function GET(request: Request) {
       ]);
 
       const csvContent = "\uFEFF" + [headers.map(escapeCSV).join(";"), ...rows.map(r => r.join(";"))].join("\r\n");
-      const filename = `achats_fournisseurs_${new Date().toISOString().split("T")[0]}.csv`;
+      const filename = `achats_fournisseurs_${cleanOrgSlug}_${new Date().toISOString().split("T")[0]}.csv`;
 
       return new NextResponse(csvContent, {
         headers: {
@@ -357,7 +374,7 @@ export async function GET(request: Request) {
       ]);
 
       const csvContent = "\uFEFF" + [headers.map(escapeCSV).join(";"), ...rows.map(r => r.join(";"))].join("\r\n");
-      const filename = `depenses_${new Date().toISOString().split("T")[0]}.csv`;
+      const filename = `depenses_${cleanOrgSlug}_${new Date().toISOString().split("T")[0]}.csv`;
 
       return new NextResponse(csvContent, {
         headers: {
