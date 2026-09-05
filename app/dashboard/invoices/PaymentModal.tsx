@@ -33,6 +33,8 @@ interface Advance {
   montant_restant: number;
   moyen_paiement: string;
   reference_paiement: string;
+  statut?: string;
+  emplacement?: string;
 }
 
 interface PaymentModalProps {
@@ -45,7 +47,9 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
   const [activeTab, setActiveTab] = useState<"history" | "advances">("history");
   const [payments, setPayments] = useState<Payment[]>([]);
   const [advances, setAdvances] = useState<Advance[]>([]);
+  const [totalAdvanceBalance, setTotalAdvanceBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [advancesLoading, setAdvancesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Form states
@@ -68,7 +72,7 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
       return !mode.includes('redit');
     })
     .reduce((acc, curr) => acc + Number(curr.montant_regle), 0);
-  const remainingToPay = (invoice.total_ttc || 0) - totalPaid;
+  const remainingToPay = Math.max(0, (invoice.total_ttc || 0) - totalPaid);
 
   useEffect(() => {
     if (!loading) {
@@ -76,9 +80,61 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
     }
   }, [loading, remainingToPay]);
 
-  useEffect(() => {
-    fetchData();
-  }, [invoice.id]);
+  const getEffectiveClientId = () => {
+    return invoice.client_id || invoice.id_client || invoice.client?.id || (typeof invoice.client === 'object' ? invoice.client?.id : null);
+  };
+
+  const loadAdvances = async (targetClientId?: number) => {
+    let cId = targetClientId || getEffectiveClientId();
+    if (!cId && invoice.id) {
+      try {
+        const invRes = await fetch(`/api/invoices/${invoice.id}`);
+        if (invRes.ok) {
+          const invData = await invRes.json();
+          cId = invData.client_id || invData.id_client || invData.client?.id;
+        }
+      } catch (err) {
+        console.error("Error retrieving client id from invoice:", err);
+      }
+    }
+
+    if (!cId) {
+      setAdvances([]);
+      setTotalAdvanceBalance(0);
+      return;
+    }
+
+    setAdvancesLoading(true);
+    try {
+      const aRes = await fetch(`/api/clients/${cId}/advances`);
+      if (aRes.ok) {
+        const aData = await aRes.json();
+        // Support both { advances: [...], totalBalance } and raw array
+        const list: Advance[] = Array.isArray(aData) 
+          ? aData 
+          : (Array.isArray(aData?.advances) 
+              ? aData.advances 
+              : (Array.isArray(aData?.data) ? aData.data : []));
+        
+        const validAdvances = list.filter(a => Number(a.montant_restant) > 0);
+        setAdvances(validAdvances);
+
+        const total = typeof aData?.totalBalance === 'number'
+          ? aData.totalBalance
+          : validAdvances.reduce((sum, a) => sum + Number(a.montant_restant || 0), 0);
+        setTotalAdvanceBalance(total);
+      } else {
+        setAdvances([]);
+        setTotalAdvanceBalance(0);
+      }
+    } catch (err) {
+      console.error("Error fetching client advances:", err);
+      setAdvances([]);
+      setTotalAdvanceBalance(0);
+    } finally {
+      setAdvancesLoading(false);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -87,16 +143,31 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
       const pData = await pRes.json();
       setPayments(Array.isArray(pData) ? pData : []);
 
-      if (invoice.client_id) {
-        // Fetch client advances
-        const aRes = await fetch(`/api/clients/${invoice.client_id}/advances?statut=Disponible`);
-        const aData = await aRes.json();
-        setAdvances(Array.isArray(aData) ? aData : []);
-      }
+      await loadAdvances();
     } catch (err) {
       console.error("Error fetching payment data:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [invoice.id]);
+
+  useEffect(() => {
+    if (activeTab === "advances") {
+      loadAdvances();
+    }
+  }, [activeTab]);
+
+  const formatDateSafe = (d: any, formatStr = 'dd MMM yyyy') => {
+    if (!d) return "-";
+    try {
+      const dt = new Date(d);
+      return isNaN(dt.getTime()) ? "-" : format(dt, formatStr, { locale: fr });
+    } catch {
+      return "-";
     }
   };
 
@@ -115,7 +186,7 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
       if (res.ok) {
         setNewPayment({ ...newPayment, reference_paiement: "", banque: "" });
         onRefresh();
-        fetchData();
+        await fetchData();
         alert("Paiement enregistré avec succès !");
       } else {
         const errorData = await res.json();
@@ -135,7 +206,7 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
       const res = await fetch(`/api/payments/${id}`, { method: "DELETE" });
       if (res.ok) {
         onRefresh();
-        fetchData();
+        await fetchData();
       }
     } catch (err) {
       console.error("Error deleting payment:", err);
@@ -144,6 +215,15 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
 
   const handleUseAdvance = async () => {
     if (!selectedAdvanceId || advanceAmount <= 0) return;
+    if (remainingToPay <= 0) {
+      alert("Cette facture est déjà totalement réglée.");
+      return;
+    }
+    const selectedAdv = advances.find(a => a.id === selectedAdvanceId);
+    if (selectedAdv && advanceAmount > selectedAdv.montant_restant) {
+      alert(`Le montant dépasse le solde disponible (${selectedAdv.montant_restant.toLocaleString()} FCFA).`);
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(`/api/invoices/${invoice.id}/use-advance`, {
@@ -158,10 +238,15 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
         setSelectedAdvanceId(null);
         setAdvanceAmount(0);
         onRefresh();
-        fetchData();
+        await fetchData();
+        alert("✅ Avance appliquée avec succès sur la facture !");
+      } else {
+        const errorData = await res.json();
+        alert(`❌ Erreur: ${errorData.error || "Impossible d'appliquer l'avance"}`);
       }
     } catch (err) {
       console.error("Error using advance:", err);
+      alert("❌ Erreur de connexion au serveur.");
     } finally {
       setSaving(false);
     }
@@ -232,7 +317,12 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
             className={`py-4 text-sm font-bold flex items-center gap-2 transition-all relative ${activeTab === "advances" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"}`}
           >
             <Wallet className="h-4 w-4" />
-            Utiliser une Avance
+            <span>Utiliser une Avance</span>
+            {advances.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 text-xs font-black rounded-full bg-blue-100 text-blue-700">
+                {advances.length}
+              </span>
+            )}
             {activeTab === "advances" && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 rounded-t-full" />}
           </button>
         </div>
@@ -259,8 +349,8 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
                             {p.moyen_reglement}
                           </div>
                           <div>
-                            <p className="text-slate-900 font-black">{p.montant_regle.toLocaleString()} FCFA</p>
-                            <p className="text-slate-400 text-xs font-semibold">{format(new Date(p.date_operation), 'dd MMMM yyyy', { locale: fr })} {p.reference_paiement && `• ${p.reference_paiement}`}</p>
+                            <p className="text-slate-900 font-black">{Number(p.montant_regle || 0).toLocaleString()} FCFA</p>
+                            <p className="text-slate-400 text-xs font-semibold">{formatDateSafe(p.date_operation, 'dd MMMM yyyy')} {p.reference_paiement && `• ${p.reference_paiement}`}</p>
                           </div>
                         </div>
                         <button 
@@ -287,7 +377,7 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
                       type="number"
                       required
                       value={newPayment.montant_regle}
-                      onChange={(e) => setNewPayment({...newPayment, montant_regle: parseFloat(e.target.value)})}
+                      onChange={(e) => setNewPayment({...newPayment, montant_regle: parseFloat(e.target.value) || 0})}
                       className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 font-black text-lg focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 shadow-sm transition-all"
                     />
                   </div>
@@ -331,74 +421,158 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-slate-800 font-black text-sm uppercase tracking-widest">Avances Disponibles pour ce client</h3>
-                <div className="p-2 bg-amber-50 rounded-lg text-amber-600 text-xs font-bold flex items-center gap-2 border border-amber-100">
-                  <Wallet className="h-3 w-3" />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-slate-800 font-black text-sm uppercase tracking-widest">Avances Disponibles pour ce client</h3>
+                  <p className="text-slate-500 text-xs mt-0.5">
+                    Solde total des acomptes : <strong className="text-emerald-600 font-bold">{totalAdvanceBalance.toLocaleString()} FCFA</strong>
+                  </p>
+                </div>
+                <div className="p-2 bg-amber-50 rounded-lg text-amber-700 text-xs font-bold flex items-center gap-2 border border-amber-200">
+                  <Wallet className="h-3.5 w-3.5 text-amber-600" />
                   Sélectionnez une avance pour l&apos;utiliser
                 </div>
               </div>
 
-              {advances.length === 0 ? (
+              {advancesLoading ? (
+                <div className="p-12 text-center text-slate-400">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                  <p className="text-sm font-medium">Chargement des avances du client...</p>
+                </div>
+              ) : advances.length === 0 ? (
                 <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center">
                   <Wallet className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500 font-bold mb-1">Aucune avance disponible</p>
+                  <p className="text-slate-700 font-bold mb-1">Aucune avance disponible</p>
                   <p className="text-slate-400 text-sm">Le client n&apos;a pas de crédits prépayés en attente.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {advances.map((adv) => (
-                    <div 
-                      key={adv.id}
-                      onClick={() => {
-                        setSelectedAdvanceId(adv.id);
-                        setAdvanceAmount(Math.min(adv.montant_restant, invoice.montant_restant));
-                      }}
-                      className={`cursor-pointer p-5 rounded-2xl border-2 transition-all group ${selectedAdvanceId === adv.id ? "border-blue-600 bg-blue-50/30" : "border-slate-100 hover:border-slate-200 bg-white"}`}
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="p-3 bg-slate-50 rounded-xl group-hover:bg-white transition-colors">
-                          <Wallet className="h-5 w-5 text-slate-600" />
+                  {advances.map((adv) => {
+                    const isSelected = selectedAdvanceId === adv.id;
+                    return (
+                      <div 
+                        key={adv.id}
+                        onClick={() => {
+                          setSelectedAdvanceId(adv.id);
+                          const defaultAmt = Math.min(Number(adv.montant_restant), remainingToPay > 0 ? remainingToPay : Number(adv.montant_restant));
+                          setAdvanceAmount(defaultAmt);
+                        }}
+                        className={`cursor-pointer p-5 rounded-2xl border-2 transition-all relative group ${
+                          isSelected 
+                            ? "border-blue-600 bg-blue-50/40 shadow-md ring-2 ring-blue-500/20" 
+                            : "border-slate-200 hover:border-blue-300 bg-white hover:shadow-sm"
+                        }`}
+                      >
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-3 rounded-xl transition-colors ${isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 group-hover:bg-blue-50 group-hover:text-blue-600"}`}>
+                              <Wallet className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 uppercase">
+                                {adv.moyen_paiement || "Avance"}
+                              </span>
+                              {adv.statut && (
+                                <span className="ml-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  {adv.statut}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-tighter">Solde Restant</p>
+                            <p className="text-slate-900 font-black text-xl text-emerald-600">{Number(adv.montant_restant).toLocaleString()} <span className="text-xs font-semibold text-slate-400">FCFA</span></p>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-slate-400 text-[10px] font-black uppercase tracking-tighter">Solde Restant</p>
-                          <p className="text-slate-900 font-black text-lg">{adv.montant_restant.toLocaleString()} FCFA</p>
+
+                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                          <span>{formatDateSafe(adv.date_avance)}</span>
+                          <span className="font-semibold text-slate-400">
+                            Initial : {Number(adv.montant_initial).toLocaleString()} FCFA
+                          </span>
+                          <span className="font-bold text-slate-700">{adv.reference_paiement || "Sans Ref"}</span>
                         </div>
                       </div>
-                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                        <span className="text-slate-400 text-xs font-bold">{format(new Date(adv.date_avance), 'dd MMM yyyy')}</span>
-                        <span className="text-slate-500 text-xs font-black">{adv.reference_paiement || "Sans Ref"}</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
               {selectedAdvanceId && (
-                <div className="bg-slate-900 rounded-3xl p-8 flex flex-col md:flex-row items-center gap-8 animate-in slide-in-from-bottom-4 duration-500">
-                  <div className="flex-1">
-                    <p className="text-blue-400 text-xs font-black uppercase tracking-widest mb-1">Montant à utiliser</p>
-                    <input 
-                      type="number"
-                      value={advanceAmount}
-                      onChange={(e) => setAdvanceAmount(parseFloat(e.target.value))}
-                      className="bg-transparent border-none text-white text-4xl font-black focus:ring-0 p-0 w-full"
-                    />
+                <div className="bg-slate-900 rounded-3xl p-6 md:p-8 flex flex-col gap-5 text-white animate-in slide-in-from-bottom-4 duration-300">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+                    <div>
+                      <p className="text-blue-400 text-xs font-black uppercase tracking-widest">Avance N° #{selectedAdvanceId} sélectionnée</p>
+                      <p className="text-slate-300 text-xs mt-0.5">
+                        Solde de cette avance : <strong className="text-white font-bold">{Number(advances.find(a => a.id === selectedAdvanceId)?.montant_restant || 0).toLocaleString()} FCFA</strong> • Reste facture : <strong className="text-white font-bold">{remainingToPay.toLocaleString()} FCFA</strong>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const adv = advances.find(a => a.id === selectedAdvanceId);
+                          if (adv) {
+                            setAdvanceAmount(Math.min(Number(adv.montant_restant), remainingToPay));
+                          }
+                        }}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 font-bold transition-colors"
+                      >
+                        Solder facture ({Math.min(Number(advances.find(a => a.id === selectedAdvanceId)?.montant_restant || 0), remainingToPay).toLocaleString()} FCFA)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const adv = advances.find(a => a.id === selectedAdvanceId);
+                          if (adv) {
+                            setAdvanceAmount(Number(adv.montant_restant));
+                          }
+                        }}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 font-bold transition-colors"
+                      >
+                        Tout le dépôt ({Number(advances.find(a => a.id === selectedAdvanceId)?.montant_restant || 0).toLocaleString()} FCFA)
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-4 w-full md:w-auto">
-                    <button 
-                      onClick={() => setSelectedAdvanceId(null)}
-                      className="flex-1 md:w-32 py-4 rounded-xl font-bold bg-white/10 text-white hover:bg-white/20 transition-all border border-white/5"
-                    >
-                      Annuler
-                    </button>
-                    <button 
-                      onClick={handleUseAdvance}
-                      disabled={saving || advanceAmount <= 0}
-                      className="flex-1 md:w-64 py-4 rounded-xl font-black bg-blue-600 text-white shadow-xl shadow-blue-600/20 hover:bg-blue-500 transition-all active:scale-95 disabled:bg-slate-700"
-                    >
-                      {saving ? "Traitement..." : "Appliquer l'Avance"}
-                    </button>
+
+                  {remainingToPay <= 0 && (
+                    <div className="p-3 bg-amber-500/20 text-amber-200 border border-amber-500/30 rounded-xl text-xs font-bold">
+                      ⚠️ Cette facture est déjà entièrement réglée. Aucun montant supplémentaire ne peut être imputé.
+                    </div>
+                  )}
+
+                  <div className="flex flex-col md:flex-row items-center gap-6">
+                    <div className="flex-1 w-full">
+                      <label className="block text-blue-400 text-xs font-black uppercase tracking-widest mb-1.5">Montant à imputer (FCFA)</label>
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          min={1}
+                          max={Number(advances.find(a => a.id === selectedAdvanceId)?.montant_restant || 0)}
+                          value={advanceAmount}
+                          onChange={(e) => setAdvanceAmount(parseFloat(e.target.value) || 0)}
+                          className="bg-white/10 border border-white/20 text-white text-3xl font-black rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-400 focus:border-transparent w-full"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-3 w-full md:w-auto pt-2 md:pt-0">
+                      <button 
+                        type="button"
+                        onClick={() => setSelectedAdvanceId(null)}
+                        className="flex-1 md:w-28 py-3.5 rounded-xl font-bold bg-white/10 text-white hover:bg-white/20 transition-all border border-white/5"
+                      >
+                        Annuler
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={handleUseAdvance}
+                        disabled={saving || advanceAmount <= 0 || remainingToPay <= 0}
+                        className="flex-1 md:w-56 py-3.5 rounded-xl font-black bg-blue-600 text-white shadow-xl shadow-blue-600/30 hover:bg-blue-500 transition-all active:scale-95 disabled:bg-slate-700 disabled:text-slate-400 disabled:shadow-none"
+                      >
+                        {saving ? "Traitement..." : "Appliquer l'Avance"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

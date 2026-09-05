@@ -167,15 +167,22 @@ export class AdvanceService {
     return true;
   }
 
-  async getActiveAdvancesByClientId(clientId: number) {
-    const { data, error } = await this.supabase
+  async getActiveAdvancesByClientId(clientId: number, session?: CustomSession) {
+    let query = this.supabase
       .from('avances_clients')
       .select('*')
       .eq('client_id', clientId)
       .in('statut', ['Disponible', 'Partiellement utilisée'])
+      .gt('montant_restant', 0)
       .order('date_avance', { ascending: true });
 
+    if (session) {
+      query = applyUserScope(query as any, session, 'avances');
+    }
+
+    const { data, error } = await query;
+
     if (error) throw new Error(error.message);
-    return data;
+    return data || [];
   }
 }
