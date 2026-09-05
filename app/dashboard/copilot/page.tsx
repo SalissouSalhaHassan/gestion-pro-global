@@ -22,7 +22,8 @@ import {
   Package,
   Layers,
   BarChart3,
-  Loader2
+  Loader2,
+  Building2
 } from "lucide-react";
 import Link from "next/link";
 
@@ -45,7 +46,20 @@ export default function AICopilotPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [orgName, setOrgName] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      const match = document.cookie.match(/gp_session=([^;]+)/);
+      if (match) {
+        const parsed = JSON.parse(decodeURIComponent(match[1]));
+        if (parsed.organization_name) {
+          setOrgName(parsed.organization_name);
+        }
+      }
+    } catch (e) {}
+  }, []);
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -53,14 +67,14 @@ export default function AICopilotPage() {
       sender: "ai",
       text:
         locale === "ar"
-          ? "مرحباً بك! أنا **GestionPro AI Executive Copilot**، مستشارك الذكي لإدارة الأعمال والتحليلات المالية والمخزون والتنبؤات. كيف يمكنني مساعدتك اليوم؟"
-          : "Bonjour ! Je suis **GestionPro AI Executive Copilot**, votre analyste décisionnel en temps réel pour vos ventes, marges, stocks et prévisions. Que souhaitez-vous analyser ?",
+          ? "مرحباً بك! أنا **GestionPro AI Executive Copilot**، مستشارك الذكي لإدارة الأعمال والتحليلات المالية والمخزون والتنبؤات. جميع المؤشرات معزولة ومخصصة لمؤسستكم حصراً. كيف يمكنني مساعدتك اليوم؟"
+          : "Bonjour ! Je suis **GestionPro AI Executive Copilot**, votre analyste décisionnel en temps réel pour vos ventes, marges, stocks et prévisions. Toutes vos métriques sont 100% isolées et dédiées à votre organisation. Que souhaitez-vous analyser ?",
       time: "À l'instant",
       kpi: {
         title: "Statut Système",
         val1: "En Ligne",
         lbl1: "Connexion Cloud",
-        val2: "100%",
+        val2: "100% Isolé",
         lbl2: "Données Synchronisées",
       },
     },
@@ -183,11 +197,17 @@ export default function AICopilotPage() {
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
               <span className="px-3 py-1 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-black tracking-wider flex items-center gap-1.5 shadow-md">
                 <BrainCircuit size={14} />
                 NEURAL BUSINESS COPILOT 4K
               </span>
+              {orgName && (
+                <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 bg-indigo-950/80 px-3 py-1 rounded-xl border border-indigo-500/30">
+                  <Building2 size={13} className="text-indigo-400" />
+                  {orgName} (Isolé & Dédié)
+                </span>
+              )}
               <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 bg-emerald-950/60 px-3 py-1 rounded-xl border border-emerald-500/30">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                 INTELLIGENCE DÉCISIONNELLE CONNECTÉE

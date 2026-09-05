@@ -10,8 +10,9 @@ export async function POST(req: Request) {
     const { prompt, locale = 'fr' } = await req.json();
     const supabase = await createClient();
     const session = await getServerSession();
+    const orgId = session?.organization_id || "00000000-0000-0000-0000-000000000001";
 
-    // 1. Fetch live snapshot analytics from database
+    // 1. Fetch live snapshot analytics strictly scoped to current organization
     const [
       facturesRes,
       clientsRes,
@@ -20,20 +21,41 @@ export async function POST(req: Request) {
       auditRes,
       companyRes
     ] = await Promise.all([
-      supabase.from('factures').select('id, bl_number, date_facture, total_ht, total_ttc, montant_paye, montant_restant, statut, client_nom').eq('is_deleted', false).order('date_facture', { ascending: false }).limit(300),
-      supabase.from('clients').select('id, nom, tel, credit_facture, credit_bl, type_client').eq('is_deleted', false).order('credit_facture', { ascending: false }).limit(50),
-      supabase.from('stocks').select('article_id, quantite, depot_nom'),
-      supabase.from('articles').select('id, reference, designation, p_achat_ht, p_vente_ttc').eq('is_deleted', false),
-      supabase.from('audit_logs').select('action_type, severity, description, created_at').order('created_at', { ascending: false }).limit(20),
-      supabase.from('informations_entreprise').select('nom_entreprise').maybeSingle(),
+      supabase.from('factures').select('id, bl_number, date_facture, total_ht, total_ttc, montant_paye, montant_restant, statut, client_nom').eq('organization_id', orgId).eq('is_deleted', false).order('date_facture', { ascending: false }).limit(300),
+      supabase.from('clients').select('id, nom, tel, credit_facture, credit_bl, type_client').eq('organization_id', orgId).eq('is_deleted', false).order('credit_facture', { ascending: false }).limit(50),
+      supabase.from('stocks').select('article_id, quantite, depot_nom').eq('organization_id', orgId),
+      supabase.from('articles').select('id, reference, designation, p_achat_ht, p_vente_ttc').eq('organization_id', orgId).eq('is_deleted', false),
+      supabase.from('audit_logs').select('action_type, severity, description, created_at').eq('organization_id', orgId).order('created_at', { ascending: false }).limit(20),
+      supabase.from('informations_entreprise').select('nom_entreprise').eq('organization_id', orgId).maybeSingle(),
     ]);
 
     const factures = facturesRes.data || [];
     const clients = clientsRes.data || [];
     const stocks = stocksRes.data || [];
     const articles = articlesRes.data || [];
-    const auditLogs = auditRes.data || [];
-    const companyName = companyRes.data?.nom_entreprise || "Gestion Pro Global";
+    let auditLogs = auditRes.data || [];
+
+    // Fallback for audit logs: if audit_logs is empty, query activity_log for current organization
+    if (auditLogs.length === 0) {
+      try {
+        const { data: actData } = await supabase
+          .from('activity_log')
+          .select('action, entity_type, details, created_at')
+          .eq('organization_id', orgId)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        if (actData && actData.length > 0) {
+          auditLogs = actData.map((a: any) => ({
+            action_type: a.action,
+            severity: (a.action || "").toUpperCase().includes("DELETE") ? "CRITICAL" : "MEDIUM",
+            description: a.details,
+            created_at: a.created_at,
+          }));
+        }
+      } catch (e) {}
+    }
+
+    const companyName = companyRes.data?.nom_entreprise || session?.organization_name || (session as any)?.nom_prenom || "Notre Entreprise";
 
     // 2. Computed Financial & Operational Metrics
     const now = new Date();
