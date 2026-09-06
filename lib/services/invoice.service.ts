@@ -157,7 +157,7 @@ export class InvoiceService {
   async getInvoiceById(id: number, session: any) {
     let query = this.supabase
       .from('factures')
-      .select('*, facture_items(*, depots:depot_id(id, nom)), clients(nom, adresse, nif)')
+      .select('*, facture_items(*, depots:depot_id(id, nom)), clients(nom, adresse, tel, nif)')
       .eq('id', id);
     
     const policy = await this.getTenantInvoicePolicy(session);

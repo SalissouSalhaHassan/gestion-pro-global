@@ -62,36 +62,42 @@ export async function GET(
     const isAdmin = await isAdminOrManager(session);
     const invoiceService = new InvoiceService(supabase);
     
-    // Admins see everything, Sellers only their own (scoping handled in service)
-    const invoice = await invoiceService.getInvoiceById(Number(id), session);
+    const invoiceService = new InvoiceService(supabase);
+    const orgId = session.organization_id;
+
+    // Concurrently fetch invoice and payments directly on server
+    const [invoice, paysRes, compRes] = await Promise.all([
+      invoiceService.getInvoiceById(Number(id), session),
+      supabase
+        .from('paiements')
+        .select('*')
+        .eq('facture_id', Number(id))
+        .order('date_operation', { ascending: true }),
+      orgId
+        ? supabase
+            .from('informations_entreprise')
+            .select('*')
+            .eq('organization_id', orgId)
+            .maybeSingle()
+        : Promise.resolve({ data: null })
+    ]);
     
     if (!invoice) {
-        return NextResponse.json({ error: "Facture introuvable ou accès refusé" }, { status: 404 });
+      return NextResponse.json({ error: "Facture introuvable ou accès refusé" }, { status: 404 });
     }
 
     // Attach company branding info
-    let companyInfo: any = null;
-    const orgId = invoice.organization_id || session.organization_id;
-    if (orgId) {
-      const { data: comp } = await supabase
-        .from("informations_entreprise")
-        .select("*")
-        .eq("organization_id", orgId)
-        .maybeSingle();
-
-      if (comp) {
-        companyInfo = comp;
-        if (comp.capital_social && comp.capital_social.startsWith("{")) {
-          try {
-            const parsed = JSON.parse(comp.capital_social);
-            companyInfo = { ...companyInfo, ...parsed };
-          } catch (e) {}
-        }
-      }
+    let companyInfo: any = compRes?.data || null;
+    if (companyInfo && companyInfo.capital_social && companyInfo.capital_social.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(companyInfo.capital_social);
+        companyInfo = { ...companyInfo, ...parsed };
+      } catch (e) {}
     }
 
     return NextResponse.json({
       ...invoice,
+      paiements: paysRes?.data || [],
       company: companyInfo,
     });
   } catch (error: any) {

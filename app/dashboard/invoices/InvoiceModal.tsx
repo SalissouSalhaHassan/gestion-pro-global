@@ -25,15 +25,18 @@ const supabase = createClient();
 
 type InvoiceModalProps = {
   invoiceId: string | number;
+  initialInvoice?: any;
   onClose: () => void;
 };
 
-export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) {
-  const [loading, setLoading] = useState(true);
-  const [invoice, setInvoice] = useState<any>(null);
-  const [items, setItems] = useState<any[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
-  const [company, setCompany] = useState<any>(null);
+export default function InvoiceModal({ invoiceId, initialInvoice, onClose }: InvoiceModalProps) {
+  const [loading, setLoading] = useState(!initialInvoice);
+  const [invoice, setInvoice] = useState<any>(initialInvoice || null);
+  const [items, setItems] = useState<any[]>(
+    initialInvoice?.facture_items || initialInvoice?.items || []
+  );
+  const [payments, setPayments] = useState<any[]>(initialInvoice?.paiements || []);
+  const [company, setCompany] = useState<any>(initialInvoice?.company || null);
   const [mode, setMode] = useState<'Invoice' | 'BL'>('Invoice');
   const [printFormat, setPrintFormat] = useState<'A4' | 'A5' | 'Ticket'>('A4');
   const [error, setError] = useState<string | null>(null);
@@ -86,36 +89,22 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     async function fetchData() {
       try {
-        setLoading(true);
+        if (!initialInvoice) {
+          setLoading(true);
+        }
         
         // Ensure invoiceId is a valid number
         const numericId = typeof invoiceId === 'string' ? Number(invoiceId) : invoiceId;
-        console.log("🔍 Fetching invoice data for ID:", numericId, "Type:", typeof numericId, "Original:", invoiceId);
         
         if (!numericId || isNaN(numericId)) {
           throw new Error(`ID de facture invalide: ${invoiceId}`);
         }
 
-        // 1. Fetch Company Info via isolated company API
-        try {
-          const compRes = await fetch("/api/settings/company");
-          if (compRes.ok) {
-            const compJson = await compRes.json();
-            if (compJson.company) {
-              setCompany(compJson.company);
-            }
-          } else {
-            const { data: compData } = await supabase.from("informations_entreprise").select("*").limit(1);
-            setCompany(compData && compData.length > 0 ? compData[0] : null);
-          }
-        } catch (e) {
-          const { data: compData } = await supabase.from("informations_entreprise").select("*").limit(1);
-          setCompany(compData && compData.length > 0 ? compData[0] : null);
-        }
-
-        // 2. Fetch Invoice Header and Details via secure API
+        // ONE single optimized API call (fetches invoice + items + payments + company info concurrently)
         const response = await fetch(`/api/invoices/${numericId}`);
         if (!response.ok) {
           const errData = await response.json();
@@ -123,10 +112,10 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
         }
         
         const inv = await response.json();
-        console.log("✅ Invoice loaded via API:", inv);
+        if (!isMounted) return;
         
         if (inv.company) {
-          setCompany((prev: any) => prev || inv.company);
+          setCompany(inv.company);
         }
 
         const clientRow = Array.isArray(inv.clients) ? inv.clients[0] : inv.clients;
@@ -138,113 +127,38 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
           client_email: clientRow?.email || inv.client_email || "",
         });
 
-        // 3. Fetch Items with article info & depot resolution
-        const { data: its } = await supabase
-          .from("facture_items")
-          .select("*, depots:depot_id(id, nom)")
-          .eq("facture_id", numericId);
+        // Set items directly from pre-resolved facture_items
+        const rawItems = inv.facture_items || inv.items || [];
+        const mappedItems = rawItems.map((item: any) => ({
+          ...item,
+          description: item.description || item.designation || "Article",
+          code_art: item.code_art || item.reference || "-",
+          depot_origine: item.depot_origine || item.depots?.nom || item.depot?.nom || inv.emplacement || "",
+          display_unit_price: resolveUnitPrice(item),
+        }));
+        setItems(mappedItems);
 
-        const rawItems = (its && its.length > 0) ? its : (inv.facture_items || []);
-
-        // Load movements to accurately resolve originating depot per article (especially for multi-depot sales)
-        const movementsMap = new Map<number, string>();
-        if (inv.bl_number) {
-          try {
-            const { data: mvts } = await supabase
-              .from("mouvements")
-              .select("article_id, depot")
-              .eq("nr_doc", inv.bl_number);
-            if (mvts) {
-              mvts.forEach((m: any) => {
-                if (m.article_id && m.depot && !movementsMap.has(Number(m.article_id))) {
-                  movementsMap.set(Number(m.article_id), m.depot);
-                }
-              });
-            }
-          } catch (mvtErr) {
-            console.warn("Could not fetch movements for invoice depot resolution:", mvtErr);
-          }
+        // Set payments
+        if (Array.isArray(inv.paiements)) {
+          setPayments(inv.paiements);
         }
-
-        // Fetch seller's assigned emplacement if inv.emplacement is missing
-        let sellerEmplacement = inv.emplacement || "";
-        if (!sellerEmplacement && inv.vendeur) {
-          try {
-            const { data: sellerUser } = await supabase
-              .from("users")
-              .select("emplacement")
-              .eq("utilisateur", inv.vendeur)
-              .maybeSingle();
-            if (sellerUser?.emplacement) {
-              sellerEmplacement = sellerUser.emplacement;
-            }
-          } catch (userErr) {
-            console.warn("Could not fetch seller user emplacement:", userErr);
-          }
-        }
-
-        const missingArticleIds = rawItems
-          .filter((it: any) => (!it.description || !it.code_art) && it.article_id)
-          .map((it: any) => it.article_id);
-
-        let articlesMap = new Map<number, any>();
-        if (missingArticleIds.length > 0) {
-          const { data: arts } = await supabase
-            .from("articles")
-            .select("id, designation, nom, reference")
-            .in("id", missingArticleIds);
-          if (arts) {
-            arts.forEach((a: any) => articlesMap.set(a.id, a));
-          }
-        }
-
-        setItems(
-          rawItems.map((item: any) => {
-            const art = articlesMap.get(item.article_id);
-            const desc =
-              item.description ||
-              art?.designation ||
-              art?.nom ||
-              item.designation ||
-              "Article";
-            const code = item.code_art || art?.reference || "-";
-
-            const depotName = 
-              item.depot_origine ||
-              item.depots?.nom ||
-              item.depot?.nom ||
-              movementsMap.get(Number(item.article_id)) ||
-              inv.emplacement ||
-              sellerEmplacement ||
-              "";
-
-            return {
-              ...item,
-              description: desc,
-              code_art: code,
-              depot_origine: depotName,
-              display_unit_price: resolveUnitPrice(item),
-            };
-          })
-        );
-
-        // 4. Fetch Payments
-        const { data: pays } = await supabase
-          .from("paiements")
-          .select("*")
-          .eq("facture_id", numericId)
-          .order("date_operation", { ascending: true });
-        setPayments(pays || []);
-
       } catch (err: any) {
         console.error("❌ Error fetching invoice details:", err);
-        setError(err.message || "Erreur lors du chargement de la facture");
+        if (isMounted) {
+          setError(err.message || "Erreur lors du chargement de la facture");
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
 
     if (invoiceId) fetchData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [invoiceId]);
 
   const handlePrint = () => {

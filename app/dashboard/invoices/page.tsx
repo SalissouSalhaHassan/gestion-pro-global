@@ -68,6 +68,7 @@ export default function InvoicesPage() {
   const [sortField, setSortField] = useState<keyof Invoice>("date_facture");
   const [sortAsc, setSortAsc] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | number | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [editInvoiceId, setEditInvoiceId] = useState<string | number | null>(null);
   const [paymentInvoice, setPaymentInvoice] = useState<any | null>(null);
   const [selectedWhatsAppInvoice, setSelectedWhatsAppInvoice] = useState<any | null>(null);
@@ -805,7 +806,10 @@ export default function InvoicesPage() {
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => setSelectedInvoiceId(inv.id)}
+                              onClick={() => {
+                                setSelectedInvoice(inv);
+                                setSelectedInvoiceId(inv.id);
+                              }}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all cursor-pointer"
                               title="Aperçu / Imprimer Facture"
                             >
@@ -923,7 +927,10 @@ export default function InvoicesPage() {
                   {/* Card Actions */}
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                     <button
-                      onClick={() => setSelectedInvoiceId(inv.id)}
+                      onClick={() => {
+                        setSelectedInvoice(inv);
+                        setSelectedInvoiceId(inv.id);
+                      }}
                       className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <Eye size={14} />
@@ -975,7 +982,11 @@ export default function InvoicesPage() {
       {selectedInvoiceId && (
         <InvoiceModal 
           invoiceId={selectedInvoiceId} 
-          onClose={() => setSelectedInvoiceId(null)} 
+          initialInvoice={selectedInvoice}
+          onClose={() => {
+            setSelectedInvoiceId(null);
+            setSelectedInvoice(null);
+          }} 
         />
       )}
 
