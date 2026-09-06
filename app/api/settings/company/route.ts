@@ -148,7 +148,8 @@ export async function POST(req: NextRequest) {
       invoice_visibility_policy: invoiceVisibilityPolicy,
     };
 
-    const updatePayload: any = {
+    // Standard guaranteed columns that exist across all schema versions
+    const standardPayload: any = {
       nom_entreprise: body.nom_entreprise || session.organization_name || "Notre Entreprise",
       adresse: body.adresse || "",
       telephone: body.telephone || "",
@@ -159,7 +160,6 @@ export async function POST(req: NextRequest) {
       art_imposition: body.art_impo || body.art_imposition || "",
       notes_pied_facture: body.notes_pied_facture || "Merci pour votre confiance.",
       capital_social: JSON.stringify(brandingMeta),
-      invoice_visibility_policy: invoiceVisibilityPolicy,
     };
 
     // 3. Find if company record exists for this organization
@@ -172,11 +172,11 @@ export async function POST(req: NextRequest) {
     let savedData: any = null;
 
     if (existing?.id) {
-      // Try updating with native columns first
+      // 1st Attempt: Try updating with all extended columns (if migration already run)
       let { data: updated, error: updateErr } = await supabase
         .from("informations_entreprise")
         .update({
-          ...updatePayload,
+          ...standardPayload,
           cachet_url: cachetUrl,
           brand_color: brandingMeta.brand_color,
           slogan: brandingMeta.slogan,
@@ -188,33 +188,77 @@ export async function POST(req: NextRequest) {
         .select()
         .single();
 
-      // If native columns don't exist yet, update with standard fields + capital_social JSON
+      // If extended columns don't exist yet in Supabase schema cache, fallback gracefully
       if (updateErr) {
-        const { data: fallbackUpdated, error: fbErr } = await supabase
+        console.warn("Extended columns update failed, attempting standard branding fallback:", updateErr.message);
+
+        // 2nd Attempt: Standard payload + cachet/branding columns (without invoice_visibility_policy)
+        let { data: semiUpdated, error: semiErr } = await supabase
           .from("informations_entreprise")
-          .update(updatePayload)
+          .update({
+            ...standardPayload,
+            cachet_url: cachetUrl,
+            brand_color: brandingMeta.brand_color,
+            slogan: brandingMeta.slogan,
+            show_stamp: brandingMeta.show_stamp,
+            show_qr_code: brandingMeta.show_qr_code,
+          })
           .eq("id", existing.id)
           .select()
           .single();
 
-        if (fbErr) throw fbErr;
-        savedData = fallbackUpdated;
+        if (semiErr) {
+          console.warn("Branding columns update failed, falling back to pure standardPayload:", semiErr.message);
+          // 3rd Attempt: Pure standard columns (capital_social stores everything safely)
+          const { data: fallbackUpdated, error: fbErr } = await supabase
+            .from("informations_entreprise")
+            .update(standardPayload)
+            .eq("id", existing.id)
+            .select()
+            .single();
+
+          if (fbErr) throw fbErr;
+          savedData = fallbackUpdated;
+        } else {
+          savedData = semiUpdated;
+        }
       } else {
         savedData = updated;
       }
     } else {
-      // Insert new record
-      const { data: inserted, error: insertErr } = await supabase
+      // 1st Attempt: Insert with all extended columns
+      let { data: inserted, error: insertErr } = await supabase
         .from("informations_entreprise")
         .insert({
-          ...updatePayload,
+          ...standardPayload,
+          cachet_url: cachetUrl,
+          brand_color: brandingMeta.brand_color,
+          slogan: brandingMeta.slogan,
+          show_stamp: brandingMeta.show_stamp,
+          show_qr_code: brandingMeta.show_qr_code,
+          invoice_visibility_policy: invoiceVisibilityPolicy,
           organization_id: orgId,
         })
         .select()
         .single();
 
-      if (insertErr) throw insertErr;
-      savedData = inserted;
+      if (insertErr) {
+        console.warn("Extended columns insert failed, falling back to pure standardPayload:", insertErr.message);
+        // Fallback: Pure standard columns insert
+        const { data: fbInserted, error: fbInsertErr } = await supabase
+          .from("informations_entreprise")
+          .insert({
+            ...standardPayload,
+            organization_id: orgId,
+          })
+          .select()
+          .single();
+
+        if (fbInsertErr) throw fbInsertErr;
+        savedData = fbInserted;
+      } else {
+        savedData = inserted;
+      }
     }
 
     return NextResponse.json({

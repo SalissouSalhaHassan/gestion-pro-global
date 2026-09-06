@@ -48,7 +48,7 @@ export class InvoiceService {
     try {
       const { data: comp } = await this.supabase
         .from('informations_entreprise')
-        .select('invoice_visibility_policy, capital_social')
+        .select('*')
         .eq('organization_id', orgId)
         .maybeSingle();
 
