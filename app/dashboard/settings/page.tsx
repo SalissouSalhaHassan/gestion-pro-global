@@ -27,7 +27,10 @@ import {
   Eye,
   Sparkles,
   UploadCloud,
-  Trash2
+  Trash2,
+  User,
+  Users,
+  Store
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -57,6 +60,7 @@ type CompanyInfo = {
   show_stamp?: boolean;
   cachet_url?: string | null;
   chemin_logo?: string | null;
+  invoice_visibility_policy?: "shared" | "personal" | "depot";
 };
 
 const BRAND_COLORS = [
@@ -257,14 +261,15 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [showSupabaseConfig, setShowSupabaseConfig] = useState(false);
-  const [activeTab, setActiveTab] = useState<"general" | "branding">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "branding" | "visibility">("general");
   const [cachetFileBase64, setCachetFileBase64] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      if (params.get("tab") === "branding") {
-        setActiveTab("branding");
+      const tabParam = params.get("tab");
+      if (tabParam === "branding" || tabParam === "visibility") {
+        setActiveTab(tabParam as any);
       }
     }
 
@@ -474,27 +479,40 @@ export default function SettingsPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("general")}
-                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeTab === "general"
                     ? "bg-white text-indigo-600 shadow-sm shadow-indigo-100"
                     : "text-slate-500 hover:text-slate-900"
                 }`}
               >
-                <Building2 size={16} />
-                <span>Informations Générales & Légales</span>
+                <Building2 size={15} />
+                <span>Général & Légal</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab("branding")}
-                className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeTab === "branding"
                     ? "bg-white text-indigo-600 shadow-sm shadow-indigo-100"
                     : "text-slate-500 hover:text-slate-900"
                 }`}
               >
-                <Palette size={16} />
-                <span>Branding & Modèle Facture</span>
+                <Palette size={15} />
+                <span>Branding & Modèle</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("visibility")}
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  activeTab === "visibility"
+                    ? "bg-white text-indigo-600 shadow-sm shadow-indigo-100"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <Shield size={15} />
+                <span>Visibilité Factures</span>
               </button>
             </div>
 
@@ -818,6 +836,175 @@ export default function SettingsPage() {
                       className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"
                       placeholder="Ex: Merci pour votre confiance. Les marchandises vendues ne sont ni reprises ni échangées après 48h."
                     />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: VISIBILITÉ DES FACTURES & CAISSES */}
+            {activeTab === "visibility" && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* Header Explanatory Card */}
+                <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200/80 space-y-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                    <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                      <Shield size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-slate-900">
+                        Politique de Visibilité des Factures
+                      </h2>
+                      <p className="text-xs text-slate-400 font-medium">
+                        Définissez quelles factures les caissiers et vendeurs peuvent voir dans leur tableau de bord.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Director / Admin Privilege Banner */}
+                  <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200/90 flex items-start gap-3">
+                    <span className="text-2xl">👑</span>
+                    <div className="space-y-1 text-xs text-amber-950">
+                      <p className="font-black flex items-center gap-2">
+                        <span>Privilège Administrateur & Direction (Rôles 1 et 2)</span>
+                        <span className="text-[10px] bg-amber-200/70 text-amber-900 font-bold px-2 py-0.5 rounded-full">Accès Total Permanent</span>
+                      </p>
+                      <p className="font-medium text-amber-900/90 leading-relaxed">
+                        Le Directeur Général et les Administrateurs ont <strong>toujours un accès complet à 100%</strong> de toutes les factures de l&apos;entreprise, quel que soit le mode sélectionné ci-dessous.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 3 Interactive Mode Options */}
+                  <div className="space-y-3 pt-2">
+                    {/* Option A: Isolation par Vendeur / Caissier */}
+                    <div
+                      onClick={() => setInfo((prev) => prev ? { ...prev, invoice_visibility_policy: "personal" } : null)}
+                      className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-4 ${
+                        info?.invoice_visibility_policy === "personal"
+                          ? "border-indigo-600 bg-indigo-50/50 shadow-sm ring-2 ring-indigo-500/20"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+                      }`}
+                    >
+                      <div className={`p-3 rounded-xl shrink-0 transition-colors ${
+                        info?.invoice_visibility_policy === "personal"
+                          ? "bg-indigo-600 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      }`}>
+                        <User size={22} />
+                      </div>
+                      <div className="flex-1 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black uppercase tracking-wider text-indigo-700 bg-indigo-100 px-2.5 py-0.5 rounded-md">
+                            Option A / الخيار (أ)
+                          </span>
+                          {info?.invoice_visibility_policy === "personal" && (
+                            <span className="text-xs font-black text-indigo-600 flex items-center gap-1">
+                              <CheckCircle2 size={16} /> Mode Sélectionné
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-black text-slate-900">
+                          Mode Isolé par Vendeur / Caissier (عزل فردي لكل بائع وكاشير)
+                        </h3>
+                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                          Chaque caissier ou vendeur voit <strong>strictement ses propres factures</strong> qu&apos;il a émises. Aucune visibilité sur les ventes des autres collègues.
+                        </p>
+                        <div className="text-[11px] text-slate-500 font-medium bg-white/80 p-2 rounded-lg border border-slate-200/60">
+                          💡 <strong>Idéal pour :</strong> Les boutiques où les vendeurs sont rémunérés à la commission ou pour garantir une confidentialité stricte entre les vendeurs.
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Option B: Isolation par Dépôt / Point de Vente */}
+                    <div
+                      onClick={() => setInfo((prev) => prev ? { ...prev, invoice_visibility_policy: "depot" } : null)}
+                      className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-4 ${
+                        info?.invoice_visibility_policy === "depot"
+                          ? "border-indigo-600 bg-indigo-50/50 shadow-sm ring-2 ring-indigo-500/20"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+                      }`}
+                    >
+                      <div className={`p-3 rounded-xl shrink-0 transition-colors ${
+                        info?.invoice_visibility_policy === "depot"
+                          ? "bg-indigo-600 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      }`}>
+                        <Store size={22} />
+                      </div>
+                      <div className="flex-1 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black uppercase tracking-wider text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-md">
+                            Option B / الخيار (ب)
+                          </span>
+                          {info?.invoice_visibility_policy === "depot" && (
+                            <span className="text-xs font-black text-indigo-600 flex items-center gap-1">
+                              <CheckCircle2 size={16} /> Mode Sélectionné
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-black text-slate-900">
+                          Mode Isolé par Caisse / Dépôt (عزل حسب المستودع ونقطة البيع)
+                        </h3>
+                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                          Chaque caissier voit uniquement les factures émises dans <strong>son dépôt ou point de vente assigné</strong>.
+                        </p>
+                        <div className="text-[11px] text-slate-500 font-medium bg-white/80 p-2 rounded-lg border border-slate-200/60">
+                          💡 <strong>Idéal pour :</strong> Les entreprises multi-magasins ou multi-succursales (ex: les caissiers de Niamey ne voient pas les ventes de Maradi).
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Option C: Partage Réseau Entreprise (Standard) */}
+                    <div
+                      onClick={() => setInfo((prev) => prev ? { ...prev, invoice_visibility_policy: "shared" } : null)}
+                      className={`p-4 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-4 ${
+                        (!info?.invoice_visibility_policy || info?.invoice_visibility_policy === "shared")
+                          ? "border-indigo-600 bg-indigo-50/50 shadow-sm ring-2 ring-indigo-500/20"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+                      }`}
+                    >
+                      <div className={`p-3 rounded-xl shrink-0 transition-colors ${
+                        (!info?.invoice_visibility_policy || info?.invoice_visibility_policy === "shared")
+                          ? "bg-indigo-600 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      }`}>
+                        <Users size={22} />
+                      </div>
+                      <div className="flex-1 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                            <Sparkles size={12} /> Recommandé / Option C (الخيار ج)
+                          </span>
+                          {(!info?.invoice_visibility_policy || info?.invoice_visibility_policy === "shared") && (
+                            <span className="text-xs font-black text-indigo-600 flex items-center gap-1">
+                              <CheckCircle2 size={16} /> Mode Sélectionné
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-black text-slate-900">
+                          Partage Global d&apos;Entreprise (مشاركة عامة لشبكة المؤسسة)
+                        </h3>
+                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                          Toutes les caisses et vendeurs de l&apos;organisation voient l&apos;ensemble des factures pour <strong>faciliter l&apos;encaissement direct, les règlements partiels et le recouvrement</strong>.
+                        </p>
+                        <div className="text-[11px] text-slate-500 font-medium bg-white/80 p-2 rounded-lg border border-slate-200/60">
+                          💡 <strong>Idéal pour :</strong> Les commerces où n&apos;importe quel caissier au guichet peut encaisser une facture créée par un vendeur commercial.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Save Button for this Tab */}
+                  <div className="pt-4 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-black text-xs shadow-lg shadow-indigo-600/25 transition-all cursor-pointer disabled:opacity-70"
+                    >
+                      {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                      <span>{saving ? "Enregistrement..." : "Appliquer cette politique"}</span>
+                    </button>
                   </div>
                 </div>
               </div>

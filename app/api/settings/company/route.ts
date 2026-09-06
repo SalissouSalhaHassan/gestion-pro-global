@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
       show_stamp: true,
       show_qr_code: true,
       cachet_url: null,
+      invoice_visibility_policy: "shared",
     };
 
     if (companyData?.capital_social && companyData.capital_social.startsWith("{")) {
@@ -70,6 +71,7 @@ export async function GET(req: NextRequest) {
     if (companyData?.slogan) branding.slogan = companyData.slogan;
     if (typeof companyData?.show_stamp === "boolean") branding.show_stamp = companyData.show_stamp;
     if (typeof companyData?.show_qr_code === "boolean") branding.show_qr_code = companyData.show_qr_code;
+    if (companyData?.invoice_visibility_policy) branding.invoice_visibility_policy = companyData.invoice_visibility_policy;
 
     return NextResponse.json({
       ok: true,
@@ -132,12 +134,18 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Prepare branding JSON (resilient storage in capital_social)
+    const validPolicies = ["shared", "personal", "depot"];
+    const invoiceVisibilityPolicy = validPolicies.includes(body.invoice_visibility_policy)
+      ? body.invoice_visibility_policy
+      : "shared";
+
     const brandingMeta = {
       cachet_url: cachetUrl,
       brand_color: body.brand_color || "#4f46e5",
       slogan: body.slogan || "",
       show_stamp: body.show_stamp !== false,
       show_qr_code: body.show_qr_code !== false,
+      invoice_visibility_policy: invoiceVisibilityPolicy,
     };
 
     const updatePayload: any = {
@@ -151,6 +159,7 @@ export async function POST(req: NextRequest) {
       art_imposition: body.art_impo || body.art_imposition || "",
       notes_pied_facture: body.notes_pied_facture || "Merci pour votre confiance.",
       capital_social: JSON.stringify(brandingMeta),
+      invoice_visibility_policy: invoiceVisibilityPolicy,
     };
 
     // 3. Find if company record exists for this organization
@@ -173,6 +182,7 @@ export async function POST(req: NextRequest) {
           slogan: brandingMeta.slogan,
           show_stamp: brandingMeta.show_stamp,
           show_qr_code: brandingMeta.show_qr_code,
+          invoice_visibility_policy: invoiceVisibilityPolicy,
         })
         .eq("id", existing.id)
         .select()

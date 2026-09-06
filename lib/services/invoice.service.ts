@@ -33,6 +33,43 @@ export type Invoice = {
 export class InvoiceService {
   constructor(private supabase: SupabaseClient) {}
 
+  private async getTenantInvoicePolicy(session: any): Promise<'shared' | 'personal' | 'depot'> {
+    if (!session) return 'shared';
+
+    const isAdmin = (session.admin === "Oui" || session.admin === "oui" || session.admin === "true" || (session as any).admin === true) || 
+                    (session.role === 1 || session.role === "1" || session.role === "admin" || session.role === 2 || session.role === "2" || session.role === "manager");
+
+    if (isAdmin) return 'shared';
+    if (session.invoice_visibility_policy) return session.invoice_visibility_policy;
+
+    const orgId = session.organization_id;
+    if (!orgId) return 'shared';
+
+    try {
+      const { data: comp } = await this.supabase
+        .from('informations_entreprise')
+        .select('invoice_visibility_policy, capital_social')
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+      if (comp?.invoice_visibility_policy) {
+        return comp.invoice_visibility_policy as any;
+      }
+      if (comp?.capital_social && comp.capital_social.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(comp.capital_social);
+          if (parsed.invoice_visibility_policy) {
+            return parsed.invoice_visibility_policy as any;
+          }
+        } catch {}
+      }
+    } catch (err) {
+      console.warn('Failed to load invoice_visibility_policy, defaulting to shared:', err);
+    }
+
+    return 'shared';
+  }
+
   async getInvoices(session: any, filters?: { search?: string | null; vendeur?: string | null }) {
     let query = this.supabase
       .from('factures')
@@ -52,7 +89,8 @@ export class InvoiceService {
       .order('id', { ascending: false })
       .limit(1000);
 
-    query = applyUserScope(query as any, session, 'factures');
+    const policy = await this.getTenantInvoicePolicy(session);
+    query = applyUserScope(query as any, session, 'factures', policy);
 
     const { data, error } = await query;
     if (error) throw new Error(error.message);
@@ -65,7 +103,8 @@ export class InvoiceService {
       .select('*, facture_items(*), clients(nom, adresse, nif)')
       .eq('id', id);
     
-    query = applyUserScope(query as any, session, 'factures');
+    const policy = await this.getTenantInvoicePolicy(session);
+    query = applyUserScope(query as any, session, 'factures', policy);
 
     const { data, error } = await query.single();
     
