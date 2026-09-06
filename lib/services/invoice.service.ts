@@ -157,7 +157,7 @@ export class InvoiceService {
   async getInvoiceById(id: number, session: any) {
     let query = this.supabase
       .from('factures')
-      .select('*, facture_items(*), clients(nom, adresse, nif)')
+      .select('*, facture_items(*, depots:depot_id(id, nom)), clients(nom, adresse, nif)')
       .eq('id', id);
     
     const policy = await this.getTenantInvoicePolicy(session);
@@ -176,28 +176,75 @@ export class InvoiceService {
     
     if (error || !data) return null;
 
-    // Fallback: If any facture_items is missing description, fetch from articles
+    // Fallback: If any facture_items is missing description, fetch from articles, and resolve depot_origine
     if (data.facture_items && Array.isArray(data.facture_items)) {
+      // Fetch movements for this invoice to accurately resolve originating depot per item
+      const movementsMap = new Map<number, string>();
+      if (data.bl_number) {
+        try {
+          const { data: mvts } = await this.supabase
+            .from('mouvements')
+            .select('article_id, depot')
+            .eq('nr_doc', data.bl_number);
+          if (mvts) {
+            mvts.forEach((m: any) => {
+              if (m.article_id && m.depot && !movementsMap.has(Number(m.article_id))) {
+                movementsMap.set(Number(m.article_id), m.depot);
+              }
+            });
+          }
+        } catch (mvtErr) {
+          console.warn('Could not fetch movements for invoice depot resolution:', mvtErr);
+        }
+      }
+
+      let fallbackDepot = data.emplacement || '';
+      if (!fallbackDepot && data.vendeur) {
+        try {
+          const { data: sellerUser } = await this.supabase
+            .from('users')
+            .select('emplacement')
+            .eq('utilisateur', data.vendeur)
+            .maybeSingle();
+          if (sellerUser?.emplacement) {
+            fallbackDepot = sellerUser.emplacement;
+          }
+        } catch (userErr) {
+          console.warn('Could not fetch seller user emplacement:', userErr);
+        }
+      }
+
       const missingIds = data.facture_items
         .filter((it: any) => !it.description && it.article_id)
         .map((it: any) => it.article_id);
 
+      let artMap = new Map<number, any>();
       if (missingIds.length > 0) {
         const { data: arts } = await this.supabase
           .from('articles')
           .select('id, designation, nom, reference')
           .in('id', missingIds);
 
-        const artMap = new Map<number, any>((arts || []).map((a: any) => [a.id, a]));
-        data.facture_items = data.facture_items.map((it: any) => {
-          const a = artMap.get(it.article_id);
-          return {
-            ...it,
-            description: it.description || a?.designation || a?.nom || 'Article',
-            code_art: it.code_art || a?.reference || it.code_art,
-          };
-        });
+        artMap = new Map<number, any>((arts || []).map((a: any) => [a.id, a]));
       }
+
+      data.facture_items = data.facture_items.map((it: any) => {
+        const a = artMap.get(it.article_id);
+        const depotNom =
+          it.depot_origine ||
+          it.depots?.nom ||
+          it.depot?.nom ||
+          movementsMap.get(Number(it.article_id)) ||
+          fallbackDepot ||
+          '';
+
+        return {
+          ...it,
+          description: it.description || a?.designation || a?.nom || 'Article',
+          code_art: it.code_art || a?.reference || it.code_art,
+          depot_origine: depotNom,
+        };
+      });
     }
 
     return data;

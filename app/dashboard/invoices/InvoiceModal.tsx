@@ -138,13 +138,51 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
           client_email: clientRow?.email || inv.client_email || "",
         });
 
-        // 3. Fetch Items with article info fallback
+        // 3. Fetch Items with article info & depot resolution
         const { data: its } = await supabase
           .from("facture_items")
-          .select("*")
+          .select("*, depots:depot_id(id, nom)")
           .eq("facture_id", numericId);
 
-        const rawItems = its || [];
+        const rawItems = (its && its.length > 0) ? its : (inv.facture_items || []);
+
+        // Load movements to accurately resolve originating depot per article (especially for multi-depot sales)
+        const movementsMap = new Map<number, string>();
+        if (inv.bl_number) {
+          try {
+            const { data: mvts } = await supabase
+              .from("mouvements")
+              .select("article_id, depot")
+              .eq("nr_doc", inv.bl_number);
+            if (mvts) {
+              mvts.forEach((m: any) => {
+                if (m.article_id && m.depot && !movementsMap.has(Number(m.article_id))) {
+                  movementsMap.set(Number(m.article_id), m.depot);
+                }
+              });
+            }
+          } catch (mvtErr) {
+            console.warn("Could not fetch movements for invoice depot resolution:", mvtErr);
+          }
+        }
+
+        // Fetch seller's assigned emplacement if inv.emplacement is missing
+        let sellerEmplacement = inv.emplacement || "";
+        if (!sellerEmplacement && inv.vendeur) {
+          try {
+            const { data: sellerUser } = await supabase
+              .from("users")
+              .select("emplacement")
+              .eq("utilisateur", inv.vendeur)
+              .maybeSingle();
+            if (sellerUser?.emplacement) {
+              sellerEmplacement = sellerUser.emplacement;
+            }
+          } catch (userErr) {
+            console.warn("Could not fetch seller user emplacement:", userErr);
+          }
+        }
+
         const missingArticleIds = rawItems
           .filter((it: any) => (!it.description || !it.code_art) && it.article_id)
           .map((it: any) => it.article_id);
@@ -171,10 +209,20 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
               "Article";
             const code = item.code_art || art?.reference || "-";
 
+            const depotName = 
+              item.depot_origine ||
+              item.depots?.nom ||
+              item.depot?.nom ||
+              movementsMap.get(Number(item.article_id)) ||
+              inv.emplacement ||
+              sellerEmplacement ||
+              "";
+
             return {
               ...item,
               description: desc,
               code_art: code,
+              depot_origine: depotName,
               display_unit_price: resolveUnitPrice(item),
             };
           })
@@ -402,7 +450,7 @@ export default function InvoiceModal({ invoiceId, onClose }: InvoiceModalProps) 
                       <>
                         <td className="border-r border-black p-1 text-center text-[9px] break-all leading-tight">{item.code_art || "-"}</td>
                         <td className="border-r border-black p-1 break-words leading-tight">{item.description || item.designation || "Article"}</td>
-                        <td className="border-r border-black p-1 text-center text-[9px] break-words leading-tight">{item.depot_origine || ""}</td>
+                        <td className="border-r border-black p-1 text-center text-[9px] break-words leading-tight">{item.depot_origine || item.depots?.nom || invoice?.emplacement || "-"}</td>
                         <td className="p-1 text-center font-bold">{Number(item.qte).toFixed(2)}</td>
                       </>
                     )}

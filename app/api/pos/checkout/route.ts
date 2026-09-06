@@ -698,6 +698,12 @@ export async function POST(request: Request) {
           const itemDescription = article?.designation || article?.nom || (item as any)?.nom || (item as any)?.designation || (item as any)?.description || "Article";
           const itemCodeArt = article?.reference || (item as any)?.reference || (item as any)?.code_barre || null;
 
+          const itemDepot = (item as any).depot_origine || canonicalDepotName;
+          const matchedItemDepot = Array.isArray(depotsRows)
+            ? (depotsRows as DepotRow[]).find((d) => normalizeDepotName(String(d.nom || "")) === normalizeDepotName(itemDepot))
+            : null;
+          const itemDepotId = matchedItemDepot?.id ? Number(matchedItemDepot.id) : effectiveDepotId;
+
           lineItemsToInsert.push({
             article_id: Number(item.id),
             code_art: itemCodeArt,
@@ -709,6 +715,7 @@ export async function POST(request: Request) {
             total_item_ttc: totalItemTtc,
             taux_tva_item: tauxTva,
             montant_tva_item: montantTva,
+            depot_id: itemDepotId,
           });
         }
 
@@ -738,6 +745,7 @@ export async function POST(request: Request) {
             nbr_art: items.length,
             bl_number: blNumber,
             date_facture: new Date().toISOString(),
+            emplacement: canonicalDepotName,
             is_deleted: false,
             organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
           }])
