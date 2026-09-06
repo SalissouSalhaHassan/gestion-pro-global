@@ -66,6 +66,7 @@ export async function POST(
       .single();
 
     if (invErr) throw new Error(invErr.message);
+    if (!invoice) throw new Error("Erreur: Impossible de créer la facture.");
 
     // 4. Insert into facture_items and deduct stock
     const items = devis.devis_items || [];

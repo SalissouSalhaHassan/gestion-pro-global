@@ -284,6 +284,7 @@ export class InvoiceService {
     }
 
     if (invoiceError) throw new Error(invoiceError.message);
+    if (!newInvoice) throw new Error("Erreur: Impossible de créer la facture.");
 
     // Insert items
     if (items && items.length > 0) {

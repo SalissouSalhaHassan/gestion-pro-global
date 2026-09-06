@@ -770,6 +770,9 @@ export async function POST(request: Request) {
         }
 
         if (invError) throw invError;
+        if (!createdInvoice) {
+          throw new Error("Erreur: Impossible de créer la facture.");
+        }
         extractedId = createdInvoice.id;
         invoiceId = createdInvoice.id;
         result = createdInvoice.id;
