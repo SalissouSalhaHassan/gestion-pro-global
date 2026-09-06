@@ -35,11 +35,6 @@ export class InvoiceService {
 
   private async getTenantInvoicePolicy(session: any): Promise<'shared' | 'personal' | 'depot'> {
     if (!session) return 'shared';
-
-    const isAdmin = (session.admin === "Oui" || session.admin === "oui" || session.admin === "true" || (session as any).admin === true) || 
-                    (session.role === 1 || session.role === "1" || session.role === "admin" || session.role === 2 || session.role === "2" || session.role === "manager");
-
-    if (isAdmin) return 'shared';
     if (session.invoice_visibility_policy) return session.invoice_visibility_policy;
 
     const orgId = session.organization_id;
@@ -70,6 +65,32 @@ export class InvoiceService {
     return 'shared';
   }
 
+  private async getDepotUsernames(session: any): Promise<string[]> {
+    const allowedDepotNames = getAllowedDepots(session);
+    if (allowedDepotNames.length === 0 && session.emplacement) {
+      allowedDepotNames.push(session.emplacement);
+    }
+
+    if (allowedDepotNames.length === 0) return [];
+
+    try {
+      let uQ = this.supabase
+        .from('users')
+        .select('utilisateur')
+        .in('emplacement', allowedDepotNames);
+
+      if (session.organization_id) {
+        uQ = uQ.eq('organization_id', session.organization_id);
+      }
+
+      const { data: uRows } = await uQ;
+      return (uRows || []).map((u: any) => u.utilisateur).filter(Boolean);
+    } catch (e) {
+      console.warn('Could not query depot users:', e);
+      return [];
+    }
+  }
+
   async getInvoices(session: any, filters?: { search?: string | null; vendeur?: string | null }) {
     let query = this.supabase
       .from('factures')
@@ -90,10 +111,45 @@ export class InvoiceService {
       .limit(1000);
 
     const policy = await this.getTenantInvoicePolicy(session);
+
+    const isAdmin = (session.admin === "Oui" || session.admin === "oui" || session.admin === "true" || (session as any).admin === true) || 
+                    (session.role === 1 || session.role === "1" || session.role === "admin" || session.role === 2 || session.role === "2" || session.role === "manager");
+
+    if (!isAdmin && policy === 'depot') {
+      const depotUsernames = await this.getDepotUsernames(session);
+      (session as any).depot_usernames = depotUsernames;
+    }
+
     query = applyUserScope(query as any, session, 'factures', policy);
 
-    const { data, error } = await query;
+    let { data, error } = await query;
     if (error) throw new Error(error.message);
+
+    // Enrich invoices with seller's actual depot/emplacement
+    if (data && Array.isArray(data) && data.length > 0) {
+      const uniqueVendors = [...new Set(data.map((inv: any) => inv.vendeur).filter(Boolean))];
+      if (uniqueVendors.length > 0) {
+        try {
+          const { data: vUsers } = await this.supabase
+            .from('users')
+            .select('utilisateur, emplacement')
+            .in('utilisateur', uniqueVendors);
+          
+          const vendorEmplacementMap = new Map<string, string>();
+          (vUsers || []).forEach((u: any) => {
+            if (u.utilisateur && u.emplacement) {
+              vendorEmplacementMap.set(u.utilisateur, u.emplacement);
+            }
+          });
+
+          data = data.map((inv: any) => ({
+            ...inv,
+            emplacement: inv.emplacement || vendorEmplacementMap.get(inv.vendeur) || 'BOUTIQUE',
+          }));
+        } catch (e) {}
+      }
+    }
+
     return data;
   }
 
@@ -104,6 +160,15 @@ export class InvoiceService {
       .eq('id', id);
     
     const policy = await this.getTenantInvoicePolicy(session);
+
+    const isAdmin = (session.admin === "Oui" || session.admin === "oui" || session.admin === "true" || (session as any).admin === true) || 
+                    (session.role === 1 || session.role === "1" || session.role === "admin" || session.role === 2 || session.role === "2" || session.role === "manager");
+
+    if (!isAdmin && policy === 'depot') {
+      const depotUsernames = await this.getDepotUsernames(session);
+      (session as any).depot_usernames = depotUsernames;
+    }
+
     query = applyUserScope(query as any, session, 'factures', policy);
 
     const { data, error } = await query.single();

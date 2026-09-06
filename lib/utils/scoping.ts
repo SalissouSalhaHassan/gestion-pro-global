@@ -71,17 +71,19 @@ export function applyUserScope<T extends PostgrestFilterBuilder<any, any, any, a
     }
 
     // Option B: Isolation per Depot/Caisse/Store ('depot')
-    // Cashiers only see sales originating from their assigned depot
+    // Cashiers only see sales originating from their assigned depot/store
     if (effectivePolicy === 'depot') {
-      const allowedDepotNames = getAllowedDepots(session);
-      if (allowedDepotNames.length === 0 && session.emplacement) {
-        allowedDepotNames.push(session.emplacement);
+      const depotUsernames: string[] = (session as any).depot_usernames || [];
+      if (depotUsernames.length > 0) {
+        return (query as any).in('vendeur', depotUsernames);
       }
-      if (allowedDepotNames.length > 0) {
-        return (query as any).in('emplacement', allowedDepotNames);
-      } else {
-        return (query as any).eq('id', -1);
+      
+      // Fallback: if depot user list not precomputed, isolate to current cashier's own sales
+      let filter = `user_id.eq.${session.id},created_by.eq.${session.id}`;
+      if (session.username) {
+        filter += `,vendeur.eq."${session.username}"`;
       }
+      return (query as any).or(filter);
     }
 
     // Option C: Shared Company-Wide ('shared' - default)

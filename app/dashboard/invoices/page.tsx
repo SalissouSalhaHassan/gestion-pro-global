@@ -32,7 +32,8 @@ import {
   TrendingUp,
   SlidersHorizontal,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Store
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import InvoiceModal from "./InvoiceModal";
@@ -596,6 +597,34 @@ export default function InvoicesPage() {
             </button>
           ))}
         </div>
+
+        {/* Quick Depot Filter Chips */}
+        {depotsList.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+            <span className="text-[11px] font-black text-slate-400 uppercase flex items-center gap-1">
+              <Store size={13} className="text-indigo-600" /> {locale === "ar" ? "نقطة البيع / المستودع:" : "Point de Vente:"}
+            </span>
+            <button
+              onClick={() => setFilterDepot(null)}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                !filterDepot ? "bg-indigo-600 text-white shadow-xs" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {locale === "ar" ? "جميع نقاط البيع" : "Toutes les caisses"}
+            </button>
+            {depotsList.map((depot) => (
+              <button
+                key={depot}
+                onClick={() => setFilterDepot(filterDepot === depot ? null : depot)}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  filterDepot === depot ? "bg-indigo-600 text-white shadow-xs" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {depot}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Advanced Filters Expandable Drawer */}
         {showAdvancedFilters && (
