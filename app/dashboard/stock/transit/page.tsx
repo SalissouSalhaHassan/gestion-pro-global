@@ -123,6 +123,23 @@ export default function TransitPage() {
             }
           } catch (e) { console.error(e); }
         }
+
+        // Check if from_depot was provided in URL to open modal immediately
+        if (typeof window !== "undefined") {
+          const urlParams = new URLSearchParams(window.location.search);
+          const fromDepotParam = urlParams.get("from_depot") || urlParams.get("source");
+          if (fromDepotParam) {
+            const found = depotsData.find(
+              (d: any) =>
+                d.nom.toLowerCase().trim() === fromDepotParam.toLowerCase().trim() ||
+                String(d.id) === fromDepotParam
+            );
+            if (found) {
+              setFormSourceDepot(String(found.id));
+              setIsCreateModalOpen(true);
+            }
+          }
+        }
       }
 
       // Fetch articles

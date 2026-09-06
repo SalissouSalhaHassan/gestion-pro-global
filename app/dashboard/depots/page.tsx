@@ -727,7 +727,7 @@ export default function DepotManagementPage() {
 
                   <div className="flex items-center gap-1">
                     <Link
-                      href={`/dashboard/stock/transfer?from_depot=${encodeURIComponent(depot.nom)}`}
+                      href={`/dashboard/stock/transit?from_depot=${encodeURIComponent(depot.nom)}`}
                       className="p-2.5 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 transition-colors cursor-pointer"
                       title={locale === "ar" ? "تحويل بضاعة من هذا المستودع" : "Transférer du stock"}
                     >
@@ -1017,7 +1017,7 @@ export default function DepotManagementPage() {
 
               <div className="flex items-center gap-2">
                 <Link
-                  href={`/dashboard/stock/transfer?from_depot=${encodeURIComponent(inspectedDepot.nom)}`}
+                  href={`/dashboard/stock/transit?from_depot=${encodeURIComponent(inspectedDepot.nom)}`}
                   className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black transition-all flex items-center gap-1.5 shadow-sm"
                 >
                   <ArrowRightLeft size={14} />
