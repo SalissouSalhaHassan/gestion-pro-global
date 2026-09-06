@@ -2091,6 +2091,7 @@ function PosPage() {
           alerts?: { designation: string, stock_restant: number }[] 
         };
         invoice_id?: string | number;
+        invoice?: any;
         debug?: any;
       };
 
