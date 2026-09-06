@@ -452,103 +452,64 @@ export async function POST(request: Request) {
       }
     }
 
-    // ─── SYSTEM SETTINGS: STOCK POLICY ───
-    const { data: settings } = await supabase.from("app_settings").select("allow_negative_stock").maybeSingle();
-    const allowNegative = settings?.allow_negative_stock ?? false;
+    // ─── PARALLEL PRE-FLIGHT (Parallel Execution: App Settings, Depots, Stocks, Articles, Client) ───
+    const itemIds = items.map((it) => Number(it.id));
+    const requestedInvoiceId = body.invoiceId ? Number(body.invoiceId) : null;
 
-    // ─── SELF-HEALING: ENSURE DEFAULT CLIENT AND DEPOT EXIST ───
-    if (clientId === 1) {
-      let c1Q = supabase.from("clients").select("id").eq("id", 1);
-      if (user.organization_id) c1Q = c1Q.eq("organization_id", user.organization_id);
-      const { data: c1 } = await c1Q.single();
-      if (!c1) {
-        await supabase.from("clients").insert({
-          id: 1, 
-          nom: "CLIENT COMPTANT", 
-          ref_client: "COMPTANT", 
-          is_deleted: false,
-          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
-        });
-      }
-    }
-    
     let depotsQuery = supabase
       .from("depots")
       .select("id, nom, emplacement")
       .eq("is_active", true);
-    if (user.organization_id) {
-      depotsQuery = depotsQuery.eq("organization_id", user.organization_id);
-    }
-    const { data: depotsRows } = await depotsQuery;
+    if (user.organization_id) depotsQuery = depotsQuery.eq("organization_id", user.organization_id);
 
-    const matchedDepot = Array.isArray(depotsRows)
-      ? (depotsRows as DepotRow[]).find((d) => normalizeDepotName(String(d.nom || "")) === requestedDepotKey)
-      : null;
+    let stockLevelsQuery = supabase
+      .from("stocks")
+      .select("id, article_id, quantite, depot_nom")
+      .in("article_id", itemIds);
+    if (user.organization_id) stockLevelsQuery = stockLevelsQuery.eq("organization_id", user.organization_id);
 
+    let articlesQuery = supabase
+      .from("articles")
+      .select("id, designation, nom, reference, code_barre, taxe, p_vente_ht, p_vente_ttc")
+      .in("id", itemIds);
+
+    let clientQuery = clientId > 1
+      ? (user.organization_id
+          ? supabase.from("clients").select("id, nom, tel, gsm, adresse, email").eq("id", clientId).eq("organization_id", user.organization_id).maybeSingle()
+          : supabase.from("clients").select("id, nom, tel, gsm, adresse, email").eq("id", clientId).maybeSingle())
+      : Promise.resolve({ data: { id: 1, nom: "CLIENT COMPTANT", tel: "", gsm: "", adresse: "", email: "" } });
+
+    let invItemsQuery = requestedInvoiceId
+      ? (user.organization_id
+          ? supabase.from("facture_items").select("article_id, qte, depot_origine").eq("facture_id", requestedInvoiceId).eq("organization_id", user.organization_id)
+          : supabase.from("facture_items").select("article_id, qte, depot_origine").eq("facture_id", requestedInvoiceId))
+      : Promise.resolve({ data: [] });
+
+    // Execute ALL pre-flight reads concurrently in ONE network roundtrip!
+    const [settingsRes, depotsRes, stockLevelsRes, articlesRes, clientRes, invItemsRes] = await Promise.all([
+      supabase.from("app_settings").select("allow_negative_stock").maybeSingle(),
+      depotsQuery,
+      stockLevelsQuery,
+      articlesQuery,
+      clientQuery,
+      invItemsQuery,
+    ]);
+
+    const allowNegative = settingsRes?.data?.allow_negative_stock ?? false;
+    const depotsRows = (depotsRes?.data as DepotRow[]) || [];
+    const matchedDepot = depotsRows.find((d) => normalizeDepotName(String(d.nom || "")) === requestedDepotKey) || null;
     const canonicalDepotName = matchedDepot?.nom || depotName;
     const effectiveDepotId = matchedDepot?.id ? Number(matchedDepot.id) : null;
+    const clientData = clientRes?.data || { id: clientId, nom: "CLIENT COMPTANT", tel: "", gsm: "", adresse: "", email: "" };
+    const stockLevels = stockLevelsRes?.data || [];
+    const artRows = articlesRes?.data || [];
+    const originalInvoiceItems = (invItemsRes?.data as EditInvoiceItemRow[]) || [];
+
     const numericUserId = Number(user.id);
     const rpcUserId = Number.isFinite(numericUserId) ? numericUserId : null;
     const rpcUserIdText = user.id == null ? null : String(user.id);
 
-    const requestedInvoiceId = body.invoiceId ? Number(body.invoiceId) : null;
-    let originalInvoiceItems: EditInvoiceItemRow[] = [];
-
-    if (requestedInvoiceId) {
-      let invItemsQ = supabase
-        .from("facture_items")
-        .select("article_id, qte, depot_origine") // Reverted to depot_origine
-        .eq("facture_id", requestedInvoiceId);
-
-      if (user.organization_id) {
-        invItemsQ = invItemsQ.eq("organization_id", user.organization_id);
-      }
-
-      const { data: invoiceItems, error: invoiceItemsError } = await invItemsQ;
-
-      if (invoiceItemsError) {
-        throw invoiceItemsError;
-      }
-
-      originalInvoiceItems = Array.isArray(invoiceItems) ? (invoiceItems as any[]) : [];
-    }
-
-    if (!matchedDepot) {
-      // Create depot if missing? (Safe-guard)
-      const { data: newDepot, error: insErr } = await supabase.from("depots").insert({ 
-        nom: canonicalDepotName, 
-        emplacement: "Point de vente", 
-        is_active: true,
-        organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
-      }).select("id").single();
-      
-      if (!insErr && newDepot) {
-        // We'll need this ID
-      }
-    }
-
     // ─── INVENTORY GUARD: PRE-VALIDATION ───
-    const itemIds = items.map(it => it.id);
-    const targetDepots = Array.from(new Set([
-      canonicalDepotName,
-      ...items.map(it => (it as any).depot_origine).filter(Boolean)
-    ]));
-    
-    // Fetch current stock for these items across the involved depots
-    let stockLevelsQuery = supabase
-      .from("stocks")
-      .select("article_id, quantite, depot_nom")
-      .in("article_id", itemIds)
-      .in("depot_nom", targetDepots);
-
-    if (user.organization_id) {
-      stockLevelsQuery = stockLevelsQuery.eq("organization_id", user.organization_id);
-    }
-
-    const { data: stockLevels, error: stockErr } = await stockLevelsQuery;
-
-    if (stockErr) console.error("Stock check error:", stockErr);
-
     const stockMapByDepot: Record<string, number> = {};
     ((stockLevels as any[] | null | undefined) || []).forEach((curr) => {
       const key = `${curr.article_id}_${normalizeDepotName(curr.depot_nom || "")}`;
@@ -584,11 +545,12 @@ export async function POST(request: Request) {
         details: insufficientItems.map(it => `Article ID ${it.id}: Requis ${it.requested}, Disponible ${it.available}`).join(", ")
       }, { status: 400 });
     }
-    // Note: Admins/Managers are allowed to proceed even with insufficient stock, per requirements.
 
     let result;
     let invoiceId: number | null = null;
     let extractedId: number | null = null;
+    let createdInvoiceData: any = null;
+    let lineItemsToInsertList: any[] = [];
     
     if (body.invoiceId) {
       // MODE: UPDATE EXISTING INVOICE
@@ -623,240 +585,299 @@ export async function POST(request: Request) {
       } catch (err) {
         console.warn("Update RPC failed, continuing with direct DB fallback...", err);
       }
-
       invoiceId = Number(body.invoiceId);
-      extractedId = invoiceId;
     } else {
-      // MODE: NEW SALE
-      let checkoutSuccess = false;
+      // MODE: NEW SALE (Fast Direct DB Transaction - Zero Unneeded RPC Overhead)
+      console.log("⚡ Executing fast direct database checkout transaction...");
 
-      try {
-        let { data, error } = await supabase.rpc("checkout_pos_sale", {
-          p_client_id: clientId,
-          p_vendeur: user.username ?? "Caisse",
-          p_emplacement: body.emplacement ?? user.emplacement ?? null,
-          p_moyen_reglement: normalizedPaymentMethod,
-          p_depot_id: effectiveDepotId,
-          p_items: items,
-          p_user_id: rpcUserId,
+      // 1. Calculate totals in-memory
+      const artMap = new Map<number, any>();
+      (artRows || []).forEach((a: any) => artMap.set(Number(a.id), a));
+
+      let calcTotalHT = 0;
+      let calcTotalTTC = 0;
+      const lineItemsToInsert: any[] = [];
+
+      for (const item of items) {
+        const article = artMap.get(Number(item.id));
+        const qte = Number(item.quantite || 1);
+        const requestedPrice = Number(item.prix);
+        const puTtc = Number.isFinite(requestedPrice) && requestedPrice >= 0
+          ? requestedPrice
+          : Number(article?.p_vente_ttc || article?.p_vente_ht || 0);
+        const tauxTva = Number(article?.taxe || 0);
+        const puHt = (1 + tauxTva / 100) === 0 ? puTtc : puTtc / (1 + (tauxTva / 100));
+        const totalItemTtc = round(puTtc * qte);
+        const totalItemHt = round(puHt * qte);
+        const montantTva = totalItemTtc - totalItemHt;
+
+        calcTotalHT += totalItemHt;
+        calcTotalTTC += totalItemTtc;
+
+        const itemDescription = article?.designation || article?.nom || (item as any)?.nom || (item as any)?.designation || (item as any)?.description || "Article";
+        const itemCodeArt = article?.reference || (item as any)?.reference || (item as any)?.code_barre || null;
+
+        const itemDepot = (item as any).depot_origine || canonicalDepotName;
+        const matchedItemDepot = Array.isArray(depotsRows)
+          ? (depotsRows as DepotRow[]).find((d) => normalizeDepotName(String(d.nom || "")) === normalizeDepotName(itemDepot))
+          : null;
+        const itemDepotId = matchedItemDepot?.id ? Number(matchedItemDepot.id) : effectiveDepotId;
+
+        lineItemsToInsert.push({
+          article_id: Number(item.id),
+          code_art: itemCodeArt,
+          description: itemDescription,
+          qte,
+          pu_ht: puHt,
+          pu_ttc: puTtc,
+          total_item_ht: totalItemHt,
+          total_item_ttc: totalItemTtc,
+          taux_tva_item: tauxTva,
+          montant_tva_item: montantTva,
+          depot_id: itemDepotId,
         });
-
-        if (error && isMissingRpcSignature(error, "checkout_pos_sale")) {
-          ({ data, error } = await supabase.rpc("checkout_pos_sale", {
-            p_client_id: clientId,
-            p_vendeur: user.username ?? "Caisse",
-            p_emplacement: body.emplacement ?? user.emplacement ?? null,
-            p_moyen_reglement: normalizedPaymentMethod,
-            p_depot_nom: canonicalDepotName,
-            p_items: items,
-            p_user_id: rpcUserId,
-          }));
-        }
-
-        if (!error && data) {
-          result = data;
-          checkoutSuccess = true;
-        }
-      } catch (rpcErr) {
-        console.warn("RPC checkout failed, engaging resilient direct DB fallback:", rpcErr);
       }
 
-      // DIRECT DB FALLBACK: If RPC is not present or failed, perform direct DB transaction
-      if (!checkoutSuccess) {
-        console.log("⚡ Executing direct database checkout transaction fallback...");
+      calcTotalHT = round(calcTotalHT);
+      calcTotalTTC = round(calcTotalTTC);
+      const calcTotalTva = round(calcTotalTTC - calcTotalHT);
 
-        // 1. Calculate totals
-        const articleIds = items.map((it: any) => Number(it.id));
-        const { data: artRows } = await supabase
-          .from("articles")
-          .select("id, designation, taxe, p_vente_ht, p_vente_ttc")
-          .in("id", articleIds);
-
-        const artMap = new Map<number, any>();
-        (artRows || []).forEach((a: any) => artMap.set(Number(a.id), a));
-
-        let calcTotalHT = 0;
-        let calcTotalTTC = 0;
-        const lineItemsToInsert: any[] = [];
-
-        for (const item of items) {
-          const article = artMap.get(Number(item.id));
-          const qte = Number(item.quantite || 1);
-          const requestedPrice = Number(item.prix);
-          const puTtc = Number.isFinite(requestedPrice) && requestedPrice >= 0
-            ? requestedPrice
-            : Number(article?.p_vente_ttc || article?.p_vente_ht || 0);
-          const tauxTva = Number(article?.taxe || 0);
-          const puHt = (1 + tauxTva / 100) === 0 ? puTtc : puTtc / (1 + (tauxTva / 100));
-          const totalItemTtc = round(puTtc * qte);
-          const totalItemHt = round(puHt * qte);
-          const montantTva = totalItemTtc - totalItemHt;
-
-          calcTotalHT += totalItemHt;
-          calcTotalTTC += totalItemTtc;
-
-          const itemDescription = article?.designation || article?.nom || (item as any)?.nom || (item as any)?.designation || (item as any)?.description || "Article";
-          const itemCodeArt = article?.reference || (item as any)?.reference || (item as any)?.code_barre || null;
-
-          const itemDepot = (item as any).depot_origine || canonicalDepotName;
-          const matchedItemDepot = Array.isArray(depotsRows)
-            ? (depotsRows as DepotRow[]).find((d) => normalizeDepotName(String(d.nom || "")) === normalizeDepotName(itemDepot))
-            : null;
-          const itemDepotId = matchedItemDepot?.id ? Number(matchedItemDepot.id) : effectiveDepotId;
-
-          lineItemsToInsert.push({
-            article_id: Number(item.id),
-            code_art: itemCodeArt,
-            description: itemDescription,
-            qte,
-            pu_ht: puHt,
-            pu_ttc: puTtc,
-            total_item_ht: totalItemHt,
-            total_item_ttc: totalItemTtc,
-            taux_tva_item: tauxTva,
-            montant_tva_item: montantTva,
-            depot_id: itemDepotId,
-          });
+      const isDebt = moyenReglement === "Crédit" || moyenReglement === "Avance";
+      let initialPaye = isDebt ? cashVersement : calcTotalTTC;
+      
+      // Advance withdrawal logic if moyenReglement is Avance
+      let advancePaymentsToInsert: any[] = [];
+      if (moyenReglement === "Avance") {
+        let remainingToSettle = calcTotalTTC - cashVersement;
+        if (remainingToSettle > 0) {
+          try {
+            const advanceService = new AdvanceService(supabase);
+            const advances = await advanceService.getActiveAdvancesByClientId(clientId);
+            for (const adv of advances) {
+              if (remainingToSettle <= 0) break;
+              const amountFromThisAdvance = Math.min(Number(adv.montant_restant), remainingToSettle);
+              if (amountFromThisAdvance > 0) {
+                await advanceService.withdrawAdvance(
+                  adv.id,
+                  amountFromThisAdvance,
+                  `Paiement Facture POS (Caisse)`,
+                  user.username || "Système"
+                );
+                advancePaymentsToInsert.push({
+                  montant_regle: amountFromThisAdvance,
+                  moyen_reglement: "Avance",
+                  avance_client_id: adv.id,
+                });
+                remainingToSettle -= amountFromThisAdvance;
+                initialPaye += amountFromThisAdvance;
+              }
+            }
+          } catch (advErr) {
+            console.warn("Advance settlement error:", advErr);
+          }
         }
+      }
 
-        const calcTotalTva = calcTotalTTC - calcTotalHT;
-        const isDebt = moyenReglement === "Crédit" || moyenReglement === "Avance";
-        const initialPaye = isDebt ? cashVersement : calcTotalTTC;
-        const initialRestant = Math.max(0, calcTotalTTC - initialPaye);
-        const statut = initialRestant === 0 ? "Payée" : initialPaye > 0 ? "Partiellement Payée" : "Non Payée";
+      const initialRestant = Math.max(0, round(calcTotalTTC - initialPaye));
+      const statut = initialRestant === 0 ? "Payée" : initialPaye > 0 ? "Partiellement Payée" : "Non Payée";
 
-        // Generate invoice number
-        const year = new Date().getFullYear();
-        const randRef = Math.random().toString(36).substring(2, 7).toUpperCase();
-        const blNumber = `FA-${year}-${randRef}`;
+      // Generate invoice number
+      const year = new Date().getFullYear();
+      const randRef = Math.random().toString(36).substring(2, 7).toUpperCase();
+      const blNumber = `FA-${year}-${randRef}`;
 
-        // 2. Insert Invoice (strictly adhering to existing factures schema)
-        const invoicePayload: any = {
-          client_id: clientId,
-          vendeur: user.username ?? "Caisse",
-          total_ht: calcTotalHT,
-          total_ttc: calcTotalTTC,
-          total_tva: calcTotalTva,
-          montant_paye: initialPaye,
-          montant_restant: initialRestant,
-          statut,
-          nbr_art: items.length,
-          bl_number: blNumber,
-          date_facture: new Date().toISOString(),
-          is_deleted: false,
-          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
-        };
+      // 2. Insert Invoice
+      const invoicePayload: any = {
+        client_id: clientId,
+        vendeur: user.username ?? "Caisse",
+        date_facture: new Date().toISOString().split("T")[0],
+        total_ht: calcTotalHT,
+        total_ttc: calcTotalTTC,
+        total_tva: calcTotalTva,
+        montant_paye: initialPaye,
+        montant_restant: initialRestant,
+        statut,
+        moyen_reglement: normalizedPaymentMethod,
+        bl_number: blNumber,
+        organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
+      };
 
-        if (canonicalDepotName) {
-          invoicePayload.emplacement = canonicalDepotName;
-        }
+      if (canonicalDepotName) invoicePayload.emplacement = canonicalDepotName;
 
-        let { data: createdInvoice, error: invError } = await supabase
+      let { data: createdInvoice, error: invError } = await supabase
+        .from("factures")
+        .insert([invoicePayload])
+        .select("id, bl_number, date_facture, total_ht, total_ttc, total_tva, montant_paye, montant_restant, statut, client_id, vendeur, organization_id")
+        .single();
+
+      // Graceful fallback if schema lacks 'emplacement' column
+      if (invError && (invError.message?.includes("emplacement") || invError.code === "PGRST204")) {
+        delete invoicePayload.emplacement;
+        const retryRes = await supabase
           .from("factures")
           .insert([invoicePayload])
-          .select("id")
+          .select("id, bl_number, date_facture, total_ht, total_ttc, total_tva, montant_paye, montant_restant, statut, client_id, vendeur, organization_id")
           .single();
+        createdInvoice = retryRes.data;
+        invError = retryRes.error;
+      }
 
-        // Graceful fallback if 'emplacement' column does not exist in the remote Supabase schema cache
-        if (invError && (invError.message?.includes("emplacement") || invError.code === "PGRST204")) {
-          delete invoicePayload.emplacement;
-          const retryRes = await supabase
-            .from("factures")
-            .insert([invoicePayload])
-            .select("id")
-            .single();
-          createdInvoice = retryRes.data;
-          invError = retryRes.error;
-        }
+      if (invError) throw invError;
+      if (!createdInvoice) {
+        throw new Error("Erreur: Impossible de créer la facture.");
+      }
 
-        if (invError) throw invError;
-        if (!createdInvoice) {
-          throw new Error("Erreur: Impossible de créer la facture.");
-        }
-        extractedId = createdInvoice.id;
-        invoiceId = createdInvoice.id;
-        result = createdInvoice.id;
+      // 3. Batch Insertions & Updates in Parallel
+      const itemsPayload = lineItemsToInsert.map((li: any) => ({
+        ...li,
+        facture_id: createdInvoice.id,
+        organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
+      }));
 
-        // 3. Insert Invoice Items
-        if (lineItemsToInsert.length > 0) {
-          const itemsPayload = lineItemsToInsert.map((li: any) => ({
-            ...li,
-            facture_id: createdInvoice.id,
-            organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
-          }));
-          await supabase.from("facture_items").insert(itemsPayload);
-        }
+      const stockMapForLookup = new Map<string, { id: any; quantite: number }>();
+      ((stockLevels as any[] | null | undefined) || []).forEach((curr) => {
+        const key = `${curr.article_id}_${normalizeDepotName(curr.depot_nom || "")}`;
+        stockMapForLookup.set(key, { id: curr.id, quantite: Number(curr.quantite || 0) });
+      });
 
-        // 4. Update Stocks and record Mouvements in parallel
-        await Promise.all(
-          items.map(async (item: any) => {
-            const qte = Number(item.quantite || 1);
-            const itemDepot = (item as any).depot_origine || canonicalDepotName;
-            let curStockQ = supabase
-              .from("stocks")
-              .select("id, quantite")
-              .eq("article_id", Number(item.id))
-              .eq("depot_nom", itemDepot);
-            if (user.organization_id) {
-              curStockQ = curStockQ.eq("organization_id", user.organization_id);
-            }
-            const { data: curStock } = await curStockQ.maybeSingle();
+      const parallelTasks: Promise<any>[] = [
+        supabase.from("facture_items").insert(itemsPayload),
+      ];
 
-            if (curStock) {
-              const currentQty = Number(curStock.quantite || 0);
-              let updateStockQ = supabase
-                .from("stocks")
-                .update({ quantite: currentQty - qte })
-                .eq("id", curStock.id);
-              if (user.organization_id) {
-                updateStockQ = updateStockQ.eq("organization_id", user.organization_id);
-              }
-              await updateStockQ;
-            } else {
-              await supabase
-                .from("stocks")
-                .insert([{
-                  article_id: Number(item.id),
-                  depot_nom: itemDepot,
-                  quantite: -qte,
-                  organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
-                }]);
-            }
+      // Stock updates (in-memory lookup avoids slow sequential select queries)
+      for (const item of items) {
+        const qte = Number(item.quantite || 1);
+        const itemDepot = (item as any).depot_origine || canonicalDepotName;
+        const key = `${item.id}_${normalizeDepotName(itemDepot)}`;
+        const existingStock = stockMapForLookup.get(key);
 
-            // Record Mouvement
-            try {
-              await supabase.from("mouvements").insert([{
-                article_id: Number(item.id),
-                nr_doc: blNumber,
-                date_mouvement: new Date().toISOString(),
-                fournisseur_client: `Vente Client #${clientId} (${itemDepot})`,
-                entree: 0,
-                sortie: qte,
-                quantite: -qte,
-                pv: item.prix || 0,
-                type: "VENTE_POS",
-                depot: itemDepot,
-                utilisateur: user.username ?? "Caisse",
-                organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
-              }]);
-            } catch (mvtErr) {
-              // Mouvements is optional
-            }
-          })
-        );
-
-        // 5. Record Initial Payment (using exact paiements schema)
-        if (initialPaye > 0) {
-          await supabase.from("paiements").insert([{
-            facture_id: createdInvoice.id,
-            date_operation: new Date().toISOString(),
-            montant_regle: initialPaye,
-            moyen_reglement: isDebt ? "Cash" : normalizedPaymentMethod,
-            reference_paiement: `REG-${createdInvoice.id}`,
-            organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
-          }]);
+        if (existingStock?.id) {
+          let updateStockQ = supabase
+            .from("stocks")
+            .update({ quantite: existingStock.quantite - qte })
+            .eq("id", existingStock.id);
+          if (user.organization_id) {
+            updateStockQ = updateStockQ.eq("organization_id", user.organization_id);
+          }
+          parallelTasks.push(updateStockQ);
+        } else {
+          parallelTasks.push(
+            supabase.from("stocks").insert([{
+              article_id: Number(item.id),
+              depot_nom: itemDepot,
+              quantite: -qte,
+              organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
+            }])
+          );
         }
       }
+
+      // Batch movements insert
+      const mouvementsPayload = items.map((item: any) => {
+        const qte = Number(item.quantite || 1);
+        const itemDepot = (item as any).depot_origine || canonicalDepotName;
+        return {
+          article_id: Number(item.id),
+          nr_doc: blNumber,
+          date_mouvement: new Date().toISOString(),
+          fournisseur_client: `Vente Client #${clientId} (${itemDepot})`,
+          entree: 0,
+          sortie: qte,
+          quantite: -qte,
+          pv: item.prix || 0,
+          type: "VENTE_POS",
+          depot: itemDepot,
+          utilisateur: user.username ?? "Caisse",
+          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
+        };
+      });
+      parallelTasks.push(supabase.from("mouvements").insert(mouvementsPayload));
+
+      // Initial Payment insertion
+      const paymentsToInsert: any[] = [];
+      if (initialPaye > 0 && !isDebt) {
+        paymentsToInsert.push({
+          facture_id: createdInvoice.id,
+          date_operation: new Date().toISOString().split("T")[0],
+          montant_regle: initialPaye,
+          moyen_reglement: normalizedPaymentMethod,
+          reference_paiement: `REG-${createdInvoice.id}`,
+          utilisateur: user.username || "Système",
+          user_id: user.id,
+          regle: true,
+          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
+        });
+      } else if (cashVersement > 0 && isDebt) {
+        paymentsToInsert.push({
+          facture_id: createdInvoice.id,
+          date_operation: new Date().toISOString().split("T")[0],
+          montant_regle: cashVersement,
+          moyen_reglement: "Espèce",
+          reference_paiement: `REG-${createdInvoice.id}`,
+          utilisateur: user.username || "Système",
+          user_id: user.id,
+          regle: true,
+          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
+        });
+      }
+
+      for (const advP of advancePaymentsToInsert) {
+        paymentsToInsert.push({
+          facture_id: createdInvoice.id,
+          date_operation: new Date().toISOString().split("T")[0],
+          montant_regle: advP.montant_regle,
+          moyen_reglement: "Avance",
+          reference_paiement: `ADV-${advP.avance_client_id}`,
+          avance_client_id: advP.avance_client_id,
+          utilisateur: user.username || "Système",
+          user_id: user.id,
+          regle: true,
+          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
+        });
+      }
+
+      if (paymentsToInsert.length > 0) {
+        parallelTasks.push(supabase.from("paiements").insert(paymentsToInsert));
+      }
+
+      await Promise.all(parallelTasks);
+
+      // Fire non-blocking audits & rewards
+      Promise.allSettled([
+        logPriceChangeAudit({
+          supabase,
+          invoiceId: createdInvoice.id,
+          documentNumber: blNumber,
+          priceChanges,
+          userId: rpcUserIdText,
+          username: user.username || "Système",
+          depotId: effectiveDepotId,
+          depotName: canonicalDepotName,
+        }),
+        clientId && Number(clientId) > 1 && calcTotalTTC > 0
+          ? awardLoyaltyPoints(clientId, createdInvoice.id, calcTotalTTC)
+          : Promise.resolve(),
+      ]).catch(console.error);
+
+      // Construct instant hydrated invoice object
+      const returnedInvoice = {
+        ...createdInvoice,
+        client_nom: clientData.nom || "Client Comptant",
+        clients: clientData,
+        items: lineItemsToInsert,
+        paiements: paymentsToInsert,
+      };
+
+      return NextResponse.json({
+        ok: true,
+        sale: { id: createdInvoice.id, numero: blNumber },
+        invoice_id: createdInvoice.id,
+        invoice: returnedInvoice,
+        debug: {
+          extractedId: createdInvoice.id,
+          isFastDirect: true,
+        }
+      });
     }
 
     // Robustly extract the Invoice ID
@@ -872,7 +893,6 @@ export async function POST(request: Request) {
 
     // FALLBACK: If still no ID, fetch the latest invoice for this client and depot
     if (!extractedId || isNaN(extractedId)) {
-      console.warn("⚠️ Could not extract invoice ID from RPC result. Attempting fallback...", result);
       const { data: invoices, error: fallbackErr } = await supabase
         .from("factures")
         .select("id")
@@ -880,18 +900,12 @@ export async function POST(request: Request) {
         .order("id", { ascending: false })
         .limit(1);
       
-      if (fallbackErr) {
-        console.warn("⚠️ Fallback query failed:", fallbackErr);
-      } else if (invoices && invoices.length > 0) {
-        console.log("✅ Fallback: Using latest invoice ID:", invoices[0].id);
+      if (!fallbackErr && invoices && invoices.length > 0) {
         extractedId = Number(invoices[0].id);
-      } else {
-        console.error("❌ CRITICAL: Fallback query returned no data");
       }
     }
 
-    // ─── POST-CHECKOUT SETTLEMENT LOGIC ───
-
+    // ─── POST-CHECKOUT SETTLEMENT LOGIC (ONLY FOR EDIT EXISTING INVOICE) ───
     let reconciledTotalTTC: number | null = null;
 
     if (extractedId && !isNaN(extractedId)) {
@@ -908,16 +922,15 @@ export async function POST(request: Request) {
       const { data: fact } = await supabase.from("factures").select("total_ttc").eq("id", extractedId).single();
       const totalTTC = Number(fact?.total_ttc || 0);
 
-      // 1. CREDIT/AVANCE INITIALIZATION (Ensure the auto-generated credit record is zeroed)
+      // 1. CREDIT/AVANCE INITIALIZATION
       if (isDebtMode) {
-        // Prevent double counting: Set auto-generated 'Crédit' payment to 0
         await supabase.from("paiements")
           .update({ montant_regle: 0 })
           .eq("facture_id", extractedId)
           .ilike("moyen_reglement", "crédit");
       }
 
-      // 2. CASH PARTIAL PAYMENT (If any versement provided in debt modes)
+      // 2. CASH PARTIAL PAYMENT
       if (isDebtMode && cashVersement > 0) {
         await supabase.from("paiements").insert({
           facture_id: extractedId,
@@ -967,7 +980,6 @@ export async function POST(request: Request) {
           }
         }
 
-        // Finalize invoice totals after Cash + Advance
         const totalPaid = round(totalTTC - (remainingToSettle > 0 ? remainingToSettle : 0));
         await supabase.from("factures").update({
           statut: isGreaterOrEqual(totalPaid, totalTTC) ? "Payée" : (totalPaid > 0 ? "Partiellement Payée" : "Non Payée"),
@@ -975,7 +987,6 @@ export async function POST(request: Request) {
           montant_restant: Math.max(0, round(totalTTC - totalPaid))
         }).eq("id", extractedId);
       } else if (moyenReglement === "Crédit") {
-        // Just Update with Cash part if any
         await supabase.from("factures").update({
           statut: cashVersement >= totalTTC ? "Payée" : (cashVersement > 0 ? "Partiellement Payée" : "Non Payée"),
           montant_paye: cashVersement,
@@ -995,7 +1006,7 @@ export async function POST(request: Request) {
         invoiceId: extractedId,
         totalTTC: finalTotalTTC,
         moyenReglement,
-        isEditMode: !!requestedInvoiceId,
+        isEditMode: true,
       });
 
       await logPriceChangeAudit({
@@ -1009,13 +1020,11 @@ export async function POST(request: Request) {
         depotName: canonicalDepotName,
       });
 
-      // Award loyalty points to client if registered
       if (clientId && Number(clientId) > 1 && finalTotalTTC > 0) {
         await awardLoyaltyPoints(clientId, extractedId, finalTotalTTC);
       }
     }
 
-    // Prepare complete invoice data to return to client
     let returnedInvoice: any = null;
     if (extractedId) {
       const { data: invRow } = await supabase
