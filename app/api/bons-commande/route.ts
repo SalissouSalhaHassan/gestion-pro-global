@@ -85,74 +85,96 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Fournisseur et articles requis" }, { status: 400 });
     }
 
-    // Auto-generate BC number (e.g., BC-2026-0001)
+    // Auto-generate unique BC number (e.g., BC-2026-0001, BC-2026-0002)
     const year = new Date().getFullYear();
-    let count = 0;
-    try {
-      let countQuery = supabase
-        .from('bons_commande')
-        .select('*', { count: 'exact', head: true });
-      if (session.organization_id) {
-        countQuery = countQuery.eq('organization_id', session.organization_id);
-      }
-      const countRes = await countQuery;
-      if (countRes.error && (countRes.error.code === 'PGRST204' || countRes.error.message?.includes('organization_id'))) {
-        const fbRes = await supabase.from('bons_commande').select('*', { count: 'exact', head: true });
-        count = fbRes.count || 0;
-      } else {
-        count = countRes.count || 0;
-      }
-    } catch {
-      count = 0;
-    }
+    let nextSeq = 1;
 
-    const nextSeq = (count || 0) + 1;
-    const numero_bc = `BC-${year}-${String(nextSeq).padStart(4, '0')}`;
+    try {
+      // Find the maximum existing sequence number from existing bons_commande
+      const { data: latestBc } = await supabase
+        .from('bons_commande')
+        .select('id, numero_bc')
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestBc) {
+        const match = latestBc.numero_bc?.match(/BC-\d{4}-(\d+)/);
+        const parsedNum = match ? parseInt(match[1], 10) : 0;
+        nextSeq = Math.max((latestBc.id || 0) + 1, (parsedNum || 0) + 1);
+      }
+    } catch (e) {
+      console.warn("Could not determine max BC sequence, starting at 1:", e);
+      nextSeq = 1;
+    }
 
     const total_ht = items.reduce((sum: number, it: any) => sum + (Number(it.quantite) * Number(it.prix_achat_unitaire) || 0), 0);
     const total_ttc = total_ht; // Standard HT / TTC
 
-    // Base header payload
-    const baseHeaderPayload: Record<string, any> = {
-      numero_bc,
-      date_commande: new Date().toISOString().split('T')[0],
-      date_livraison_prevue: date_livraison_prevue || null,
-      fournisseur_id: fournisseur_id || null,
-      fournisseur_nom,
-      statut: 'BROUILLON',
-      total_ht,
-      total_ttc,
-      notes: notes || '',
-      depot_id: depot_id || null,
-      created_by: session.username || 'Admin',
-    };
-
-    // Try inserting with organization_id first
+    // Retry loop in case of unique constraint collision (e.g. duplicate key on bons_commande_numero_bc_key)
     let newBc: any = null;
     let headerErr: any = null;
+    let attempts = 0;
 
-    if (session.organization_id) {
-      const { data, error } = await supabase
-        .from('bons_commande')
-        .insert({
-          ...baseHeaderPayload,
-          organization_id: session.organization_id,
-        })
-        .select()
-        .single();
-      newBc = data;
-      headerErr = error;
-    }
+    while (attempts < 15 && !newBc) {
+      attempts++;
+      const currentNumeroBc = `BC-${year}-${String(nextSeq).padStart(4, '0')}`;
 
-    // If no org_id or insertion failed due to missing organization_id column, retry without it
-    if (!newBc && (!session.organization_id || (headerErr && (headerErr.code === 'PGRST204' || headerErr.message?.includes('organization_id'))))) {
-      const { data, error } = await supabase
-        .from('bons_commande')
-        .insert(baseHeaderPayload)
-        .select()
-        .single();
-      newBc = data;
-      headerErr = error;
+      // Base header payload
+      const baseHeaderPayload: Record<string, any> = {
+        numero_bc: currentNumeroBc,
+        date_commande: new Date().toISOString().split('T')[0],
+        date_livraison_prevue: date_livraison_prevue || null,
+        fournisseur_id: fournisseur_id || null,
+        fournisseur_nom,
+        statut: 'BROUILLON',
+        total_ht,
+        total_ttc,
+        notes: notes || '',
+        depot_id: depot_id || null,
+        created_by: session.username || 'Admin',
+      };
+
+      // Try inserting with organization_id first
+      if (session.organization_id) {
+        const { data, error } = await supabase
+          .from('bons_commande')
+          .insert({
+            ...baseHeaderPayload,
+            organization_id: session.organization_id,
+          })
+          .select()
+          .single();
+        newBc = data;
+        headerErr = error;
+      }
+
+      // If no org_id or insertion failed due to missing organization_id column, retry without it
+      if (!newBc && (!session.organization_id || (headerErr && (headerErr.code === 'PGRST204' || headerErr.message?.includes('organization_id'))))) {
+        const { data, error } = await supabase
+          .from('bons_commande')
+          .insert(baseHeaderPayload)
+          .select()
+          .single();
+        newBc = data;
+        headerErr = error;
+      }
+
+      // If duplicate key error on numero_bc, increment sequence and retry immediately
+      if (!newBc && headerErr && (
+        headerErr.code === '23505' ||
+        headerErr.message?.includes('bons_commande_numero_bc_key') ||
+        headerErr.message?.includes('unique constraint')
+      )) {
+        console.warn(`numero_bc collision on ${currentNumeroBc}, retrying with next sequence...`);
+        nextSeq++;
+        continue;
+      }
+
+      // If any other error, stop retry loop
+      if (headerErr) {
+        break;
+      }
     }
 
     if (headerErr) {

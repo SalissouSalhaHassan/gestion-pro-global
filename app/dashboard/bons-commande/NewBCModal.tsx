@@ -400,7 +400,7 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
       const data = await res.json();
 
       if (!res.ok) {
-        if (data.migrationRequired || data.error?.includes("bons_commande") || data.error?.includes("schema cache")) {
+        if (data.migrationRequired === true) {
           setIsMigrationError(true);
         }
         throw new Error(data.error || "Erreur lors de la création du bon de commande");
@@ -455,14 +455,16 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
         {/* Modal Form Body */}
         <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6 overflow-y-auto max-h-[80vh] custom-scrollbar">
           
-          {/* Error Banner with 1-Click SQL Copy if table genuinely missing */}
+          {/* Error Banner with 1-Click SQL Copy only if table genuinely missing */}
           {errorMessage && (
             <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs space-y-3 animate-fadeIn">
               <div className="flex items-start gap-3 text-rose-800 dark:text-rose-200 font-semibold">
                 <AlertCircle size={20} className="shrink-0 text-rose-600 mt-0.5" />
                 <div className="flex-1">
                   <p className="font-bold text-sm">
-                    {isAr ? "تنبيه النظام أثناء المعالجة" : "Action Requise : Initialisation de la Table"}
+                    {isMigrationError
+                      ? (isAr ? "تهيئة قاعدة البيانات مطلوبة" : "Action Requise : Initialisation de la Table")
+                      : (isAr ? "تنبيه أثناء حفظ أمر الشراء" : "Erreur lors de l'enregistrement")}
                   </p>
                   <p className="mt-0.5 text-rose-700 dark:text-rose-300">{errorMessage}</p>
                 </div>
