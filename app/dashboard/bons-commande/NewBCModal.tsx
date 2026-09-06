@@ -21,14 +21,25 @@ import {
   HelpCircle,
   TrendingUp,
   Info,
-  Phone
+  Phone,
+  Search,
+  CheckCircle2,
+  ExternalLink,
+  ChevronDown
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/context";
 
 type Supplier = {
   id: number;
+  ref_fournisseur?: string;
   nom: string;
+  contact?: string;
+  tel?: string;
+  gsm?: string;
   telephone?: string;
+  adresse?: string;
+  email?: string;
+  credit?: number;
   solde?: number;
 };
 
@@ -40,11 +51,15 @@ type Depot = {
 };
 
 type Article = {
-  id: number;
+  id: number | string;
   reference: string;
   designation: string;
-  p_achat_ht: number;
+  code_barre?: string | null;
+  famille?: string | null;
+  p_achat_ht?: number;
+  p_vente_ht?: number;
   p_vente_ttc?: number;
+  quantite?: number;
   stocks?: { quantite: number; depot_nom?: string; depot_id?: number }[];
 };
 
@@ -96,7 +111,13 @@ CREATE TABLE IF NOT EXISTS public.bon_commande_items (
     total_ligne NUMERIC(15, 2) NOT NULL DEFAULT 0
 );
 
--- 3. Sécurité Row Level Security (RLS)
+-- 3. Mise à niveau si existant
+ALTER TABLE IF EXISTS public.bons_commande 
+  ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id);
+
+ALTER TABLE IF EXISTS public.bon_commande_items 
+  ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id);
+
 ALTER TABLE public.bons_commande ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bon_commande_items ENABLE ROW LEVEL SECURITY;
 
@@ -109,36 +130,45 @@ CREATE POLICY "Enable read for authenticated users on bon_commande_items"
 CREATE POLICY "Enable write for authenticated users on bon_commande_items"
   ON public.bon_commande_items FOR ALL USING (true);
 
--- 4. Recharger le cache de schéma Supabase
 NOTIFY pgrst, 'reload schema';`;
 
 export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: NewBCModalProps) {
   const { locale, dir } = useLanguage();
   const isAr = locale === "ar";
 
+  // Data from DB
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [depots, setDepots] = useState<Depot[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   
+  // Selection state
+  const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null);
   const [selectedSupplierName, setSelectedSupplierName] = useState<string>("");
+  const [manualSupplierMode, setManualSupplierMode] = useState<boolean>(false);
   const [selectedDepotId, setSelectedDepotId] = useState<number | null>(null);
   const [dateLivraison, setDateLivraison] = useState("");
   const [notes, setNotes] = useState("");
+  
+  // Item rows
   const [items, setItems] = useState<ItemRow[]>(
     initialSuggestions && initialSuggestions.length > 0
       ? initialSuggestions
       : [{ designation: "", quantite: 10, prix_achat_unitaire: 0 }]
   );
 
+  // Loading & Modals
   const [saving, setSaving] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [loadingMeta, setLoadingMeta] = useState(true);
+  const [isCatalogPickerOpen, setIsCatalogPickerOpen] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState("");
 
-  // Error & Migration states
+  // Error states
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isMigrationError, setIsMigrationError] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
 
+  // 1. Fetch metadata linked to Gestion des Fournisseurs & Catalogue des Articles & Dépôts
   useEffect(() => {
     const loadMetadata = async () => {
       try {
@@ -149,13 +179,22 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
           fetch("/api/depots"),
         ]);
 
+        // A. Process Suppliers from Gestion des Fournisseurs
         const supData = await supRes.json();
+        const loadedSuppliers: Supplier[] = Array.isArray(supData)
+          ? supData
+          : (Array.isArray(supData?.data) ? supData.data : (Array.isArray(supData?.suppliers) ? supData.suppliers : []));
+        setSuppliers(loadedSuppliers);
+
+        // B. Process Articles from Catalogue & Gestion des Articles
         const artData = await artRes.json();
+        const loadedArticles: Article[] = Array.isArray(artData)
+          ? artData
+          : (Array.isArray(artData?.items) ? artData.items : (Array.isArray(artData?.data) ? artData.data : []));
+        setArticles(loadedArticles);
+
+        // C. Process Depots
         const depData = await depRes.json();
-
-        setSuppliers(Array.isArray(supData) ? supData : []);
-        setArticles(Array.isArray(artData) ? artData : []);
-
         const rawDepots = Array.isArray(depData) ? depData : depData?.depots || [];
         setDepots(rawDepots);
         if (rawDepots.length > 0 && !selectedDepotId) {
@@ -169,6 +208,90 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
     };
     loadMetadata();
   }, []);
+
+  // When supplier is selected from dropdown
+  const handleSupplierSelectChange = (supIdStr: string) => {
+    if (supIdStr === "MANUAL") {
+      setManualSupplierMode(true);
+      setSelectedSupplierId(null);
+      setSelectedSupplierName("");
+      return;
+    }
+
+    const supId = Number(supIdStr);
+    const sup = suppliers.find((s) => s.id === supId);
+    if (sup) {
+      setSelectedSupplierId(sup.id);
+      setSelectedSupplierName(sup.nom);
+      setManualSupplierMode(false);
+    }
+  };
+
+  // Supplier object details
+  const activeSupplier = useMemo(() => {
+    if (selectedSupplierId) {
+      return suppliers.find((s) => s.id === selectedSupplierId);
+    }
+    return suppliers.find(
+      (s) => s.nom.trim().toLowerCase() === selectedSupplierName.trim().toLowerCase()
+    );
+  }, [suppliers, selectedSupplierId, selectedSupplierName]);
+
+  // Handle article selection from catalogue
+  const handleArticleSelect = (index: number, articleId: number | string) => {
+    const art = articles.find((a) => String(a.id) === String(articleId));
+    if (!art) return;
+
+    // Calculate total on-hand stock across depots
+    const totalStock = typeof art.quantite === "number"
+      ? art.quantite
+      : (art.stocks || []).reduce((acc, s) => acc + (Number(s.quantite) || 0), 0);
+
+    const next = [...items];
+    next[index] = {
+      ...next[index],
+      article_id: Number(art.id),
+      reference: art.reference || "",
+      designation: art.designation,
+      prix_achat_unitaire: Number(art.p_achat_ht) || 0,
+      prix_vente_ref: Number(art.p_vente_ttc) || Number(art.p_vente_ht) || 0,
+      current_stock: totalStock,
+    };
+    setItems(next);
+  };
+
+  // Quick add from Catalog Picker Modal
+  const handleAddArticleFromCatalog = (art: Article) => {
+    const totalStock = typeof art.quantite === "number"
+      ? art.quantite
+      : (art.stocks || []).reduce((acc, s) => acc + (Number(s.quantite) || 0), 0);
+
+    // If first item is empty row, replace it
+    if (items.length === 1 && !items[0].designation.trim()) {
+      setItems([{
+        article_id: Number(art.id),
+        reference: art.reference || "",
+        designation: art.designation,
+        quantite: 10,
+        prix_achat_unitaire: Number(art.p_achat_ht) || 0,
+        prix_vente_ref: Number(art.p_vente_ttc) || Number(art.p_vente_ht) || 0,
+        current_stock: totalStock,
+      }]);
+    } else {
+      setItems((prev) => [
+        ...prev,
+        {
+          article_id: Number(art.id),
+          reference: art.reference || "",
+          designation: art.designation,
+          quantite: 10,
+          prix_achat_unitaire: Number(art.p_achat_ht) || 0,
+          prix_vente_ref: Number(art.p_vente_ttc) || Number(art.p_vente_ht) || 0,
+          current_stock: totalStock,
+        }
+      ]);
+    }
+  };
 
   const handleAutoSuggest = async () => {
     try {
@@ -193,26 +316,6 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
     } finally {
       setLoadingSuggestions(false);
     }
-  };
-
-  const handleArticleSelect = (index: number, articleId: number) => {
-    const art = articles.find((a) => a.id === Number(articleId));
-    if (!art) return;
-
-    // Calculate total on-hand stock across depots
-    const totalStock = (art.stocks || []).reduce((acc, s) => acc + (Number(s.quantite) || 0), 0);
-
-    const next = [...items];
-    next[index] = {
-      ...next[index],
-      article_id: art.id,
-      reference: art.reference || "",
-      designation: art.designation,
-      prix_achat_unitaire: Number(art.p_achat_ht) || 0,
-      prix_vente_ref: Number(art.p_vente_ttc) || 0,
-      current_stock: totalStock,
-    };
-    setItems(next);
   };
 
   const updateItem = (index: number, field: keyof ItemRow, val: any) => {
@@ -247,11 +350,17 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
     setTimeout(() => setCopiedSql(false), 3500);
   };
 
-  const selectedSupplierObj = useMemo(() => {
-    return suppliers.find(
-      (s) => s.nom.trim().toLowerCase() === selectedSupplierName.trim().toLowerCase()
+  // Filtered articles for catalog picker
+  const filteredCatalogArticles = useMemo(() => {
+    if (!catalogSearch.trim()) return articles;
+    const q = catalogSearch.toLowerCase();
+    return articles.filter(
+      (a) =>
+        a.designation.toLowerCase().includes(q) ||
+        (a.reference && a.reference.toLowerCase().includes(q)) ||
+        (a.code_barre && a.code_barre.toLowerCase().includes(q))
     );
-  }, [suppliers, selectedSupplierName]);
+  }, [articles, catalogSearch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -273,7 +382,7 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fournisseur_id: selectedSupplierObj?.id || null,
+          fournisseur_id: activeSupplier?.id || selectedSupplierId || null,
           fournisseur_nom: selectedSupplierName.trim(),
           depot_id: selectedDepotId || null,
           date_livraison_prevue: dateLivraison || null,
@@ -310,7 +419,7 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto animate-fadeIn" dir={dir}>
       <div className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-[28px] sm:rounded-[36px] shadow-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden flex flex-col my-auto animate-in zoom-in-95 duration-200">
         
-        {/* Enterprise Glassmorphic Header */}
+        {/* Enterprise Header */}
         <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 px-6 py-5 sm:px-8 sm:py-6 text-white flex items-center justify-between border-b border-indigo-500/20 relative">
           <div className="absolute top-0 right-0 w-96 h-full bg-indigo-500/10 blur-2xl pointer-events-none" />
           
@@ -321,7 +430,7 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h3 className="text-lg sm:text-xl font-black text-white tracking-tight">
-                  {isAr ? "أمر شراء وتوريد مورد جديد (Purchase Order)" : "Nouveau Bon de Commande Fournisseur (PO)"}
+                  {isAr ? "أمر شراء وتوريد بضاعة (Purchase Order)" : "Nouveau Bon de Commande Fournisseur (PO)"}
                 </h3>
                 <span className="px-3 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[11px] font-black border border-indigo-500/30">
                   {isAr ? "المشتريات والمخازن" : "PROCUREMENT & STOCKS"}
@@ -329,8 +438,8 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
               </div>
               <p className="text-xs text-slate-300 mt-1 font-medium">
                 {isAr 
-                  ? "إنشاء طلب توريد رسمي مع تخصيص مستودع الاستلام، والاحتساب التلقائي مع خيار التموين الذكي"
-                  : "Émettez un ordre d'approvisionnement officiel, ciblez le dépôt de réception et gérez vos flux de stocks"}
+                  ? "متصل مباشرة مع دليل الأصناف (Gestion des Articles) وإدارة الموردين (Gestion des Fournisseurs)"
+                  : "Connecté directement au Catalogue des Articles et à la Gestion des Fournisseurs"}
               </p>
             </div>
           </div>
@@ -377,46 +486,86 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
             </div>
           )}
 
-          {/* Section 1: Commercial Header Info */}
+          {/* Section 1: Fournisseur & Dépôt & Date (Connected to Gestion des Fournisseurs & Dépôts) */}
           <div className="bg-slate-50/80 dark:bg-slate-800/40 p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
               
-              {/* Supplier Selection */}
-              <div className="sm:col-span-5">
-                <label className="block text-xs font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider mb-2 flex items-center gap-1.5">
-                  <Building2 size={14} className="text-indigo-500" />
-                  <span>{isAr ? "المورد الشريك *" : "Fournisseur Partenaire *"}</span>
-                </label>
-                <div className="relative">
-                  <input
-                    list="suppliers-list"
-                    type="text"
-                    required
-                    placeholder={isAr ? "ابحث أو اختر أو اكتب اسم المورد..." : "Rechercher ou saisir fournisseur..."}
-                    value={selectedSupplierName}
-                    onChange={(e) => setSelectedSupplierName(e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-xs"
-                  />
-                  <datalist id="suppliers-list">
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.nom}>
-                        {s.telephone ? `📞 ${s.telephone}` : ""}
-                      </option>
-                    ))}
-                  </datalist>
+              {/* Fournisseur Partenaire (Directly from Gestion des Fournisseurs) */}
+              <div className="sm:col-span-5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider flex items-center gap-1.5">
+                    <Building2 size={14} className="text-indigo-500" />
+                    <span>{isAr ? "المورد الشريك *" : "Fournisseur Partenaire *"}</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualSupplierMode(!manualSupplierMode);
+                      if (manualSupplierMode && suppliers.length > 0) {
+                        setSelectedSupplierId(suppliers[0].id);
+                        setSelectedSupplierName(suppliers[0].nom);
+                      }
+                    }}
+                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                  >
+                    {manualSupplierMode
+                      ? (isAr ? "اختيار من الموردين المسجلين" : "Sélectionner dans la liste")
+                      : (isAr ? "+ إدخال يدوي" : "+ Saisie manuelle")}
+                  </button>
                 </div>
-                {selectedSupplierObj && (
-                  <div className="flex items-center gap-3 mt-1.5 px-1 text-[11px] text-slate-500">
-                    {selectedSupplierObj.telephone && (
-                      <span className="flex items-center gap-1 text-emerald-600 font-semibold">
-                        <Phone size={11} /> {selectedSupplierObj.telephone}
+
+                {!manualSupplierMode ? (
+                  <div className="relative">
+                    <select
+                      required
+                      value={selectedSupplierId || (activeSupplier ? activeSupplier.id : "")}
+                      onChange={(e) => handleSupplierSelectChange(e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-xs cursor-pointer"
+                    >
+                      <option value="" disabled>
+                        {loadingMeta 
+                          ? (isAr ? "جارٍ جلب الموردين..." : "Chargement des fournisseurs...") 
+                          : (isAr ? "اختر مورد من إدارة الموردين..." : "Sélectionner un fournisseur...")}
+                      </option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.nom} {s.ref_fournisseur ? `(${s.ref_fournisseur})` : ""} {s.tel || s.gsm ? `| 📞 ${s.tel || s.gsm}` : ""}
+                        </option>
+                      ))}
+                      <option value="MANUAL">{isAr ? "+ مورد جديد غير مسجل" : "+ Autre fournisseur (Saisie libre)"}</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      placeholder={isAr ? "اكتب اسم المورد..." : "Nom du fournisseur..."}
+                      value={selectedSupplierName}
+                      onChange={(e) => setSelectedSupplierName(e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-xs"
+                      autoFocus
+                    />
+                  </div>
+                )}
+
+                {/* Supplier Profile Info Badge */}
+                {activeSupplier && (
+                  <div className="p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40 flex flex-wrap items-center gap-3 text-[11px] text-slate-600 dark:text-slate-300">
+                    <span className="font-extrabold text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
+                      <CheckCircle2 size={12} className="text-emerald-500" />
+                      {activeSupplier.nom}
+                    </span>
+                    {(activeSupplier.tel || activeSupplier.gsm) && (
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold font-mono">
+                        <Phone size={10} /> {activeSupplier.tel || activeSupplier.gsm}
                       </span>
                     )}
-                    {typeof selectedSupplierObj.solde === "number" && (
-                      <span>
-                        {isAr ? "الرصيد المالي:" : "Solde actuel:"}{" "}
-                        <strong className="text-slate-700 dark:text-slate-200">
-                          {selectedSupplierObj.solde.toLocaleString("fr-FR")} FCFA
+                    {typeof activeSupplier.credit === "number" && (
+                      <span className="text-slate-500">
+                        {isAr ? "الرصيد / المستحق:" : "Solde / Crédit:"}{" "}
+                        <strong className="text-slate-800 dark:text-slate-100 font-mono">
+                          {Number(activeSupplier.credit || 0).toLocaleString("fr-FR")} FCFA
                         </strong>
                       </span>
                     )}
@@ -424,9 +573,9 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
                 )}
               </div>
 
-              {/* Destination Depot Selection */}
-              <div className="sm:col-span-4">
-                <label className="block text-xs font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider mb-2 flex items-center gap-1.5">
+              {/* Destination Depot */}
+              <div className="sm:col-span-4 space-y-1.5">
+                <label className="block text-xs font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider flex items-center gap-1.5">
                   <Boxes size={14} className="text-amber-500" />
                   <span>{isAr ? "مستودع الاستلام *" : "Dépôt de Réception *"}</span>
                 </label>
@@ -444,11 +593,14 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
                     <option value="">{isAr ? "المستودع الرئيسي الافتراضي" : "Dépôt Principal par défaut"}</option>
                   )}
                 </select>
+                <span className="text-[10px] text-slate-400 block px-1">
+                  {isAr ? "المستودع الذي سيتم إضافة البضائع إليه عند الاستلام" : "Le dépôt qui recevra le stock à la validation"}
+                </span>
               </div>
 
-              {/* Expected Delivery Date */}
-              <div className="sm:col-span-3">
-                <label className="block text-xs font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider mb-2 flex items-center gap-1.5">
+              {/* Delivery Date */}
+              <div className="sm:col-span-3 space-y-1.5">
+                <label className="block text-xs font-black uppercase text-slate-700 dark:text-slate-300 tracking-wider flex items-center gap-1.5">
                   <Calendar size={14} className="text-purple-500" />
                   <span>{isAr ? "تاريخ التسليم المتوقع" : "Date Prévue"}</span>
                 </label>
@@ -463,20 +615,30 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
             </div>
           </div>
 
-          {/* Section 2: Items Table with Smart Replenishment Banner */}
+          {/* Section 2: Articles Table directly connected to Catalogue & Gestion des Articles */}
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <Package size={18} className="text-indigo-600 dark:text-indigo-400" />
                 <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                  {isAr ? `قائمة المواد المطلوبة (${items.length})` : `Articles & Quantités Commandés (${items.length})`}
+                  {isAr ? `الأصناف والمواد المطلوبة (${items.length})` : `Articles & Quantités Commandés (${items.length})`}
                 </h4>
                 <span className="px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-black">
                   {totalQty} {isAr ? "قطعة" : "unités"}
                 </span>
               </div>
 
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                {/* Browse Catalog Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsCatalogPickerOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border border-slate-200 dark:border-slate-700"
+                >
+                  <Search size={14} className="text-indigo-500" />
+                  <span>{isAr ? "تصفح الدليل الشامل" : "Catalogue Articles"}</span>
+                </button>
+
                 {/* Auto Reorder Button */}
                 <button
                   type="button"
@@ -490,7 +652,7 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
                   ) : (
                     <Sparkles size={14} className="text-amber-200" />
                   )}
-                  <span>{isAr ? "⚡ تموين آلي للمخزون المنخفض" : "⚡ Réappro. Automatique"}</span>
+                  <span>{isAr ? "⚡ تموين آلي للنواقص" : "⚡ Réappro. Automatique"}</span>
                 </button>
 
                 {/* Add Row Button */}
@@ -514,11 +676,11 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
                     key={idx}
                     className="p-4 bg-slate-50/90 dark:bg-slate-800/60 hover:bg-white dark:hover:bg-slate-800 rounded-3xl border border-slate-200/80 dark:border-slate-700/70 grid grid-cols-12 gap-3.5 items-center transition-all shadow-xs group"
                   >
-                    {/* Item Designation & Fast Search */}
+                    {/* Article / Designation Connected to Catalogue */}
                     <div className="col-span-12 md:col-span-5 space-y-1.5">
                       <div className="flex items-center justify-between">
                         <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1">
-                          <span>{isAr ? "تعيين الصنف / المنتج" : "Article / Désignation"}</span>
+                          <span>{isAr ? "تعيين الصنف / المنتج من الدليل" : "Article / Désignation (Catalogue)"}</span>
                         </label>
                         {typeof it.current_stock === "number" && (
                           <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
@@ -533,29 +695,41 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
                         )}
                       </div>
 
-                      <div className="flex gap-2">
-                        {articles.length > 0 && (
-                          <select
-                            onChange={(e) => handleArticleSelect(idx, Number(e.target.value))}
-                            className="w-2/5 px-2.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500"
-                            value={it.article_id || ""}
-                          >
-                            <option value="">{isAr ? "من الدليل..." : "Catalogue..."}</option>
-                            {articles.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.designation} {a.reference ? `[${a.reference}]` : ""}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                        <input
-                          type="text"
-                          required
-                          placeholder={isAr ? "اسم الصنف أو البيان..." : "Désignation de l'article..."}
-                          value={it.designation}
-                          onChange={(e) => updateItem(idx, "designation", e.target.value)}
-                          className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs"
-                        />
+                      <div className="space-y-1.5">
+                        {/* Dropdown connected to Catalogue & Gestion des Articles */}
+                        <select
+                          onChange={(e) => handleArticleSelect(idx, e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-xl border border-indigo-200/80 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer"
+                          value={it.article_id || ""}
+                        >
+                          <option value="">
+                            {articles.length === 0 
+                              ? (isAr ? "جارٍ تحميل دليل الأصناف..." : "Chargement du catalogue...") 
+                              : (isAr ? "🔍 اختر من دليل الأصناف (Catalogue)..." : "🔍 Choisir dans le Catalogue des Articles...")}
+                          </option>
+                          {articles.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.designation} {a.reference ? `[${a.reference}]` : ""} {typeof a.p_achat_ht === "number" ? `(Achat: ${a.p_achat_ht} F)` : ""}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Editable designation input (or manual override) */}
+                        <div className="flex gap-2 items-center">
+                          {it.reference && (
+                            <span className="text-[10px] font-mono font-bold px-2 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded-lg shrink-0 border border-indigo-200/60">
+                              {it.reference}
+                            </span>
+                          )}
+                          <input
+                            type="text"
+                            required
+                            placeholder={isAr ? "اسم الصنف أو التعيين..." : "Désignation de l'article..."}
+                            value={it.designation}
+                            onChange={(e) => updateItem(idx, "designation", e.target.value)}
+                            className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs"
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -579,7 +753,7 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
                     <div className="col-span-6 sm:col-span-3 md:col-span-2 space-y-1">
                       <div className="flex items-center justify-between">
                         <label className="block text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                          {isAr ? "سعر الشراء المقدر" : "Prix Achat Est."}
+                          {isAr ? "سعر الشراء (HT)" : "Prix Achat Est."}
                         </label>
                       </div>
                       <input
@@ -590,6 +764,11 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
                         onChange={(e) => updateItem(idx, "prix_achat_unitaire", e.target.value)}
                         className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-black text-slate-900 dark:text-white text-right focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs"
                       />
+                      {it.prix_vente_ref ? (
+                        <span className="text-[10px] text-slate-400 text-right block font-mono">
+                          {isAr ? "سعر البيع:" : "P.Vente:"} {it.prix_vente_ref.toLocaleString()} F
+                        </span>
+                      ) : null}
                     </div>
 
                     {/* Line Total */}
@@ -695,6 +874,127 @@ export default function NewBCModal({ onClose, onSuccess, initialSuggestions }: N
           </div>
 
         </form>
+
+        {/* Modal: Quick Catalog Browser / Search */}
+        {isCatalogPickerOpen && (
+          <div className="fixed inset-0 z-60 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-[32px] max-w-3xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150">
+              
+              {/* Header */}
+              <div className="p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between border-b border-indigo-500/20">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    <Package size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm text-white">
+                      {isAr ? "دليل الأصناف والمنتجات (Gestion des Articles)" : "Catalogue & Gestion des Articles"}
+                    </h3>
+                    <p className="text-xs text-slate-300">
+                      {isAr ? "اختر الأصناف لإضافتها مباشرة لأمر الشراء" : "Sélectionnez des articles pour les ajouter directement au bon de commande"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsCatalogPickerOpen(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-3">
+                <div className="relative flex-1">
+                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder={isAr ? "بحث بالاسم، المرجع، أو الباركود..." : "Rechercher par désignation, référence ou code-barre..."}
+                    value={catalogSearch}
+                    onChange={(e) => setCatalogSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                    autoFocus
+                  />
+                </div>
+                <span className="text-xs font-bold text-slate-500 shrink-0">
+                  {filteredCatalogArticles.length} {isAr ? "صنف" : "articles"}
+                </span>
+              </div>
+
+              {/* Articles Grid / List */}
+              <div className="p-4 overflow-y-auto space-y-2 flex-1 custom-scrollbar">
+                {filteredCatalogArticles.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 text-xs font-medium">
+                    {isAr ? "لا توجد أصناف مطابقة لنتائج البحث." : "Aucun article trouvé."}
+                  </div>
+                ) : (
+                  filteredCatalogArticles.map((art) => {
+                    const totalStock = typeof art.quantite === "number"
+                      ? art.quantite
+                      : (art.stocks || []).reduce((acc, s) => acc + (Number(s.quantite) || 0), 0);
+
+                    return (
+                      <div
+                        key={art.id}
+                        className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 hover:border-indigo-500/50 flex items-center justify-between gap-4 transition-all shadow-2xs"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-xs text-slate-900 dark:text-white">
+                              {art.designation}
+                            </span>
+                            {art.reference && (
+                              <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[10px] font-bold">
+                                {art.reference}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                            <span>
+                              {isAr ? "سعر الشراء:" : "P.Achat:"}{" "}
+                              <strong className="text-slate-700 dark:text-slate-200 font-mono">
+                                {Number(art.p_achat_ht || 0).toLocaleString("fr-FR")} FCFA
+                              </strong>
+                            </span>
+                            <span>•</span>
+                            <span className={totalStock <= 0 ? "text-rose-600 font-bold" : totalStock <= 5 ? "text-amber-600 font-bold" : "text-emerald-600 font-bold"}>
+                              {isAr ? "المخزون:" : "Stock:"} {totalStock}
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleAddArticleFromCatalog(art);
+                            setIsCatalogPickerOpen(false);
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-indigo-600/20 shrink-0 active:scale-95"
+                        >
+                          <Plus size={14} />
+                          <span>{isAr ? "إضافة للأمر" : "Ajouter"}</span>
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsCatalogPickerOpen(false)}
+                  className="px-5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                >
+                  {isAr ? "إغلاق" : "Fermer"}
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
