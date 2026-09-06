@@ -740,7 +740,7 @@ export async function POST(request: Request) {
         stockMapForLookup.set(key, { id: curr.id, quantite: Number(curr.quantite || 0) });
       });
 
-      const parallelTasks: Promise<any>[] = [
+      const parallelTasks: any[] = [
         supabase.from("facture_items").insert(itemsPayload),
       ];
 
