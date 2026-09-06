@@ -61,8 +61,6 @@ export async function GET(
 
     const isAdmin = await isAdminOrManager(session);
     const invoiceService = new InvoiceService(supabase);
-    
-    const invoiceService = new InvoiceService(supabase);
     const orgId = session.organization_id;
 
     // Concurrently fetch invoice and payments directly on server
