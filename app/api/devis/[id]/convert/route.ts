@@ -44,23 +44,24 @@ export async function POST(
     const blNumber = `FA-${year}-${rand}`;
 
     // 3. Insert into factures
+    const invoicePayload: any = {
+      client_id: devis.client_id,
+      date_facture: new Date().toISOString().split("T")[0],
+      bl_number: blNumber,
+      total_ht: devis.total_ht,
+      total_tva: devis.total_tva,
+      total_ttc: devis.total_ttc,
+      montant_paye: 0,
+      montant_restant: devis.total_ttc,
+      statut: "Non Payée",
+      vendeur: session.username || devis.vendeur || "Vente",
+      is_deleted: false,
+      notes: `Converti depuis le devis ${devis.numero_devis}. ${devis.notes || ""}`,
+    };
+
     const { data: invoice, error: invErr } = await supabase
       .from("factures")
-      .insert({
-        client_id: devis.client_id,
-        date_facture: new Date().toISOString().split("T")[0],
-        bl_number: blNumber,
-        total_ht: devis.total_ht,
-        total_tva: devis.total_tva,
-        total_ttc: devis.total_ttc,
-        montant_paye: 0,
-        montant_restant: devis.total_ttc,
-        statut: "Non Payée",
-        vendeur: session.username || devis.vendeur || "Vente",
-        emplacement: "BOUTIQUE",
-        is_deleted: false,
-        notes: `Converti depuis le devis ${devis.numero_devis}. ${devis.notes || ""}`,
-      })
+      .insert(invoicePayload)
       .select()
       .single();
 

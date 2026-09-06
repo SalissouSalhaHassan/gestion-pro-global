@@ -731,26 +731,43 @@ export async function POST(request: Request) {
         const blNumber = `FA-${year}-${randRef}`;
 
         // 2. Insert Invoice (strictly adhering to existing factures schema)
-        const { data: createdInvoice, error: invError } = await supabase
+        const invoicePayload: any = {
+          client_id: clientId,
+          vendeur: user.username ?? "Caisse",
+          total_ht: calcTotalHT,
+          total_ttc: calcTotalTTC,
+          total_tva: calcTotalTva,
+          montant_paye: initialPaye,
+          montant_restant: initialRestant,
+          statut,
+          nbr_art: items.length,
+          bl_number: blNumber,
+          date_facture: new Date().toISOString(),
+          is_deleted: false,
+          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
+        };
+
+        if (canonicalDepotName) {
+          invoicePayload.emplacement = canonicalDepotName;
+        }
+
+        let { data: createdInvoice, error: invError } = await supabase
           .from("factures")
-          .insert([{
-            client_id: clientId,
-            vendeur: user.username ?? "Caisse",
-            total_ht: calcTotalHT,
-            total_ttc: calcTotalTTC,
-            total_tva: calcTotalTva,
-            montant_paye: initialPaye,
-            montant_restant: initialRestant,
-            statut,
-            nbr_art: items.length,
-            bl_number: blNumber,
-            date_facture: new Date().toISOString(),
-            emplacement: canonicalDepotName,
-            is_deleted: false,
-            organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
-          }])
+          .insert([invoicePayload])
           .select("id")
           .single();
+
+        // Graceful fallback if 'emplacement' column does not exist in the remote Supabase schema cache
+        if (invError && (invError.message?.includes("emplacement") || invError.code === "PGRST204")) {
+          delete invoicePayload.emplacement;
+          const retryRes = await supabase
+            .from("factures")
+            .insert([invoicePayload])
+            .select("id")
+            .single();
+          createdInvoice = retryRes.data;
+          invError = retryRes.error;
+        }
 
         if (invError) throw invError;
         extractedId = createdInvoice.id;

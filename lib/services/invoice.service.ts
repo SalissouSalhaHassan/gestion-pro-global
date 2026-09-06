@@ -254,7 +254,7 @@ export class InvoiceService {
     const { items, client_nom, ...invoiceRow } = invoiceData as any;
     
     // Insert the main invoice
-    const { data: newInvoice, error: invoiceError } = await this.supabase
+    let { data: newInvoice, error: invoiceError } = await this.supabase
       .from('factures')
       .insert({
         ...invoiceRow,
@@ -265,6 +265,23 @@ export class InvoiceService {
       })
       .select()
       .single();
+
+    if (invoiceError && (invoiceError.message?.includes("emplacement") || invoiceError.code === "PGRST204")) {
+      delete invoiceRow.emplacement;
+      const retry = await this.supabase
+        .from('factures')
+        .insert({
+          ...invoiceRow,
+          user_id: userId || invoiceRow.user_id,
+          montant_paye: invoiceRow.montant_paye || 0,
+          montant_restant: invoiceRow.total_ttc - (invoiceRow.montant_paye || 0),
+          statut: invoiceRow.montant_paye === invoiceRow.total_ttc ? 'Payée' : 'Non Payée'
+        })
+        .select()
+        .single();
+      newInvoice = retry.data;
+      invoiceError = retry.error;
+    }
 
     if (invoiceError) throw new Error(invoiceError.message);
 
