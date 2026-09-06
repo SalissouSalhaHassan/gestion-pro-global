@@ -9,6 +9,7 @@ type CheckoutItem = {
   id: number | string;
   quantite: number;
   prix?: number;
+  depot_origine?: string | null;
 };
 
 type PriceChangePayload = {
@@ -527,13 +528,17 @@ export async function POST(request: Request) {
 
     // ─── INVENTORY GUARD: PRE-VALIDATION ───
     const itemIds = items.map(it => it.id);
+    const targetDepots = Array.from(new Set([
+      canonicalDepotName,
+      ...items.map(it => (it as any).depot_origine).filter(Boolean)
+    ]));
     
-    // Fetch current stock for these items in the specific depot
+    // Fetch current stock for these items across the involved depots
     let stockLevelsQuery = supabase
       .from("stocks")
       .select("article_id, quantite, depot_nom")
       .in("article_id", itemIds)
-      .ilike("depot_nom", canonicalDepotName);
+      .in("depot_nom", targetDepots);
 
     if (user.organization_id) {
       stockLevelsQuery = stockLevelsQuery.eq("organization_id", user.organization_id);
@@ -543,26 +548,25 @@ export async function POST(request: Request) {
 
     if (stockErr) console.error("Stock check error:", stockErr);
 
-    const stockMap = ((stockLevels as any[] | null | undefined) || []).reduce<Record<string, number>>((acc, curr) => {
-      const key = String(curr.article_id);
-      acc[key] = Number(acc[key] || 0) + Number(curr.quantite || 0);
-      return acc;
-    }, {});
+    const stockMapByDepot: Record<string, number> = {};
+    ((stockLevels as any[] | null | undefined) || []).forEach((curr) => {
+      const key = `${curr.article_id}_${normalizeDepotName(curr.depot_nom || "")}`;
+      stockMapByDepot[key] = (stockMapByDepot[key] || 0) + Number(curr.quantite || 0);
+    });
 
     if (requestedInvoiceId && originalInvoiceItems.length > 0) {
       for (const originalItem of originalInvoiceItems) {
-        if (normalizeDepotName(String(originalItem.depot_origine || "")) !== normalizeDepotName(canonicalDepotName)) {
-          continue;
-        }
-
-        const key = String(originalItem.article_id);
-        stockMap[key] = Number(stockMap[key] || 0) + Number(originalItem.qte || 0);
+        const origDepot = originalItem.depot_origine || canonicalDepotName;
+        const key = `${originalItem.article_id}_${normalizeDepotName(origDepot)}`;
+        stockMapByDepot[key] = (stockMapByDepot[key] || 0) + Number(originalItem.qte || 0);
       }
     }
 
     const insufficientItems = [];
     for (const item of items) {
-      const available = stockMap[item.id] || 0;
+      const itemDepot = (item as any).depot_origine || canonicalDepotName;
+      const key = `${item.id}_${normalizeDepotName(itemDepot)}`;
+      const available = stockMapByDepot[key] ?? 0;
       if (item.quantite > available) {
         insufficientItems.push({
           id: item.id,
@@ -757,11 +761,12 @@ export async function POST(request: Request) {
         // 4. Update Stocks in depot
         for (const item of items) {
           const qte = Number(item.quantite || 1);
+          const itemDepot = (item as any).depot_origine || canonicalDepotName;
           let curStockQ = supabase
             .from("stocks")
             .select("id, quantite")
             .eq("article_id", Number(item.id))
-            .eq("depot_nom", canonicalDepotName);
+            .eq("depot_nom", itemDepot);
           if (user.organization_id) {
             curStockQ = curStockQ.eq("organization_id", user.organization_id);
           }
@@ -782,7 +787,7 @@ export async function POST(request: Request) {
               .from("stocks")
               .insert([{
                 article_id: Number(item.id),
-                depot_nom: canonicalDepotName,
+                depot_nom: itemDepot,
                 quantite: -qte,
                 organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
               }]);
@@ -794,12 +799,13 @@ export async function POST(request: Request) {
               article_id: Number(item.id),
               nr_doc: blNumber,
               date_mouvement: new Date().toISOString(),
-              fournisseur_client: `Vente Client #${clientId}`,
+              fournisseur_client: `Vente Client #${clientId} (${itemDepot})`,
               entree: 0,
               sortie: qte,
               quantite: -qte,
               pv: item.prix || 0,
               type: "VENTE_POS",
+              depot: itemDepot,
               utilisateur: user.username ?? "Caisse",
               organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
             }]);

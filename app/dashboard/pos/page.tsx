@@ -1708,7 +1708,18 @@ function PosPage() {
         );
       }
       const unitPrice = getEffectiveItemPrice(article, pricingTier);
-      return [...prev, { ...article, p_vente_ttc: unitPrice, p_vente_ht: unitPrice, quantite: 1, original_price: unitPrice, price_modified: false }];
+      return [
+        ...prev,
+        {
+          ...article,
+          p_vente_ttc: unitPrice,
+          p_vente_ht: unitPrice,
+          quantite: 1,
+          original_price: unitPrice,
+          price_modified: false,
+          depot_origine: selectedDepot || null,
+        },
+      ];
     });
   }, [editInvoiceId, selectedDepot, pricingTier, getEffectiveItemPrice]);
 
@@ -1745,9 +1756,10 @@ function PosPage() {
     const art = articles.find(a => a.id === id);
     const existingItem = cart.find((item) => item.id === id);
     if (art) {
-        const available = getAvailableArticleStock(art, selectedDepot) + (editInvoiceId ? existingItem?.quantite || 0 : 0);
+        const itemDepot = existingItem?.depot_origine || selectedDepot;
+        const available = getAvailableArticleStock(art, itemDepot) + (editInvoiceId ? existingItem?.quantite || 0 : 0);
         if (qty > available) {
-          setError(`⚠️ Limite de stock atteinte (${available} disponibles)`);
+          setError(`⚠️ Limite de stock atteinte (${available} disponibles dans ${itemDepot})`);
           setTimeout(() => setError(null), 3000);
           qty = available;
         }
@@ -1887,14 +1899,17 @@ function PosPage() {
   }, []);
 
   const handleDepotChange = useCallback((newDepot: string) => {
-    if (cart.length > 0) {
-      if (!confirm("Changer de dépôt videra votre panier actuel. Voulez-vous continuer ?")) {
-        return;
-      }
-      clearCart();
-    }
     setSelectedDepot(newDepot);
-  }, [cart, clearCart]);
+    // Keep ticket items intact and update their depot_origine seamlessly!
+    setCart((prev) =>
+      prev.map((it) => ({
+        ...it,
+        depot_origine: newDepot,
+      }))
+    );
+    setSuccess(`📍 Dépôt changé en : ${newDepot} (Ticket de caisse conservé)`);
+    setTimeout(() => setSuccess(null), 3000);
+  }, []);
 
   /* ── Computed ── */
   const filteredArticles = useMemo(() => {
@@ -2049,6 +2064,7 @@ function PosPage() {
             id: item.id,
             quantite: item.quantite,
             prix: item.p_vente_ttc,
+            depot_origine: item.depot_origine || selectedDepot || "",
           })),
           priceChanges: currentPriceChanges.map((entry) => ({
             articleId: entry.articleId,
@@ -2920,6 +2936,47 @@ function PosPage() {
                           <div style={{ fontWeight: 800, color: "#1e293b" }}>{item.designation}</div>
                           {item.code_barre && (
                             <div style={{ fontSize: 10, color: "#94a3b8", fontFamily: "monospace" }}>{item.code_barre}</div>
+                          )}
+                          {allowedDepotsList.length > 1 && (
+                            <div style={{ marginTop: 3, display: "flex", alignItems: "center", gap: 3 }}>
+                              <span style={{ fontSize: 11 }}>📦</span>
+                              <select
+                                value={item.depot_origine || selectedDepot}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const newDep = e.target.value;
+                                  setCart((prev) =>
+                                    prev.map((ci) =>
+                                      ci.id === item.id ? { ...ci, depot_origine: newDep } : ci
+                                    )
+                                  );
+                                  setSuccess(`Article transféré vers : ${newDep}`);
+                                  setTimeout(() => setSuccess(null), 2500);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  color: "#4338ca",
+                                  background: "#eef2ff",
+                                  border: "1px solid #c7d2fe",
+                                  borderRadius: 5,
+                                  padding: "1px 4px",
+                                  cursor: "pointer",
+                                  outline: "none",
+                                }}
+                                title="Changer le dépôt source pour cet article sans vider le panier"
+                              >
+                                {allowedDepotsList.map((depName) => {
+                                  const curStock = getAvailableArticleStock(item, depName);
+                                  return (
+                                    <option key={depName} value={depName} style={{ color: "#000" }}>
+                                      {depName} ({curStock} dispo)
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </div>
                           )}
                         </td>
                         <td style={{ ...S.ticketTd, textAlign: "center" }}>
