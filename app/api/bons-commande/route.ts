@@ -15,6 +15,7 @@ export async function GET(request: Request) {
     const statut = searchParams.get('statut');
     const search = searchParams.get('search');
 
+    // First attempt: try querying with organization_id if available
     let query = supabase
       .from('bons_commande')
       .select('*, items:bon_commande_items(*)')
@@ -23,7 +24,6 @@ export async function GET(request: Request) {
     if (session.organization_id) {
       query = query.eq('organization_id', session.organization_id);
     }
-
     if (statut && statut !== 'ALL') {
       query = query.eq('statut', statut);
     }
@@ -31,9 +31,34 @@ export async function GET(request: Request) {
       query = query.or(`numero_bc.ilike.%${search}%,fournisseur_nom.ilike.%${search}%`);
     }
 
-    const { data: bcs, error } = await query;
+    let { data: bcs, error } = await query;
+
+    // If error was caused by missing organization_id column in PostgreSQL, retry without it
+    if (error && (error.code === 'PGRST204' || error.message?.includes('organization_id'))) {
+      let fallbackQuery = supabase
+        .from('bons_commande')
+        .select('*, items:bon_commande_items(*)')
+        .order('created_at', { ascending: false });
+
+      if (statut && statut !== 'ALL') {
+        fallbackQuery = fallbackQuery.eq('statut', statut);
+      }
+      if (search) {
+        fallbackQuery = fallbackQuery.or(`numero_bc.ilike.%${search}%,fournisseur_nom.ilike.%${search}%`);
+      }
+
+      const res = await fallbackQuery;
+      bcs = res.data;
+      error = res.error;
+    }
+
     if (error) {
-      if (error.code === 'PGRST204' || error.message?.includes('bons_commande') || error.message?.includes('schema cache')) {
+      // Only treat genuine missing table error as uninitialized
+      if (
+        error.message?.includes('relation "bons_commande" does not exist') ||
+        error.message?.includes('relation "public.bons_commande" does not exist') ||
+        error.message?.includes("Could not find the 'bons_commande' table")
+      ) {
         console.warn("Table bons_commande not yet created in Supabase. Returning empty array.");
         return NextResponse.json([]);
       }
@@ -62,13 +87,24 @@ export async function POST(request: Request) {
 
     // Auto-generate BC number (e.g., BC-2026-0001)
     const year = new Date().getFullYear();
-    let countQuery = supabase
-      .from('bons_commande')
-      .select('*', { count: 'exact', head: true });
-    if (session.organization_id) {
-      countQuery = countQuery.eq('organization_id', session.organization_id);
+    let count = 0;
+    try {
+      let countQuery = supabase
+        .from('bons_commande')
+        .select('*', { count: 'exact', head: true });
+      if (session.organization_id) {
+        countQuery = countQuery.eq('organization_id', session.organization_id);
+      }
+      const countRes = await countQuery;
+      if (countRes.error && (countRes.error.code === 'PGRST204' || countRes.error.message?.includes('organization_id'))) {
+        const fbRes = await supabase.from('bons_commande').select('*', { count: 'exact', head: true });
+        count = fbRes.count || 0;
+      } else {
+        count = countRes.count || 0;
+      }
+    } catch {
+      count = 0;
     }
-    const { count } = await countQuery;
 
     const nextSeq = (count || 0) + 1;
     const numero_bc = `BC-${year}-${String(nextSeq).padStart(4, '0')}`;
@@ -76,28 +112,56 @@ export async function POST(request: Request) {
     const total_ht = items.reduce((sum: number, it: any) => sum + (Number(it.quantite) * Number(it.prix_achat_unitaire) || 0), 0);
     const total_ttc = total_ht; // Standard HT / TTC
 
-    // Insert Header
-    const { data: newBc, error: headerErr } = await supabase
-      .from('bons_commande')
-      .insert({
-        numero_bc,
-        date_commande: new Date().toISOString().split('T')[0],
-        date_livraison_prevue: date_livraison_prevue || null,
-        fournisseur_id: fournisseur_id || null,
-        fournisseur_nom,
-        statut: 'BROUILLON',
-        total_ht,
-        total_ttc,
-        notes: notes || '',
-        depot_id: depot_id || null,
-        created_by: session.username || 'Admin',
-        organization_id: session.organization_id || '00000000-0000-0000-0000-000000000001',
-      })
-      .select()
-      .single();
+    // Base header payload
+    const baseHeaderPayload: Record<string, any> = {
+      numero_bc,
+      date_commande: new Date().toISOString().split('T')[0],
+      date_livraison_prevue: date_livraison_prevue || null,
+      fournisseur_id: fournisseur_id || null,
+      fournisseur_nom,
+      statut: 'BROUILLON',
+      total_ht,
+      total_ttc,
+      notes: notes || '',
+      depot_id: depot_id || null,
+      created_by: session.username || 'Admin',
+    };
+
+    // Try inserting with organization_id first
+    let newBc: any = null;
+    let headerErr: any = null;
+
+    if (session.organization_id) {
+      const { data, error } = await supabase
+        .from('bons_commande')
+        .insert({
+          ...baseHeaderPayload,
+          organization_id: session.organization_id,
+        })
+        .select()
+        .single();
+      newBc = data;
+      headerErr = error;
+    }
+
+    // If no org_id or insertion failed due to missing organization_id column, retry without it
+    if (!newBc && (!session.organization_id || (headerErr && (headerErr.code === 'PGRST204' || headerErr.message?.includes('organization_id'))))) {
+      const { data, error } = await supabase
+        .from('bons_commande')
+        .insert(baseHeaderPayload)
+        .select()
+        .single();
+      newBc = data;
+      headerErr = error;
+    }
 
     if (headerErr) {
-      if (headerErr.code === 'PGRST204' || headerErr.message?.includes('bons_commande') || headerErr.message?.includes('schema cache')) {
+      const isMissingTable =
+        headerErr.message?.includes('relation "bons_commande" does not exist') ||
+        headerErr.message?.includes('relation "public.bons_commande" does not exist') ||
+        (headerErr.code === 'PGRST204' && headerErr.message?.includes("'bons_commande' table"));
+
+      if (isMissingTable) {
         return NextResponse.json({
           error: "La table 'bons_commande' n'est pas encore initialisée dans Supabase. Veuillez exécuter le script SQL dans l'éditeur Supabase SQL Editor pour activer ce module.",
           migrationRequired: true
@@ -107,7 +171,7 @@ export async function POST(request: Request) {
     }
 
     // Insert Items
-    const itemsToInsert = items.map((it: any) => ({
+    const baseItemsToInsert = items.map((it: any) => ({
       bon_commande_id: newBc.id,
       article_id: it.article_id || null,
       reference: it.reference || null,
@@ -115,12 +179,24 @@ export async function POST(request: Request) {
       quantite: Number(it.quantite) || 1,
       prix_achat_unitaire: Number(it.prix_achat_unitaire) || 0,
       total_ligne: (Number(it.quantite) || 1) * (Number(it.prix_achat_unitaire) || 0),
-      organization_id: session.organization_id || '00000000-0000-0000-0000-000000000001',
     }));
 
-    const { error: itemsErr } = await supabase
-      .from('bon_commande_items')
-      .insert(itemsToInsert);
+    // Try with organization_id if present
+    let itemsErr: any = null;
+    if (session.organization_id) {
+      const orgItems = baseItemsToInsert.map((item) => ({
+        ...item,
+        organization_id: session.organization_id,
+      }));
+      const res = await supabase.from('bon_commande_items').insert(orgItems);
+      itemsErr = res.error;
+    }
+
+    // If insertion failed due to missing organization_id column or not provided, retry without it
+    if (!session.organization_id || (itemsErr && (itemsErr.code === 'PGRST204' || itemsErr.message?.includes('organization_id')))) {
+      const res = await supabase.from('bon_commande_items').insert(baseItemsToInsert);
+      itemsErr = res.error;
+    }
 
     if (itemsErr) throw itemsErr;
 

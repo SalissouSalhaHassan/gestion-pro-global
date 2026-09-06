@@ -45,9 +45,10 @@ type BC = {
   items?: any[];
 };
 
-const SQL_MIGRATION_SCRIPT = `-- Migration: Création des tables Bons de Commande & Articles
+const SQL_MIGRATION_SCRIPT = `-- Migration: Création & Mise à niveau multi-tenant des Bons de Commande
 CREATE TABLE IF NOT EXISTS public.bons_commande (
     id SERIAL PRIMARY KEY,
+    organization_id UUID REFERENCES public.organizations(id),
     numero_bc VARCHAR(50) UNIQUE NOT NULL,
     date_commande DATE NOT NULL DEFAULT CURRENT_DATE,
     date_livraison_prevue DATE,
@@ -65,6 +66,7 @@ CREATE TABLE IF NOT EXISTS public.bons_commande (
 
 CREATE TABLE IF NOT EXISTS public.bon_commande_items (
     id SERIAL PRIMARY KEY,
+    organization_id UUID REFERENCES public.organizations(id),
     bon_commande_id INTEGER NOT NULL REFERENCES public.bons_commande(id) ON DELETE CASCADE,
     article_id INTEGER REFERENCES public.articles(id) ON DELETE SET NULL,
     reference VARCHAR(100),
@@ -73,6 +75,13 @@ CREATE TABLE IF NOT EXISTS public.bon_commande_items (
     prix_achat_unitaire NUMERIC(15, 2) NOT NULL DEFAULT 0,
     total_ligne NUMERIC(15, 2) NOT NULL DEFAULT 0
 );
+
+-- Mise à niveau si les tables existent déjà sans organization_id
+ALTER TABLE IF EXISTS public.bons_commande 
+  ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id);
+
+ALTER TABLE IF EXISTS public.bon_commande_items 
+  ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id);
 
 ALTER TABLE public.bons_commande ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bon_commande_items ENABLE ROW LEVEL SECURITY;
@@ -85,6 +94,9 @@ CREATE POLICY "Enable read for authenticated users on bon_commande_items"
   ON public.bon_commande_items FOR SELECT USING (true);
 CREATE POLICY "Enable write for authenticated users on bon_commande_items"
   ON public.bon_commande_items FOR ALL USING (true);
+
+CREATE INDEX IF NOT EXISTS idx_bons_commande_org ON public.bons_commande(organization_id);
+CREATE INDEX IF NOT EXISTS idx_bon_commande_items_org ON public.bon_commande_items(organization_id);
 
 NOTIFY pgrst, 'reload schema';`;
 

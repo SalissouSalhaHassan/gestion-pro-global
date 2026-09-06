@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
 import { openWhatsAppDirect } from "@/lib/utils/whatsapp";
+import { useLanguage } from "@/lib/i18n/context";
 
 type BC = {
   id: number;
@@ -41,6 +42,8 @@ type BCDetailModalProps = {
 };
 
 export default function BCDetailModal({ bc, onClose, onRefresh }: BCDetailModalProps) {
+  const { locale, dir } = useLanguage();
+  const isAr = locale === "ar";
   const [receiving, setReceiving] = useState(false);
   const [supplierPhone, setSupplierPhone] = useState("");
   const [showPhonePrompt, setShowPhonePrompt] = useState(false);
@@ -141,27 +144,27 @@ export default function BCDetailModal({ bc, onClose, onRefresh }: BCDetailModalP
               <button
                 onClick={handleReceiveStock}
                 disabled={receiving}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
               >
                 {receiving ? <Loader2 size={14} className="animate-spin" /> : <PackageCheck size={14} />}
-                <span>Valider Réception & Stock</span>
+                <span>{isAr ? "تأكيد الاستلام وإدخال المخزون" : "Valider Réception & Stock"}</span>
               </button>
             )}
 
             <button
               onClick={handleSendWhatsApp}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
               <MessageCircle size={14} />
-              <span>WhatsApp Fournisseur</span>
+              <span>{isAr ? "واتساب المورد" : "WhatsApp Fournisseur"}</span>
             </button>
 
             <button
               onClick={handlePrint}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
               <Printer size={14} />
-              <span>Imprimer A4</span>
+              <span>{isAr ? "طباعة A4" : "Imprimer A4"}</span>
             </button>
 
             <button
