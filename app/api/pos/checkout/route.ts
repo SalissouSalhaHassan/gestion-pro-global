@@ -697,7 +697,6 @@ export async function POST(request: Request) {
         montant_paye: initialPaye,
         montant_restant: initialRestant,
         statut,
-        moyen_reglement: normalizedPaymentMethod,
         bl_number: blNumber,
         organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
       };
@@ -710,16 +709,22 @@ export async function POST(request: Request) {
         .select("id, bl_number, date_facture, total_ht, total_ttc, total_tva, montant_paye, montant_restant, statut, client_id, vendeur, organization_id")
         .single();
 
-      // Graceful fallback if schema lacks 'emplacement' column
-      if (invError && (invError.message?.includes("emplacement") || invError.code === "PGRST204")) {
-        delete invoicePayload.emplacement;
-        const retryRes = await supabase
-          .from("factures")
-          .insert([invoicePayload])
-          .select("id, bl_number, date_facture, total_ht, total_ttc, total_tva, montant_paye, montant_restant, statut, client_id, vendeur, organization_id")
-          .single();
-        createdInvoice = retryRes.data;
-        invError = retryRes.error;
+      // Graceful fallback if any column is missing in remote Supabase schema cache
+      while (invError && invError.message) {
+        const match = invError.message.match(/Could not find the '([^']+)' column of 'factures'/i);
+        if (match && match[1] && invoicePayload[match[1]] !== undefined) {
+          console.warn(`Stripping missing column '${match[1]}' from factures insert payload.`);
+          delete invoicePayload[match[1]];
+          const retryRes = await supabase
+            .from("factures")
+            .insert([invoicePayload])
+            .select("id, bl_number, date_facture, total_ht, total_ttc, total_tva, montant_paye, montant_restant, statut, client_id, vendeur, organization_id")
+            .single();
+          createdInvoice = retryRes.data;
+          invError = retryRes.error;
+        } else {
+          break;
+        }
       }
 
       if (invError) throw invError;
@@ -862,6 +867,7 @@ export async function POST(request: Request) {
       // Construct instant hydrated invoice object
       const returnedInvoice = {
         ...createdInvoice,
+        moyen_reglement: normalizedPaymentMethod,
         client_nom: clientData.nom || "Client Comptant",
         clients: clientData,
         items: lineItemsToInsert,
