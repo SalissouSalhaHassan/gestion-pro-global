@@ -351,7 +351,14 @@ export default function InvoiceModal({ invoiceId, initialInvoice, onClose }: Inv
                 </tr>
               </thead>
               <tbody className="font-medium text-[11px]">
-                {items.map((item, i) => (
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-4 text-center text-slate-400 italic font-normal">
+                      Chargement des articles...
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((item, i) => (
                   <tr key={i} className="border-b border-black last:border-b-0">
                     {mode === 'Invoice' ? (
                       <>
@@ -369,7 +376,7 @@ export default function InvoiceModal({ invoiceId, initialInvoice, onClose }: Inv
                       </>
                     )}
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>

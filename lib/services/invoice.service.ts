@@ -178,39 +178,36 @@ export class InvoiceService {
 
     // Fallback: If any facture_items is missing description, fetch from articles, and resolve depot_origine
     if (data.facture_items && Array.isArray(data.facture_items)) {
-      // Fetch movements for this invoice to accurately resolve originating depot per item
+      const needsMovementLookup = !!data.bl_number && data.facture_items.some((it: any) => !it.depot_origine && !it.depots?.nom && !it.depot?.nom);
+      const needsSellerLookup = !data.emplacement && !!data.vendeur;
+
       const movementsMap = new Map<number, string>();
-      if (data.bl_number) {
+      let fallbackDepot = data.emplacement || '';
+
+      if (needsMovementLookup || needsSellerLookup) {
         try {
-          const { data: mvts } = await this.supabase
-            .from('mouvements')
-            .select('article_id, depot')
-            .eq('nr_doc', data.bl_number);
-          if (mvts) {
-            mvts.forEach((m: any) => {
+          const [mvtsRes, sellerRes] = await Promise.all([
+            needsMovementLookup
+              ? this.supabase.from('mouvements').select('article_id, depot').eq('nr_doc', data.bl_number)
+              : Promise.resolve({ data: null }),
+            needsSellerLookup
+              ? this.supabase.from('users').select('emplacement').eq('utilisateur', data.vendeur).maybeSingle()
+              : Promise.resolve({ data: null })
+          ]);
+
+          if (mvtsRes?.data) {
+            mvtsRes.data.forEach((m: any) => {
               if (m.article_id && m.depot && !movementsMap.has(Number(m.article_id))) {
                 movementsMap.set(Number(m.article_id), m.depot);
               }
             });
           }
-        } catch (mvtErr) {
-          console.warn('Could not fetch movements for invoice depot resolution:', mvtErr);
-        }
-      }
 
-      let fallbackDepot = data.emplacement || '';
-      if (!fallbackDepot && data.vendeur) {
-        try {
-          const { data: sellerUser } = await this.supabase
-            .from('users')
-            .select('emplacement')
-            .eq('utilisateur', data.vendeur)
-            .maybeSingle();
-          if (sellerUser?.emplacement) {
-            fallbackDepot = sellerUser.emplacement;
+          if (sellerRes?.data?.emplacement) {
+            fallbackDepot = sellerRes.data.emplacement;
           }
-        } catch (userErr) {
-          console.warn('Could not fetch seller user emplacement:', userErr);
+        } catch (e) {
+          console.warn('Non-fatal error in parallel auxiliary invoice enrichment:', e);
         }
       }
 

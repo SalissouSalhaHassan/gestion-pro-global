@@ -2113,7 +2113,8 @@ function PosPage() {
         });
       }
 
-      await loadPersistedPriceChanges();
+      // Refresh price change history in background without blocking checkout UI
+      loadPersistedPriceChanges().catch(console.error);
 
       // Update local stock after successful sale
       setArticles((prev) =>
@@ -2126,7 +2127,7 @@ function PosPage() {
         })
       );
 
-      // TRIGGER PAYMENT MODAL
+      // TRIGGER PAYMENT MODAL INSTANTLY (Zero-Latency)
       let printId: string | number | null = null;
       
       if (payload.invoice_id) {
@@ -2141,42 +2142,30 @@ function PosPage() {
 
       if (printId) {
         const numPrintId = typeof printId === 'string' ? Number(printId) : printId;
-        console.log("💳 Attempting to open Payment Modal for Invoice ID:", numPrintId);
+        console.log("💳 Opening Payment Modal for Invoice ID:", numPrintId);
         
-        try {
-          // Fetch fresh invoice data for the payment modal
-          const { data: fullInvoice, error: fetchErr } = await supabase
-            .from("factures")
-            .select("*, clients(nom, adresse, tel, gsm, email)")
-            .eq("id", numPrintId)
-            .maybeSingle(); // Use maybeSingle to avoid errors if not found
-
-          if (fetchErr) console.error("❌ Fetch error:", fetchErr);
-
-          const clientRow = fullInvoice?.clients ? (Array.isArray(fullInvoice.clients) ? fullInvoice.clients[0] : fullInvoice.clients) : null;
-          
-          // Construct the invoice object with a robust fallback
-          const invoiceForModal = {
-            id: numPrintId,
-            client_id: fullInvoice?.client_id || selectedClientId || 1,
-            bl_number: fullInvoice?.bl_number || payload.sale?.numero || `FACT-${numPrintId}`,
-            total_ttc: fullInvoice?.total_ttc || cart.reduce((acc, it) => acc + (it.p_vente_ttc * it.quantite), 0),
-            montant_restant: fullInvoice?.montant_restant !== undefined 
-              ? fullInvoice.montant_restant 
-              : (cart.reduce((acc, it) => acc + (it.p_vente_ttc * it.quantite), 0) - Number(receivedAmount)),
-            client_nom: clientRow?.nom || fullInvoice?.client_nom || clients.find(c => String(c.id) === String(fullInvoice?.client_id || selectedClientId))?.nom || "Client Divers",
-            ...fullInvoice // Spread original fields if any
-          };
-          
-          console.log("📦 Invoice object for modal:", invoiceForModal);
-          setPaymentInvoice(invoiceForModal);
-          setShowPaymentModal(true);
-          localStorage.setItem("last_invoice_id", String(numPrintId));
-        } catch (err) {
-          console.error("❌ Error preparing payment modal:", err);
-          // Last resort fallback
-          setPrintInvoiceId(numPrintId);
-        }
+        // Fast-path: use pre-hydrated invoice from server response
+        const serverInv = payload.invoice;
+        const clientRow = serverInv?.clients ? (Array.isArray(serverInv.clients) ? serverInv.clients[0] : serverInv.clients) : null;
+        
+        const invoiceForModal = {
+          id: numPrintId,
+          client_id: serverInv?.client_id || selectedClientId || 1,
+          bl_number: serverInv?.bl_number || payload.sale?.numero || `FACT-${numPrintId}`,
+          total_ttc: serverInv?.total_ttc || cart.reduce((acc, it) => acc + (it.p_vente_ttc * it.quantite), 0),
+          montant_restant: serverInv?.montant_restant !== undefined 
+            ? serverInv.montant_restant 
+            : Math.max(0, (cart.reduce((acc, it) => acc + (it.p_vente_ttc * it.quantite), 0) - Number(receivedAmount))),
+          montant_paye: serverInv?.montant_paye !== undefined
+            ? serverInv.montant_paye
+            : Number(receivedAmount),
+          client_nom: clientRow?.nom || serverInv?.client_nom || clients.find(c => String(c.id) === String(serverInv?.client_id || selectedClientId))?.nom || "Client Divers",
+          ...serverInv
+        };
+        
+        setPaymentInvoice(invoiceForModal);
+        setShowPaymentModal(true);
+        localStorage.setItem("last_invoice_id", String(numPrintId));
       }
       
       setSuccess(
@@ -3809,7 +3798,11 @@ function PosPage() {
         <InvoiceModal 
           key={`invoice-${printInvoiceId}`}
           invoiceId={printInvoiceId} 
-          onClose={() => setPrintInvoiceId(null)} 
+          initialInvoice={paymentInvoice}
+          onClose={() => {
+            setPrintInvoiceId(null);
+            setPaymentInvoice(null);
+          }} 
         />
       )}
 

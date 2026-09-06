@@ -45,10 +45,12 @@ interface PaymentModalProps {
 
 export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentModalProps) {
   const [activeTab, setActiveTab] = useState<"history" | "advances">("history");
-  const [payments, setPayments] = useState<Payment[]>([]);
+  const [payments, setPayments] = useState<Payment[]>(
+    invoice.paiements || invoice.payments || []
+  );
   const [advances, setAdvances] = useState<Advance[]>([]);
   const [totalAdvanceBalance, setTotalAdvanceBalance] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!(invoice.paiements && invoice.paiements.length > 0));
   const [advancesLoading, setAdvancesLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -109,7 +111,6 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
       const aRes = await fetch(`/api/clients/${cId}/advances`);
       if (aRes.ok) {
         const aData = await aRes.json();
-        // Support both { advances: [...], totalBalance } and raw array
         const list: Advance[] = Array.isArray(aData) 
           ? aData 
           : (Array.isArray(aData?.advances) 
@@ -137,13 +138,43 @@ export default function PaymentModal({ invoice, onClose, onRefresh }: PaymentMod
   };
 
   const fetchData = async () => {
-    setLoading(true);
+    // If we already have payments pre-hydrated, don't show full-screen loader
+    if (!payments.length && !invoice.paiements) {
+      setLoading(true);
+    }
     try {
-      const pRes = await fetch(`/api/invoices/${invoice.id}/payments`);
-      const pData = await pRes.json();
-      setPayments(Array.isArray(pData) ? pData : []);
+      let cId = getEffectiveClientId();
 
-      await loadAdvances();
+      // Parallel execution: fetch payments and advances concurrently
+      const [pRes, aRes] = await Promise.all([
+        fetch(`/api/invoices/${invoice.id}/payments`),
+        cId ? fetch(`/api/clients/${cId}/advances`) : Promise.resolve(null)
+      ]);
+
+      if (pRes && pRes.ok) {
+        const pData = await pRes.json();
+        setPayments(Array.isArray(pData) ? pData : []);
+      }
+
+      if (aRes && aRes.ok) {
+        const aData = await aRes.json();
+        const list: Advance[] = Array.isArray(aData) 
+          ? aData 
+          : (Array.isArray(aData?.advances) 
+              ? aData.advances 
+              : (Array.isArray(aData?.data) ? aData.data : []));
+        
+        const validAdvances = list.filter(a => Number(a.montant_restant) > 0);
+        setAdvances(validAdvances);
+
+        const total = typeof aData?.totalBalance === 'number'
+          ? aData.totalBalance
+          : validAdvances.reduce((sum, a) => sum + Number(a.montant_restant || 0), 0);
+        setTotalAdvanceBalance(total);
+      } else if (!cId) {
+        // Fallback for missing cId in parallel branch
+        loadAdvances();
+      }
     } catch (err) {
       console.error("Error fetching payment data:", err);
     } finally {

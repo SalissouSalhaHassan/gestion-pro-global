@@ -787,61 +787,63 @@ export async function POST(request: Request) {
           await supabase.from("facture_items").insert(itemsPayload);
         }
 
-        // 4. Update Stocks in depot
-        for (const item of items) {
-          const qte = Number(item.quantite || 1);
-          const itemDepot = (item as any).depot_origine || canonicalDepotName;
-          let curStockQ = supabase
-            .from("stocks")
-            .select("id, quantite")
-            .eq("article_id", Number(item.id))
-            .eq("depot_nom", itemDepot);
-          if (user.organization_id) {
-            curStockQ = curStockQ.eq("organization_id", user.organization_id);
-          }
-          const { data: curStock } = await curStockQ.maybeSingle();
-
-          if (curStock) {
-            const currentQty = Number(curStock.quantite || 0);
-            let updateStockQ = supabase
+        // 4. Update Stocks and record Mouvements in parallel
+        await Promise.all(
+          items.map(async (item: any) => {
+            const qte = Number(item.quantite || 1);
+            const itemDepot = (item as any).depot_origine || canonicalDepotName;
+            let curStockQ = supabase
               .from("stocks")
-              .update({ quantite: currentQty - qte })
-              .eq("id", curStock.id);
+              .select("id, quantite")
+              .eq("article_id", Number(item.id))
+              .eq("depot_nom", itemDepot);
             if (user.organization_id) {
-              updateStockQ = updateStockQ.eq("organization_id", user.organization_id);
+              curStockQ = curStockQ.eq("organization_id", user.organization_id);
             }
-            await updateStockQ;
-          } else {
-            await supabase
-              .from("stocks")
-              .insert([{
+            const { data: curStock } = await curStockQ.maybeSingle();
+
+            if (curStock) {
+              const currentQty = Number(curStock.quantite || 0);
+              let updateStockQ = supabase
+                .from("stocks")
+                .update({ quantite: currentQty - qte })
+                .eq("id", curStock.id);
+              if (user.organization_id) {
+                updateStockQ = updateStockQ.eq("organization_id", user.organization_id);
+              }
+              await updateStockQ;
+            } else {
+              await supabase
+                .from("stocks")
+                .insert([{
+                  article_id: Number(item.id),
+                  depot_nom: itemDepot,
+                  quantite: -qte,
+                  organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
+                }]);
+            }
+
+            // Record Mouvement
+            try {
+              await supabase.from("mouvements").insert([{
                 article_id: Number(item.id),
-                depot_nom: itemDepot,
+                nr_doc: blNumber,
+                date_mouvement: new Date().toISOString(),
+                fournisseur_client: `Vente Client #${clientId} (${itemDepot})`,
+                entree: 0,
+                sortie: qte,
                 quantite: -qte,
+                pv: item.prix || 0,
+                type: "VENTE_POS",
+                depot: itemDepot,
+                utilisateur: user.username ?? "Caisse",
                 organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
               }]);
-          }
-
-          // Record Mouvement
-          try {
-            await supabase.from("mouvements").insert([{
-              article_id: Number(item.id),
-              nr_doc: blNumber,
-              date_mouvement: new Date().toISOString(),
-              fournisseur_client: `Vente Client #${clientId} (${itemDepot})`,
-              entree: 0,
-              sortie: qte,
-              quantite: -qte,
-              pv: item.prix || 0,
-              type: "VENTE_POS",
-              depot: itemDepot,
-              utilisateur: user.username ?? "Caisse",
-              organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
-            }]);
-          } catch (mvtErr) {
-            // Mouvements is optional
-          }
-        }
+            } catch (mvtErr) {
+              // Mouvements is optional
+            }
+          })
+        );
 
         // 5. Record Initial Payment (using exact paiements schema)
         if (initialPaye > 0) {
@@ -982,7 +984,7 @@ export async function POST(request: Request) {
       }
       const { data: finalInvoiceRow } = await supabase
         .from("factures")
-        .select("bl_number, total_ttc")
+        .select("*, clients(nom, adresse, tel, gsm, email)")
         .eq("id", extractedId)
         .single();
 
@@ -1013,10 +1015,22 @@ export async function POST(request: Request) {
       }
     }
 
+    // Prepare complete invoice data to return to client
+    let returnedInvoice: any = null;
+    if (extractedId) {
+      const { data: invRow } = await supabase
+        .from("factures")
+        .select("*, clients(nom, adresse, tel, gsm, email)")
+        .eq("id", extractedId)
+        .maybeSingle();
+      returnedInvoice = invRow;
+    }
+
     return NextResponse.json({
       ok: true,
       sale: result || { id: extractedId },
       invoice_id: extractedId,
+      invoice: returnedInvoice,
       debug: {
         extractedId,
         result,
