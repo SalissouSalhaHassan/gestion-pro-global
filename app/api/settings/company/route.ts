@@ -58,20 +58,21 @@ export async function GET(req: NextRequest) {
       invoice_visibility_policy: "shared",
     };
 
-    if (companyData?.capital_social && companyData.capital_social.startsWith("{")) {
-      try {
-        const parsed = JSON.parse(companyData.capital_social);
-        branding = { ...branding, ...parsed };
-      } catch (e) {}
-    }
-
-    // Prefer native columns if present
+    // Check native columns first
     if (companyData?.cachet_url) branding.cachet_url = companyData.cachet_url;
     if (companyData?.brand_color) branding.brand_color = companyData.brand_color;
     if (companyData?.slogan) branding.slogan = companyData.slogan;
     if (typeof companyData?.show_stamp === "boolean") branding.show_stamp = companyData.show_stamp;
     if (typeof companyData?.show_qr_code === "boolean") branding.show_qr_code = companyData.show_qr_code;
     if (companyData?.invoice_visibility_policy) branding.invoice_visibility_policy = companyData.invoice_visibility_policy;
+
+    // Capital_social JSON contains explicitly saved settings from the UI
+    if (companyData?.capital_social && companyData.capital_social.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(companyData.capital_social);
+        branding = { ...branding, ...parsed };
+      } catch (e) {}
+    }
 
     return NextResponse.json({
       ok: true,
@@ -225,6 +226,14 @@ export async function POST(req: NextRequest) {
       } else {
         savedData = updated;
       }
+
+      // Ensure native column is also synced if present
+      try {
+        await supabase
+          .from("informations_entreprise")
+          .update({ invoice_visibility_policy: invoiceVisibilityPolicy })
+          .eq("id", existing.id);
+      } catch (syncColErr) {}
     } else {
       // 1st Attempt: Insert with all extended columns
       let { data: inserted, error: insertErr } = await supabase

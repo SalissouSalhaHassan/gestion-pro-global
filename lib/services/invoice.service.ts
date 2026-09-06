@@ -48,9 +48,6 @@ export class InvoiceService {
         .eq('organization_id', orgId)
         .maybeSingle();
 
-      if (comp?.invoice_visibility_policy) {
-        return comp.invoice_visibility_policy as any;
-      }
       if (comp?.capital_social && comp.capital_social.startsWith('{')) {
         try {
           const parsed = JSON.parse(comp.capital_social);
@@ -58,6 +55,9 @@ export class InvoiceService {
             return parsed.invoice_visibility_policy as any;
           }
         } catch {}
+      }
+      if (comp?.invoice_visibility_policy) {
+        return comp.invoice_visibility_policy as any;
       }
     } catch (err) {
       console.warn('Failed to load invoice_visibility_policy, defaulting to shared:', err);
