@@ -1,5 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { applyUserScope } from '@/lib/utils/scoping';
+import { getAllowedDepots } from '@/lib/auth_helper';
 
 export type InvoiceItem = {
   id?: number;
