@@ -1900,14 +1900,14 @@ function PosPage() {
 
   const handleDepotChange = useCallback((newDepot: string) => {
     setSelectedDepot(newDepot);
-    // Keep ticket items intact and update their depot_origine seamlessly!
+    // Keep ticket items intact and preserve individual item depot selections
     setCart((prev) =>
       prev.map((it) => ({
         ...it,
-        depot_origine: newDepot,
+        depot_origine: it.depot_origine || newDepot,
       }))
     );
-    setSuccess(`📍 Dépôt changé en : ${newDepot} (Ticket de caisse conservé)`);
+    setSuccess(`📍 Dépôt actif : ${newDepot} (Ticket de caisse conservé)`);
     setTimeout(() => setSuccess(null), 3000);
   }, []);
 

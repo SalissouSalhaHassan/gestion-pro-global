@@ -398,6 +398,7 @@ export async function POST(request: Request) {
             id: item.id,
             quantite: Number(item.quantite),
             prix: Number(item.prix || 0),
+            depot_origine: item.depot_origine ? String(item.depot_origine).trim() : null,
           }))
           .filter(
             (item) => !!item.id && item.quantite > 0
