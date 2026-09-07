@@ -245,16 +245,39 @@ export class ContractService {
 
     if (contractId) {
       payload.updated_at = new Date().toISOString();
-      const { error } = await this.supabase
+      let { error } = await this.supabase
         .from('contrats')
         .update(payload)
         .eq('id', contractId);
 
+      // Fallback if annee_debut / mois_debut columns do not exist yet in DB
+      if (error && (error.message?.includes('annee_debut') || error.message?.includes('mois_debut') || error.message?.includes('schema cache'))) {
+        console.warn("Retrying contract update without annee_debut/mois_debut due to schema cache mismatch");
+        delete payload.annee_debut;
+        delete payload.mois_debut;
+        const retryRes = await this.supabase
+          .from('contrats')
+          .update(payload)
+          .eq('id', contractId);
+        error = retryRes.error;
+      }
+
       if (error) throw new Error(error.message);
     } else {
-      const { error } = await this.supabase
+      let { error } = await this.supabase
         .from('contrats')
         .insert(payload);
+
+      // Fallback if annee_debut / mois_debut columns do not exist yet in DB
+      if (error && (error.message?.includes('annee_debut') || error.message?.includes('mois_debut') || error.message?.includes('schema cache'))) {
+        console.warn("Retrying contract insert without annee_debut/mois_debut due to schema cache mismatch");
+        delete payload.annee_debut;
+        delete payload.mois_debut;
+        const retryRes = await this.supabase
+          .from('contrats')
+          .insert(payload);
+        error = retryRes.error;
+      }
 
       if (error) throw new Error(error.message);
     }

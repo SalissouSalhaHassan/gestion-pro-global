@@ -6,8 +6,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, User, Home, Wallet, Save, X } from "lucide-react";
+import { Loader2, User, Home, Wallet, Save, X, Copy, Check, AlertCircle, Database } from "lucide-react";
 import type { Contract } from "@/lib/services/loyer.service";
+
+export const SQL_CONTRATS_MIGRATION = `-- ==============================================================================
+-- MIGRATION: Add annee_debut and mois_debut to contrats table
+-- ==============================================================================
+
+-- 1. Add annee_debut & mois_debut to contrats if missing
+ALTER TABLE public.contrats ADD COLUMN IF NOT EXISTS annee_debut INTEGER DEFAULT 2026;
+ALTER TABLE public.contrats ADD COLUMN IF NOT EXISTS mois_debut INTEGER DEFAULT 1;
+ALTER TABLE public.contrats ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+-- 2. Ensure contrat_paiements has organization_id
+ALTER TABLE public.contrat_paiements ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+-- 3. Create index for performance
+CREATE INDEX IF NOT EXISTS idx_contrats_annee_mois ON public.contrats(annee_debut, mois_debut);
+CREATE INDEX IF NOT EXISTS idx_contrats_org ON public.contrats(organization_id);
+CREATE INDEX IF NOT EXISTS idx_contrat_paiements_org ON public.contrat_paiements(organization_id);
+
+-- 4. Reload PostgREST schema cache
+NOTIFY pgrst, 'reload schema';`;
 
 const Field = ({ label, dataKey, form, onChange, required, type = "text", colSpan = false }: { label: string; dataKey: string; form: Record<string, string>; onChange: (key: string, value: string) => void; required?: boolean; type?: string; colSpan?: boolean }) => (
   <div className={colSpan ? "md:col-span-2" : ""}>
@@ -55,6 +75,13 @@ export default function ContractFormDialog({ open, onClose, onSaved, contractId 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [copiedSql, setCopiedSql] = useState(false);
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SQL_CONTRATS_MIGRATION);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 3000);
+  };
 
   // Generate reference for new contracts
   useEffect(() => {
@@ -241,8 +268,30 @@ export default function ContractFormDialog({ open, onClose, onSaved, contractId 
 
             {/* Error */}
             {error && (
-              <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-xl text-sm font-bold">
-                {error}
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-2xl text-sm font-bold space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <AlertCircle size={20} className="text-rose-600 shrink-0" />
+                  <span>{error}</span>
+                </div>
+                {(error.includes("annee_debut") || error.includes("mois_debut") || error.includes("schema cache") || error.includes("does not exist")) && (
+                  <div className="p-3.5 bg-white rounded-xl border border-rose-200 text-xs space-y-2 text-slate-700 font-normal">
+                    <p className="font-bold text-slate-900 flex items-center gap-2">
+                      <Database size={16} className="text-indigo-600" />
+                      Colonnes manquantes dans la table <code className="font-mono text-rose-600 font-bold">contrats</code>
+                    </p>
+                    <p className="text-slate-500">
+                      Les colonnes <code className="font-mono text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded">annee_debut</code> et <code className="font-mono text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded">mois_debut</code> doivent être ajoutées à votre base Supabase.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleCopySql}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl transition-all shadow-sm cursor-pointer mt-1"
+                    >
+                      {copiedSql ? <Check size={16} /> : <Copy size={16} />}
+                      <span>{copiedSql ? "Script SQL Copié avec succès !" : "Copier le Script SQL (1-Clic)"}</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
