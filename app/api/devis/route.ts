@@ -113,7 +113,24 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (devisErr) throw new Error(devisErr.message);
+    if (devisErr) {
+      if (
+        devisErr.message &&
+        (devisErr.message.includes("does not exist") ||
+          devisErr.message.includes("schema cache") ||
+          devisErr.code === "42P01" ||
+          devisErr.code === "PGRST205")
+      ) {
+        return NextResponse.json(
+          {
+            error: "La table 'public.devis' n'est pas encore initialisée dans Supabase. Veuillez exécuter le script SQL dans Supabase SQL Editor.",
+            code: "DEVIS_TABLE_MISSING",
+          },
+          { status: 400 }
+        );
+      }
+      throw new Error(devisErr.message);
+    }
 
     // 2. Insert Devis Items
     const itemsToInsert = items.map((it: any) => {
@@ -141,7 +158,12 @@ export async function POST(request: Request) {
       };
     });
 
-    const { error: itemsErr } = await supabase.from("devis_items").insert(itemsToInsert);
+    let { error: itemsErr } = await supabase.from("devis_items").insert(itemsToInsert);
+    if (itemsErr && itemsErr.message && itemsErr.message.includes("organization_id")) {
+      const fallbackItems = itemsToInsert.map(({ organization_id, ...rest }: any) => rest);
+      const retry = await supabase.from("devis_items").insert(fallbackItems);
+      itemsErr = retry.error;
+    }
     if (itemsErr) throw new Error(itemsErr.message);
 
     return NextResponse.json(newDevis, { status: 201 });

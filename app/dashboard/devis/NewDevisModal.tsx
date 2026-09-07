@@ -14,11 +14,16 @@ import {
   Loader2,
   Sparkles,
   Layers,
-  Package
+  Package,
+  Database,
+  Copy,
+  Check,
+  AlertCircle
 } from "lucide-react";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
 import { useLanguage } from "@/lib/i18n/context";
 import { createClient } from "@/lib/supabase/client";
+import { DEVIS_SQL_MIGRATION } from "./migration_sql";
 
 const supabase = createClient();
 
@@ -36,6 +41,8 @@ export default function NewDevisModal({
   const [articles, setArticles] = useState<any[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [dbMissingError, setDbMissingError] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Form states
   const [selectedClientId, setSelectedClientId] = useState<number | "">("");
@@ -152,6 +159,7 @@ export default function NewDevisModal({
 
     try {
       setSaving(true);
+      setDbMissingError(false);
       const res = await fetch("/api/devis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -167,8 +175,20 @@ export default function NewDevisModal({
         }),
       });
 
+      const json = await res.json();
       if (!res.ok) {
-        const json = await res.json();
+        if (
+          json.code === "DEVIS_TABLE_MISSING" ||
+          (json.error &&
+            (json.error.includes("devis") ||
+              json.error.includes("schema cache") ||
+              json.error.includes("does not exist") ||
+              json.error.includes("42P01") ||
+              json.error.includes("PGRST205")))
+        ) {
+          setDbMissingError(true);
+          return;
+        }
         throw new Error(json.error || "Erreur lors de l'enregistrement");
       }
 
@@ -210,6 +230,58 @@ export default function NewDevisModal({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6 overflow-y-auto max-h-[80vh]">
+          {/* Missing DB Table Notice */}
+          {dbMissingError && (
+            <div className="p-5 rounded-2xl bg-amber-50 border-2 border-amber-400 text-amber-950 space-y-3 animate-in fade-in">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-xl bg-amber-200/70 text-amber-800 shrink-0">
+                  <Database size={22} />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-black">
+                    {locale === "ar"
+                      ? "⚠️ جدول عروض الأسعار (public.devis) غير مهيأ في Supabase"
+                      : "⚠️ Table 'public.devis' non installée dans Supabase"}
+                  </h4>
+                  <p className="text-xs text-amber-900 leading-relaxed font-medium">
+                    {locale === "ar"
+                      ? "اضغط على زر (نسخ كود التثبيت SQL) بالأسفل والصقه في Supabase SQL Editor واضغط على RUN، ثم اضغط على (إعادة المحاولة)."
+                      : "Cliquez sur le bouton ci-dessous pour copier le script SQL, exécutez-le dans Supabase SQL Editor (RUN), puis réessayez."}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(DEVIS_SQL_MIGRATION);
+                    setCopiedSql(true);
+                    setTimeout(() => setCopiedSql(false), 3000);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow cursor-pointer"
+                >
+                  {copiedSql ? <Check size={15} /> : <Copy size={15} />}
+                  <span>
+                    {copiedSql
+                      ? locale === "ar"
+                        ? "تم نسخ السكربت بنجاح!"
+                        : "Script SQL Copié !"
+                      : locale === "ar"
+                      ? "نسخ كود التثبيت SQL"
+                      : "Copier le script SQL"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow cursor-pointer"
+                >
+                  <span>{locale === "ar" ? "إعادة المحاولة" : "Réessayer"}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Client & Dates Grid */}
           <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-4">
             <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">

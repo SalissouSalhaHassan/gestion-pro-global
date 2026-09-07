@@ -1,7 +1,6 @@
 -- ==============================================================================
 -- MIGRATION: 20260903_create_devis_proforma.sql
 -- DESCRIPTION: Quotations & Proforma Invoices (Devis & Factures Proforma)
--- AUTHOR: Lead Software Architect & Technical Supervisor
 -- SYSTEM: Gestion Pro Global (Enterprise Edition)
 -- ==============================================================================
 
@@ -40,10 +39,18 @@ CREATE TABLE IF NOT EXISTS public.devis_items (
     remise_pourcentage NUMERIC(5, 2) DEFAULT 0,
     taux_tva NUMERIC(5, 2) DEFAULT 0,
     total_ligne_ht NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    total_ligne_ttc NUMERIC(15, 2) NOT NULL DEFAULT 0
+    total_ligne_ttc NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    organization_id UUID
 );
 
--- 3. Indexes for fast lookup
+-- 3. Upgrade if tables already exist
+ALTER TABLE IF EXISTS public.devis 
+  ADD COLUMN IF NOT EXISTS organization_id UUID;
+
+ALTER TABLE IF EXISTS public.devis_items 
+  ADD COLUMN IF NOT EXISTS organization_id UUID;
+
+-- 4. Indexes for fast lookup
 CREATE INDEX IF NOT EXISTS idx_devis_date 
   ON public.devis (date_devis DESC);
 
@@ -53,21 +60,34 @@ CREATE INDEX IF NOT EXISTS idx_devis_client
 CREATE INDEX IF NOT EXISTS idx_devis_statut 
   ON public.devis (statut);
 
+CREATE INDEX IF NOT EXISTS idx_devis_org 
+  ON public.devis (organization_id);
+
 CREATE INDEX IF NOT EXISTS idx_devis_items_devis 
   ON public.devis_items (devis_id);
 
--- 4. Enable Row Level Security (RLS)
+CREATE INDEX IF NOT EXISTS idx_devis_items_org 
+  ON public.devis_items (organization_id);
+
+-- 5. Enable Row Level Security (RLS)
 ALTER TABLE public.devis ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.devis_items ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Enable read for authenticated users on devis" ON public.devis;
 CREATE POLICY "Enable read for authenticated users on devis" 
   ON public.devis FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Enable all for authenticated users on devis" ON public.devis;
 CREATE POLICY "Enable all for authenticated users on devis" 
   ON public.devis FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Enable read for authenticated users on devis_items" ON public.devis_items;
 CREATE POLICY "Enable read for authenticated users on devis_items" 
   ON public.devis_items FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Enable all for authenticated users on devis_items" ON public.devis_items;
 CREATE POLICY "Enable all for authenticated users on devis_items" 
   ON public.devis_items FOR ALL USING (true);
+
+-- 6. Reload schema cache immediately
+NOTIFY pgrst, 'reload schema';
