@@ -125,6 +125,28 @@ export default function NewDevisModal({
     }
   };
 
+  const handleArticleSelect = (index: number, articleId: string) => {
+    if (!articleId) {
+      updateItem(index, "article_id", null);
+      return;
+    }
+    const art = articles.find((a) => String(a.id) === String(articleId));
+    if (art) {
+      const updated = [...items];
+      const pu = Number(art.p_vente_ht || art.p_vente_ttc || 0);
+      const tva = Number(art.taxe || 0);
+      updated[index] = {
+        ...updated[index],
+        article_id: art.id,
+        reference: art.reference || "",
+        description: art.designation || "",
+        pu_ht: pu,
+        taux_tva: tva,
+      };
+      setItems(updated);
+    }
+  };
+
   const updateItem = (index: number, field: string, value: any) => {
     const updated = [...items];
     updated[index] = { ...updated[index], [field]: value };
@@ -420,15 +442,55 @@ export default function NewDevisModal({
                     const lineTotal = (Number(it.qte) || 0) * (Number(it.pu_ht) || 0) * (1 - (Number(it.remise_pourcentage) || 0) / 100);
                     return (
                       <tr key={idx} className="hover:bg-slate-50">
-                        <td className="px-3 py-2">
-                          <input
-                            type="text"
-                            required
-                            value={it.description}
-                            onChange={(e) => updateItem(idx, "description", e.target.value)}
-                            placeholder="Désignation du produit ou service..."
-                            className="w-full bg-transparent font-bold text-slate-800 outline-none text-xs"
-                          />
+                        <td className="px-3 py-2 min-w-[260px]">
+                          <div className="space-y-1.5">
+                            {/* Dropdown connected directly to Catalogue & Gestion des Articles */}
+                            <select
+                              value={it.article_id || ""}
+                              onChange={(e) => handleArticleSelect(idx, e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-indigo-200/80 bg-white text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer"
+                            >
+                              <option value="">
+                                {articles.length === 0
+                                  ? (locale === "ar" ? "جارٍ تحميل دليل الأصناف..." : "Chargement du catalogue...")
+                                  : (locale === "ar" ? "🔍 اختر من دليل الأصناف (Catalogue)..." : "🔍 Choisir dans le Catalogue des Articles...")}
+                              </option>
+                              {articles.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.designation} {a.reference ? `[${a.reference}]` : ""} ({formatCurrencyAmount(a.p_vente_ht || a.p_vente_ttc || 0, "FCFA")})
+                                </option>
+                              ))}
+                            </select>
+
+                            {/* Editable designation with reference badge & catalogue autocomplete */}
+                            <div className="flex items-center gap-1.5">
+                              {it.reference && (
+                                <span className="text-[10px] font-mono font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md shrink-0 border border-indigo-200/60">
+                                  {it.reference}
+                                </span>
+                              )}
+                              <input
+                                type="text"
+                                required
+                                list="catalogue-articles-list"
+                                value={it.description}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  updateItem(idx, "description", val);
+                                  const matched = articles.find(
+                                    (a) =>
+                                      a.designation?.toLowerCase() === val.toLowerCase() ||
+                                      a.reference?.toLowerCase() === val.toLowerCase()
+                                  );
+                                  if (matched) {
+                                    handleArticleSelect(idx, String(matched.id));
+                                  }
+                                }}
+                                placeholder={locale === "ar" ? "اسم الصنف أو كتابة وصف حر..." : "Désignation ou saisie libre..."}
+                                className="w-full px-2.5 py-1 rounded-lg border border-slate-200 bg-white font-bold text-slate-800 outline-none text-xs focus:border-indigo-400"
+                              />
+                            </div>
+                          </div>
                         </td>
                         <td className="px-2 py-2 text-center">
                           <input
@@ -489,6 +551,15 @@ export default function NewDevisModal({
                   </tr>
                 </tfoot>
               </table>
+
+              {/* Datalist connected to Catalogue & Gestion des Articles */}
+              <datalist id="catalogue-articles-list">
+                {articles.map((a) => (
+                  <option key={a.id} value={a.designation}>
+                    {a.reference ? `[${a.reference}] ` : ""}({formatCurrencyAmount(a.p_vente_ht || a.p_vente_ttc || 0, "FCFA")})
+                  </option>
+                ))}
+              </datalist>
             </div>
           </div>
 
