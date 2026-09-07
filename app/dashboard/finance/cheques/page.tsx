@@ -26,6 +26,8 @@ import {
   Printer,
   Copy,
   Check,
+  CheckSquare,
+  Square,
   Sparkles,
   Database
 } from "lucide-react";
@@ -100,6 +102,81 @@ interface ChequeItem {
   fournisseur?: { nom: string; tel?: string } | null;
 }
 
+function numberToFrenchWords(amount: number): string {
+  if (isNaN(amount) || amount === 0) return "zéro";
+
+  const units = ["", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf"];
+  const teens = ["dix", "onze", "douze", "treize", "quatorze", "quinze", "seize", "dix-sept", "dix-huit", "dix-neuf"];
+  const tens = ["", "dix", "vingt", "trente", "quarante", "cinquante", "soixante", "soixante-dix", "quatre-vingt", "quatre-vingt-dix"];
+
+  function chunkToWords(n: number): string {
+    if (n === 0) return "";
+    let str = "";
+    const h = Math.floor(n / 100);
+    const rest = n % 100;
+
+    if (h > 0) {
+      if (h === 1) str += "cent ";
+      else str += units[h] + (rest === 0 ? " cents " : " cent ");
+    }
+
+    if (rest > 0) {
+      if (rest < 10) {
+        str += units[rest];
+      } else if (rest >= 10 && rest < 20) {
+        str += teens[rest - 10];
+      } else {
+        const d = Math.floor(rest / 10);
+        const u = rest % 10;
+        if (d === 7) {
+          str += "soixante-" + teens[u];
+        } else if (d === 8) {
+          if (u === 0) str += "quatre-vingts";
+          else str += "quatre-vingt-" + units[u];
+        } else if (d === 9) {
+          str += "quatre-vingt-" + teens[u];
+        } else {
+          if (u === 1 && d < 8) {
+            str += tens[d] + "-et-un";
+          } else if (u > 0) {
+            str += tens[d] + "-" + units[u];
+          } else {
+            str += tens[d];
+          }
+        }
+      }
+    }
+    return str.trim();
+  }
+
+  const intPart = Math.floor(Math.abs(amount));
+  const billions = Math.floor(intPart / 1000000000);
+  let remainder = intPart % 1000000000;
+  const millions = Math.floor(remainder / 1000000);
+  remainder = remainder % 1000000;
+  const thousands = Math.floor(remainder / 1000);
+  const unitsRest = remainder % 1000;
+
+  const parts: string[] = [];
+
+  if (billions > 0) {
+    parts.push(chunkToWords(billions) + (billions > 1 ? " milliards" : " milliard"));
+  }
+  if (millions > 0) {
+    parts.push(chunkToWords(millions) + (millions > 1 ? " millions" : " million"));
+  }
+  if (thousands > 0) {
+    if (thousands === 1) parts.push("mille");
+    else parts.push(chunkToWords(thousands) + " mille");
+  }
+  if (unitsRest > 0) {
+    parts.push(chunkToWords(unitsRest));
+  }
+
+  const res = parts.join(" ").replace(/\s+/g, " ").trim();
+  return res ? res.charAt(0).toUpperCase() + res.slice(1) : "Zéro";
+}
+
 export default function ChequesEffetsPage() {
   const { t, dir } = useLanguage();
   const [loading, setLoading] = useState(true);
@@ -109,6 +186,14 @@ export default function ChequesEffetsPage() {
   const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
   const [isBordereauModalOpen, setIsBordereauModalOpen] = useState(false);
   const [selectedBankForBordereau, setSelectedBankForBordereau] = useState<string>("ALL");
+  const [selectedChequeIds, setSelectedChequeIds] = useState<number[]>([]);
+  const [depositAccountRIB, setDepositAccountRIB] = useState<string>("");
+  const [bordereauRef, setBordereauRef] = useState<string>(() => {
+    const d = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    return `BDR-${d}-${Math.floor(100 + Math.random() * 900)}`;
+  });
+  const [companyInfo, setCompanyInfo] = useState<any>(null);
+  const [receiptCheque, setReceiptCheque] = useState<ChequeItem | null>(null);
 
   const [kpis, setKpis] = useState({
     totalEnPortefeuille: 0,
@@ -129,6 +214,23 @@ export default function ChequesEffetsPage() {
   // Modals
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [selectedCheque, setSelectedCheque] = useState<ChequeItem | null>(null);
+
+  const fetchCompanyInfo = async () => {
+    try {
+      const res = await fetch("/api/settings/company");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.company) {
+          setCompanyInfo(data.company);
+          if (data.company.compte_bancaire || data.company.rib) {
+            setDepositAccountRIB(data.company.compte_bancaire || data.company.rib);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load company info:", err);
+    }
+  };
 
   const fetchCheques = async () => {
     setLoading(true);
@@ -153,6 +255,7 @@ export default function ChequesEffetsPage() {
 
   useEffect(() => {
     fetchCheques();
+    fetchCompanyInfo();
   }, [typeFilter, statusFilter]);
 
   const handleCopySql = () => {
@@ -270,6 +373,33 @@ export default function ChequesEffetsPage() {
     return Array.from(new Set(list));
   }, [cheques]);
 
+  // Sync selected cheques when available cheques or selected bank changes
+  useEffect(() => {
+    setSelectedChequeIds(bordereauCheques.map((c) => c.id));
+  }, [selectedBankForBordereau, cheques]);
+
+  const chequesToPrint = useMemo(() => {
+    return bordereauCheques.filter((c) => selectedChequeIds.includes(c.id));
+  }, [bordereauCheques, selectedChequeIds]);
+
+  const totalRemiseAmount = useMemo(() => {
+    return chequesToPrint.reduce((sum, c) => sum + (Number(c.montant) || 0), 0);
+  }, [chequesToPrint]);
+
+  const toggleSelectAllCheques = () => {
+    if (selectedChequeIds.length === bordereauCheques.length) {
+      setSelectedChequeIds([]);
+    } else {
+      setSelectedChequeIds(bordereauCheques.map((c) => c.id));
+    }
+  };
+
+  const toggleChequeSelection = (id: number) => {
+    setSelectedChequeIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16" dir={dir}>
       {/* Database Missing Banner if needed */}
@@ -343,12 +473,15 @@ export default function ChequesEffetsPage() {
           </button>
 
           <button
-            onClick={() => setIsBordereauModalOpen(true)}
+            onClick={() => {
+              setSelectedChequeIds(bordereauCheques.map((c) => c.id));
+              setIsBordereauModalOpen(true);
+            }}
             disabled={cheques.length === 0}
-            className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-sm shadow-sm transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-sm shadow-sm transition-all disabled:opacity-50 cursor-pointer"
           >
             <Printer size={17} />
-            <span>Bordereau de Remise</span>
+            <span>Bordereau de Remise Bancaire</span>
           </button>
 
           <button
@@ -628,8 +761,15 @@ export default function ChequesEffetsPage() {
                             </button>
                           )}
                           <button
+                            onClick={() => setReceiptCheque(c)}
+                            title="Imprimer Récépissé / Décharge Client"
+                            className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:border-indigo-500 hover:text-indigo-600 transition-colors shadow-sm cursor-pointer"
+                          >
+                            <Printer size={15} />
+                          </button>
+                          <button
                             onClick={() => setSelectedCheque(c)}
-                            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:border-indigo-500 hover:text-indigo-600 transition-colors shadow-sm"
+                            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:border-indigo-500 hover:text-indigo-600 transition-colors shadow-sm cursor-pointer"
                           >
                             Gérer
                           </button>
@@ -658,6 +798,10 @@ export default function ChequesEffetsPage() {
           cheque={selectedCheque}
           onClose={() => setSelectedCheque(null)}
           onSuccess={fetchCheques}
+          onPrintReceipt={(cheque) => {
+            setSelectedCheque(null);
+            setReceiptCheque(cheque);
+          }}
         />
       )}
 
@@ -717,28 +861,34 @@ export default function ChequesEffetsPage() {
 
       {/* Bordereau de Remise Bancaire Printable Modal */}
       {isBordereauModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn" dir={dir}>
-          <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 rounded-[28px] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-slate-900 dark:to-indigo-950/30 no-print">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn bordereau-modal-overlay print:static print:p-0 print:bg-white print:backdrop-blur-none" dir={dir}>
+          <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 rounded-[28px] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh] bordereau-modal-card print:border-none print:shadow-none print:rounded-none print:max-w-full print:max-h-none print:bg-white print:overflow-visible">
+            
+            {/* Modal Control Header (Hidden on Print) */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-indigo-50/80 via-blue-50/50 to-slate-50 dark:from-slate-900 dark:to-indigo-950/30 no-print print:hidden bordereau-modal-header">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/30">
+                <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/30 shrink-0">
                   <Printer size={22} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                    Bordereau de Remise de Chèques
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    Bordereau de Remise Bancaire
+                    <span className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-black uppercase">
+                      Format A4 4K
+                    </span>
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Bordereau officiel d'encaissement bancaire prêt pour impression A4
+                    Bordereau officiel d'encaissement bancaire • {chequesToPrint.length} sélectionné(s) • Total: {totalRemiseAmount.toLocaleString("fr-FR")} FCFA
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <select
                   value={selectedBankForBordereau}
                   onChange={(e) => setSelectedBankForBordereau(e.target.value)}
                   className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  title="Filtrer par Banque"
                 >
                   <option value="ALL">Toutes les banques</option>
                   {uniqueBanks.map((b) => (
@@ -746,79 +896,164 @@ export default function ChequesEffetsPage() {
                   ))}
                 </select>
 
+                <input
+                  type="text"
+                  value={depositAccountRIB}
+                  onChange={(e) => setDepositAccountRIB(e.target.value)}
+                  placeholder="RIB / N° Compte Dépôt"
+                  className="px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-44"
+                  title="N° de Compte ou RIB à créditer"
+                />
+
+                <button
+                  onClick={toggleSelectAllCheques}
+                  className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors"
+                  title="Cocher / Décocher tout"
+                >
+                  {selectedChequeIds.length === bordereauCheques.length ? "Tout décocher" : "Tout cocher"}
+                </button>
+
                 <button
                   onClick={() => window.print()}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all"
+                  disabled={chequesToPrint.length === 0}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
                 >
                   <Printer size={16} />
-                  <span>Imprimer Bordereau</span>
+                  <span>Imprimer Bordereau (A4)</span>
                 </button>
 
                 <button
                   onClick={() => setIsBordereauModalOpen(false)}
-                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
             </div>
 
-            {/* Printable Remittance Sheet */}
-            <div className="p-8 overflow-y-auto flex-1 bg-white text-slate-900 print:p-0 print:m-0" id="printable-bordereau">
-              <div className="border-2 border-slate-900 p-6 rounded-2xl mb-6">
-                <div className="flex items-start justify-between border-b border-slate-300 pb-4 mb-4">
-                  <div>
-                    <h2 className="text-xl font-black uppercase tracking-wider text-slate-900">
-                      BORDEREAU DE REMISE DE CHÈQUES
+            {/* Quick Cheque Toggle Bar on Screen (Hidden on Print) */}
+            {bordereauCheques.length > 1 && (
+              <div className="px-6 py-2.5 bg-slate-50 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800 text-xs flex flex-wrap items-center gap-3 no-print print:hidden">
+                <span className="font-bold text-slate-500">Sélectionner les pièces :</span>
+                {bordereauCheques.map((c) => {
+                  const isChecked = selectedChequeIds.includes(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => toggleChequeSelection(c.id)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-[11px] transition-all ${
+                        isChecked
+                          ? "bg-indigo-100 text-indigo-800 border border-indigo-300 font-bold dark:bg-indigo-950/70 dark:text-indigo-300"
+                          : "bg-white text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400"
+                      }`}
+                    >
+                      {isChecked ? <CheckSquare size={13} className="text-indigo-600" /> : <Square size={13} />}
+                      <span>{c.numero_piece}</span>
+                      <span className="text-[10px] opacity-75">({Number(c.montant).toLocaleString("fr-FR")} F)</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Printable Remittance Sheet Body */}
+            <div className="p-8 overflow-y-auto flex-1 bg-white text-slate-900 print:p-0 print:m-0 print:overflow-visible print:h-auto print:max-h-none print:w-full print:block" id="printable-bordereau">
+              <div className="max-w-4xl mx-auto bg-white text-slate-900 border-2 border-slate-900 p-8 rounded-2xl print:border-2 print:border-black print:p-5 print:rounded-none print:max-w-full">
+                
+                {/* Header: Company Profile + Bank Slip Title & Ref */}
+                <div className="flex items-start justify-between border-b-2 border-slate-900 pb-5 mb-5">
+                  <div className="flex items-center gap-4">
+                    {companyInfo?.logo_url ? (
+                      <img src={companyInfo.logo_url} alt="Logo" className="w-16 h-16 object-contain rounded-xl print:w-14 print:h-14" />
+                    ) : (
+                      <div className="w-14 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-xl print:border print:border-black">
+                        {companyInfo?.nom_entreprise ? companyInfo.nom_entreprise.charAt(0).toUpperCase() : "G"}
+                      </div>
+                    )}
+                    <div>
+                      <h1 className="text-lg font-black tracking-tight text-slate-900 uppercase">
+                        {companyInfo?.nom_entreprise || "GESTION PRO GLOBAL"}
+                      </h1>
+                      <p className="text-xs text-slate-600 font-medium">
+                        {companyInfo?.adresse || "Siège Social"}
+                      </p>
+                      <div className="flex flex-wrap gap-x-3 text-[11px] text-slate-500 font-medium mt-0.5">
+                        {companyInfo?.telephone && <span>Tél : <strong className="text-slate-800">{companyInfo.telephone}</strong></span>}
+                        {companyInfo?.email && <span>Email : <strong className="text-slate-800">{companyInfo.email}</strong></span>}
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 text-[10px] text-slate-500 font-bold mt-1">
+                        {companyInfo?.nif && <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">NIF : {companyInfo.nif}</span>}
+                        {companyInfo?.rc && <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">RCCM : {companyInfo.rc}</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right border-l-2 border-slate-200 pl-6 print:border-slate-400">
+                    <span className="inline-block px-2.5 py-1 rounded bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider mb-1.5">
+                      Bordereau Bancaire Officiel
+                    </span>
+                    <h2 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                      Remise de Chèques & Effets
                     </h2>
-                    <p className="text-xs font-semibold text-slate-600 mt-0.5">
-                      DÉPÔT POUR ENCAISSEMENT / COMPTE BANCAIRE
+                    <p className="text-xs font-mono font-bold text-indigo-700 print:text-black">
+                      Réf : {bordereauRef}
+                    </p>
+                    <p className="text-xs text-slate-600 mt-1">
+                      Date : <strong className="text-slate-900">{new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</strong>
                     </p>
                   </div>
-                  <div className="text-right text-xs">
-                    <p className="font-bold text-slate-900">Date : {new Date().toLocaleDateString("fr-FR")}</p>
-                    <p className="text-slate-600">Banque Destinataire : <span className="font-black text-indigo-700">{selectedBankForBordereau === "ALL" ? "TOUTES BANQUES" : selectedBankForBordereau}</span></p>
+                </div>
+
+                {/* Account & Bank Remittance Metadata Box */}
+                <div className="grid grid-cols-3 gap-3 p-3.5 mb-5 bg-slate-50 border border-slate-300 rounded-xl text-xs print:bg-white print:border-black">
+                  <div>
+                    <span className="font-bold text-slate-500 uppercase text-[10px] block">Titulaire du Compte (Remettant) :</span>
+                    <p className="font-black text-slate-900 text-xs mt-0.5 uppercase">
+                      {companyInfo?.nom_entreprise || "GESTION PRO GLOBAL / ENTREPRISE"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-500 uppercase text-[10px] block">Banque Réceptrice & Dépôt :</span>
+                    <p className="font-black text-slate-900 text-xs mt-0.5">
+                      {selectedBankForBordereau === "ALL" ? "COMPTE BANCAIRE PRINCIPAL" : selectedBankForBordereau}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-500 uppercase text-[10px] block">Compte à créditer (RIB) :</span>
+                    <p className="font-mono font-black text-slate-900 text-xs mt-0.5">
+                      {depositAccountRIB || companyInfo?.compte_bancaire || "Compte Courant Commercial"}
+                    </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-xs mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <div>
-                    <span className="font-bold text-slate-500 uppercase">Titulaire du Compte :</span>
-                    <p className="font-black text-slate-900 text-sm">GESTION PRO GLOBAL / ENTREPRISE</p>
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-500 uppercase">Nombre total de chèques :</span>
-                    <p className="font-black text-indigo-700 text-sm">{bordereauCheques.length} pièce(s)</p>
-                  </div>
-                </div>
-
-                <table className="w-full text-xs text-left border-collapse border border-slate-300 mb-6">
+                {/* Table of Cheques */}
+                <table className="w-full text-xs text-left border-collapse border border-slate-900 mb-5">
                   <thead>
-                    <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300">
-                      <th className="p-2 border border-slate-300 text-center w-10">N°</th>
-                      <th className="p-2 border border-slate-300">N° de Chèque</th>
-                      <th className="p-2 border border-slate-300">Banque du Tireur</th>
-                      <th className="p-2 border border-slate-300">Tireur (Émetteur)</th>
-                      <th className="p-2 border border-slate-300">Échéance</th>
-                      <th className="p-2 border border-slate-300 text-right">Montant (FCFA)</th>
+                    <tr className="bg-slate-100 text-slate-900 font-extrabold border-b-2 border-slate-900 print:bg-slate-200">
+                      <th className="p-2 border border-slate-900 text-center w-10">N°</th>
+                      <th className="p-2 border border-slate-900">N° de Chèque</th>
+                      <th className="p-2 border border-slate-900">Banque du Tireur</th>
+                      <th className="p-2 border border-slate-900">Tireur (Émetteur)</th>
+                      <th className="p-2 border border-slate-900 text-center">Échéance</th>
+                      <th className="p-2 border border-slate-900 text-right">Montant (FCFA)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {bordereauCheques.length === 0 ? (
+                    {chequesToPrint.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-6 text-center text-slate-400">
-                          Aucun chèque en portefeuille ou déposé pour cette sélection
+                        <td colSpan={6} className="p-6 text-center text-slate-400 italic">
+                          Aucun chèque sélectionné pour ce bordereau de remise
                         </td>
                       </tr>
                     ) : (
-                      bordereauCheques.map((item, idx) => (
-                        <tr key={item.id} className="border-b border-slate-200">
-                          <td className="p-2 border border-slate-300 text-center font-semibold">{idx + 1}</td>
-                          <td className="p-2 border border-slate-300 font-mono font-bold text-slate-900">{item.numero_piece}</td>
-                          <td className="p-2 border border-slate-300 font-semibold">{item.banque_emetteur}</td>
-                          <td className="p-2 border border-slate-300 font-medium">{item.emetteur_nom}</td>
-                          <td className="p-2 border border-slate-300 text-slate-600">{new Date(item.date_echeance).toLocaleDateString("fr-FR")}</td>
-                          <td className="p-2 border border-slate-300 text-right font-mono font-black text-slate-900">
+                      chequesToPrint.map((item, idx) => (
+                        <tr key={item.id} className="border-b border-slate-300 print:border-black">
+                          <td className="p-2 border border-slate-900 text-center font-bold">{idx + 1}</td>
+                          <td className="p-2 border border-slate-900 font-mono font-black text-slate-900">{item.numero_piece}</td>
+                          <td className="p-2 border border-slate-900 font-semibold">{item.banque_emetteur}</td>
+                          <td className="p-2 border border-slate-900 font-medium">{item.emetteur_nom}</td>
+                          <td className="p-2 border border-slate-900 text-center text-slate-700">{new Date(item.date_echeance).toLocaleDateString("fr-FR")}</td>
+                          <td className="p-2 border border-slate-900 text-right font-mono font-black text-slate-900">
                             {Number(item.montant).toLocaleString("fr-FR")}
                           </td>
                         </tr>
@@ -826,30 +1061,65 @@ export default function ChequesEffetsPage() {
                     )}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-400">
-                      <td colSpan={5} className="p-2.5 text-right uppercase border border-slate-300">
-                        Total Général Remis :
+                    <tr className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-900 print:bg-slate-100">
+                      <td colSpan={4} className="p-2.5 text-left uppercase border border-slate-900 text-[11px]">
+                        Nombre de pièce(s) remise(s) : <strong className="text-indigo-800 print:text-black">{chequesToPrint.length} pièce(s)</strong>
                       </td>
-                      <td className="p-2.5 text-right font-mono text-sm text-indigo-800 border border-slate-300">
-                        {bordereauCheques.reduce((sum, c) => sum + (Number(c.montant) || 0), 0).toLocaleString("fr-FR")} FCFA
+                      <td className="p-2.5 text-right uppercase border border-slate-900 text-[11px]">
+                        Total Général :
+                      </td>
+                      <td className="p-2.5 text-right font-mono text-sm text-indigo-900 print:text-black border border-slate-900">
+                        {totalRemiseAmount.toLocaleString("fr-FR")} FCFA
                       </td>
                     </tr>
                   </tfoot>
                 </table>
 
-                {/* Signatures */}
-                <div className="grid grid-cols-2 gap-8 pt-6 border-t border-slate-300 text-xs">
-                  <div className="border border-slate-300 p-4 rounded-xl min-h-[110px] flex flex-col justify-between">
-                    <span className="font-bold text-slate-700 uppercase tracking-wider">
-                      Signature et Visa du Déposant :
-                    </span>
-                    <span className="text-[10px] text-slate-400 italic">Signature précédée de la mention "Bon pour remise"</span>
+                {/* Amount in Full Words */}
+                <div className="p-3.5 mb-5 bg-slate-50 border border-slate-300 rounded-xl text-xs print:bg-white print:border-black">
+                  <span className="font-bold text-slate-500 uppercase text-[10px] block">Montant total en toutes lettres :</span>
+                  <p className="font-bold text-slate-900 text-xs italic mt-0.5">
+                    Arrêté le présent bordereau à la somme totale de : <span className="underline uppercase not-italic font-black">{numberToFrenchWords(totalRemiseAmount)} Francs CFA</span>.
+                  </p>
+                </div>
+
+                {/* Legal Mention */}
+                <p className="text-[10px] text-slate-500 italic mb-5 text-center print:text-black">
+                  * Remis à l'encaissement sous réserve de bonne fin, d'existence de la provision effective et de compensation interbancaire.
+                </p>
+
+                {/* Signatures & Bank Stamp Box */}
+                <div className="grid grid-cols-2 gap-6 pt-2 text-xs">
+                  <div className="border-2 border-slate-900 p-4 rounded-xl min-h-[140px] flex flex-col justify-between print:border-black">
+                    <div>
+                      <span className="font-black text-slate-900 uppercase tracking-wide block text-[11px]">
+                        Cadre Réservé au Déposant / Remettant
+                      </span>
+                      <span className="text-[10px] text-slate-500 italic block mt-0.5">
+                        Mention manuscrite « Bon pour remise de {chequesToPrint.length} chèque(s) »
+                      </span>
+                    </div>
+                    <div className="flex items-end justify-between pt-4">
+                      <span className="text-[10px] text-slate-400 font-semibold">Date & Signature :</span>
+                      {companyInfo?.cachet_url && (
+                        <img src={companyInfo.cachet_url} alt="Cachet Entreprise" className="h-14 object-contain opacity-85 rotate-[-3deg]" />
+                      )}
+                    </div>
                   </div>
-                  <div className="border border-slate-300 p-4 rounded-xl min-h-[110px] flex flex-col justify-between">
-                    <span className="font-bold text-slate-700 uppercase tracking-wider">
-                      Cachet et Visa de la Banque Réceptrice :
-                    </span>
-                    <span className="text-[10px] text-slate-400 italic">Reçu sous réserve d'encaissement effectif</span>
+
+                  <div className="border-2 border-slate-900 p-4 rounded-xl min-h-[140px] flex flex-col justify-between print:border-black">
+                    <div>
+                      <span className="font-black text-slate-900 uppercase tracking-wide block text-[11px]">
+                        Cadre Réservé à l'Établissement Bancaire
+                      </span>
+                      <span className="text-[10px] text-slate-500 italic block mt-0.5">
+                        Date de réception, visa du guichetier & cachet de la banque
+                      </span>
+                    </div>
+                    <div className="flex items-end justify-between pt-4">
+                      <span className="text-[10px] text-slate-400 font-semibold">Reçu le : ____/____/2026</span>
+                      <span className="text-[10px] text-slate-400 font-semibold">Cachet & Visa Guichet</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -857,6 +1127,264 @@ export default function ChequesEffetsPage() {
           </div>
         </div>
       )}
+
+      {/* Individual Cheque Receipt / Décharge Modal */}
+      {receiptCheque && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fadeIn bordereau-modal-overlay print:static print:p-0 print:bg-white" dir={dir}>
+          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-[28px] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh] bordereau-modal-card print:border-none print:shadow-none print:rounded-none print:max-w-full print:max-h-none print:bg-white print:overflow-visible">
+            {/* Header bar (hidden on print) */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-slate-900 dark:to-emerald-950/30 no-print print:hidden bordereau-modal-header">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/30">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Récépissé de Décharge de Chèque
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Preuve officielle de remise du chèque pour le client ou le dossier comptable
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                >
+                  <Printer size={15} />
+                  <span>Imprimer Récépissé (A4)</span>
+                </button>
+                <button
+                  onClick={() => setReceiptCheque(null)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Receipt Body */}
+            <div className="p-8 overflow-y-auto flex-1 bg-white text-slate-900 print:p-0 print:m-0 print:overflow-visible print:h-auto print:max-h-none print:w-full print:block" id="printable-receipt">
+              <div className="border-2 border-slate-900 p-6 rounded-2xl print:border-2 print:border-black print:p-5 print:rounded-none">
+                {/* Header */}
+                <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    {companyInfo?.logo_url ? (
+                      <img src={companyInfo.logo_url} alt="Logo" className="w-12 h-12 object-contain rounded-lg" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-lg">
+                        {companyInfo?.nom_entreprise ? companyInfo.nom_entreprise.charAt(0).toUpperCase() : "G"}
+                      </div>
+                    )}
+                    <div>
+                      <h2 className="text-base font-black uppercase text-slate-900">
+                        {companyInfo?.nom_entreprise || "GESTION PRO GLOBAL"}
+                      </h2>
+                      <p className="text-xs text-slate-600 font-medium">{companyInfo?.adresse || "Siège Social"}</p>
+                      <p className="text-xs text-slate-600 font-medium">{companyInfo?.telephone && `Tél: ${companyInfo.telephone}`} {companyInfo?.email && `• ${companyInfo.email}`}</p>
+                      <p className="text-[10px] text-slate-500 font-bold">{companyInfo?.nif && `NIF: ${companyInfo.nif}`} {companyInfo?.rc && `• RCCM: ${companyInfo.rc}`}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="inline-block px-2 py-0.5 rounded bg-slate-900 text-white text-[9px] font-black uppercase tracking-wider mb-1">
+                      Décharge Officielle
+                    </span>
+                    <p className="text-xs font-mono font-bold text-slate-900">N° REC-CHQ-{receiptCheque.id}-{receiptCheque.numero_piece}</p>
+                    <p className="text-xs text-slate-600">Date : {new Date().toLocaleDateString("fr-FR")}</p>
+                  </div>
+                </div>
+
+                <h3 className="text-center font-black text-sm uppercase tracking-wider text-slate-900 mb-4 bg-slate-100 py-1.5 rounded border border-slate-200 print:bg-slate-100">
+                  ATTESTATION DE RÉCEPTION DE CHÈQUE / EFFET DE COMMERCE
+                </h3>
+
+                <div className="space-y-3 text-xs mb-6">
+                  <p>
+                    Nous soussignés, <strong>{companyInfo?.nom_entreprise || "GESTION PRO GLOBAL"}</strong>, certifions avoir reçu ce jour de la part de :
+                  </p>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 print:bg-white print:border-black">
+                    <p className="font-bold text-slate-900 text-sm">{receiptCheque.emetteur_nom} {receiptCheque.client?.nom && receiptCheque.client.nom !== receiptCheque.emetteur_nom ? `(${receiptCheque.client.nom})` : ""}</p>
+                    {receiptCheque.client?.tel && <p className="text-xs text-slate-600">Téléphone : {receiptCheque.client.tel}</p>}
+                  </div>
+
+                  <p>Le règlement par chèque / effet dont les caractéristiques sont consignées ci-dessous :</p>
+
+                  <table className="w-full text-xs border-collapse border border-slate-900">
+                    <tbody>
+                      <tr className="border-b border-slate-900">
+                        <td className="p-2 border border-slate-900 font-bold bg-slate-100 w-1/3">Type de Titre</td>
+                        <td className="p-2 border border-slate-900 font-bold">{receiptCheque.type_titre === "CHEQUE" ? "Chèque Bancaire" : receiptCheque.type_titre === "EFFET" ? "Lettre de Change / Traite" : "Billet à Ordre"}</td>
+                      </tr>
+                      <tr className="border-b border-slate-900">
+                        <td className="p-2 border border-slate-900 font-bold bg-slate-100">Numéro du Titre</td>
+                        <td className="p-2 border border-slate-900 font-mono font-black">{receiptCheque.numero_piece}</td>
+                      </tr>
+                      <tr className="border-b border-slate-900">
+                        <td className="p-2 border border-slate-900 font-bold bg-slate-100">Banque Émettrice</td>
+                        <td className="p-2 border border-slate-900 font-semibold">{receiptCheque.banque_emetteur}</td>
+                      </tr>
+                      <tr className="border-b border-slate-900">
+                        <td className="p-2 border border-slate-900 font-bold bg-slate-100">Date d'Échéance</td>
+                        <td className="p-2 border border-slate-900 font-bold">{new Date(receiptCheque.date_echeance).toLocaleDateString("fr-FR")}</td>
+                      </tr>
+                      <tr className="border-b border-slate-900">
+                        <td className="p-2 border border-slate-900 font-bold bg-slate-100">Montant en chiffres</td>
+                        <td className="p-2 border border-slate-900 font-mono font-black text-sm text-indigo-900 print:text-black">
+                          {Number(receiptCheque.montant).toLocaleString("fr-FR")} FCFA
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="p-2 border border-slate-900 font-bold bg-slate-100">Montant en toutes lettres</td>
+                        <td className="p-2 border border-slate-900 italic font-bold">
+                          {numberToFrenchWords(Number(receiptCheque.montant))} Francs CFA
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {receiptCheque.notes && (
+                    <p className="text-[11px] text-slate-600 italic">
+                      Motif / Référence : {receiptCheque.notes}
+                    </p>
+                  )}
+
+                  <p className="text-[10px] text-slate-500 italic pt-2">
+                    * Ce récépissé est délivré sous réserve de bonne fin et d'encaissement effectif des fonds par l'établissement bancaire.
+                  </p>
+                </div>
+
+                {/* Signatures */}
+                <div className="grid grid-cols-2 gap-6 pt-4 border-t-2 border-slate-900 text-xs">
+                  <div className="border border-slate-300 p-3 rounded-xl min-h-[110px] flex flex-col justify-between print:border-black">
+                    <span className="font-bold text-slate-900 uppercase text-[10px]">Le Client / Déposant</span>
+                    <span className="text-[9px] text-slate-400 italic">Nom et Signature</span>
+                  </div>
+                  <div className="border border-slate-300 p-3 rounded-xl min-h-[110px] flex flex-col justify-between print:border-black">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 uppercase text-[10px]">Pour l'Entreprise (Visa Caisse)</span>
+                    </div>
+                    <div className="flex items-end justify-between">
+                      <span className="text-[9px] text-slate-400 italic">Cachet & Signature</span>
+                      {companyInfo?.cachet_url && (
+                        <img src={companyInfo.cachet_url} alt="Cachet" className="h-10 object-contain opacity-85" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dedicated Global Print CSS for 4K Output */}
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm;
+          }
+
+          html, body {
+            background: #ffffff !important;
+            color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* Hide everything not part of the printed document */
+          aside,
+          nav,
+          header,
+          footer,
+          [role="navigation"],
+          .no-print,
+          .print\\:hidden,
+          .bordereau-modal-header,
+          button,
+          select,
+          input {
+            display: none !important;
+          }
+
+          /* Reset all parent wrappers so modal backdrop and scrollbars disappear */
+          #__next,
+          main,
+          div[dir],
+          .fixed.inset-0,
+          .bordereau-modal-overlay {
+            position: static !important;
+            display: block !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+            border: none !important;
+            box-shadow: none !important;
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+
+          .bordereau-modal-card {
+            position: static !important;
+            display: block !important;
+            background: #ffffff !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
+
+          #printable-bordereau,
+          #printable-receipt {
+            display: block !important;
+            position: static !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+          }
+
+          /* Clean non-breaking rows */
+          table {
+            page-break-inside: auto !important;
+            width: 100% !important;
+          }
+          tr {
+            page-break-inside: avoid !important;
+            page-break-after: auto !important;
+          }
+          thead {
+            display: table-header-group !important;
+          }
+          tfoot {
+            display: table-footer-group !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

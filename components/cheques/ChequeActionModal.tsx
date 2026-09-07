@@ -16,7 +16,8 @@ import {
   Undo2,
   MessageSquare,
   ShieldAlert,
-  Clock
+  Clock,
+  Printer
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/context";
 import { openWhatsAppDirect, formatPhoneForWhatsApp } from "@/lib/utils/whatsapp";
@@ -26,6 +27,7 @@ interface ChequeActionModalProps {
   cheque: any;
   onClose: () => void;
   onSuccess: () => void;
+  onPrintReceipt?: (cheque: any) => void;
 }
 
 export default function ChequeActionModal({
@@ -33,6 +35,7 @@ export default function ChequeActionModal({
   cheque,
   onClose,
   onSuccess,
+  onPrintReceipt,
 }: ChequeActionModalProps) {
   const { dir } = useLanguage();
   const [loading, setLoading] = useState(false);
@@ -142,12 +145,25 @@ export default function ChequeActionModal({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            {onPrintReceipt && (
+              <button
+                type="button"
+                onClick={() => onPrintReceipt(cheque)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-xs font-bold transition-all shadow-sm"
+                title="Imprimer Récépissé / Décharge"
+              >
+                <Printer size={15} />
+                <span className="hidden sm:inline">Imprimer Reçu</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Action Tabs Bar */}
@@ -271,6 +287,19 @@ export default function ChequeActionModal({
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl text-xs text-slate-600 dark:text-slate-400">
                   <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Notes :</span>
                   {cheque.notes}
+                </div>
+              )}
+
+              {onPrintReceipt && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => onPrintReceipt(cheque)}
+                    className="w-full py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-800 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <Printer size={16} />
+                    <span>Imprimer le Récépissé / Décharge Client</span>
+                  </button>
                 </div>
               )}
 
