@@ -402,7 +402,9 @@ export default function ChequesEffetsPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16" dir={dir}>
-      {/* Database Missing Banner if needed */}
+      {/* SCREEN-ONLY DASHBOARD CONTENT (COMPLETELY HIDDEN ON PRINT) */}
+      <div className="space-y-6 screen-only print:hidden no-print">
+        {/* Database Missing Banner if needed */}
       {dbNeedsSetup && (
         <div className="p-5 rounded-[28px] bg-gradient-to-r from-amber-500/15 via-indigo-500/10 to-transparent border border-amber-500/30 dark:border-amber-500/20 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-fadeIn">
           <div className="flex items-center gap-3.5">
@@ -782,6 +784,7 @@ export default function ChequesEffetsPage() {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
 
       {/* New Cheque Modal */}
@@ -1300,13 +1303,15 @@ export default function ChequesEffetsPage() {
           }
 
           /* Hide everything not part of the printed document */
+          .screen-only,
+          .no-print,
+          .print\\:hidden,
+          [class*="print:hidden"],
           aside,
           nav,
           header,
           footer,
           [role="navigation"],
-          .no-print,
-          .print\\:hidden,
           .bordereau-modal-header,
           button,
           select,
@@ -1338,7 +1343,7 @@ export default function ChequesEffetsPage() {
           .bordereau-modal-card {
             position: static !important;
             display: block !important;
-            background: #ffffff !important;
+            background: transparent !important;
             border: none !important;
             box-shadow: none !important;
             border-radius: 0 !important;
@@ -1366,6 +1371,7 @@ export default function ChequesEffetsPage() {
             box-shadow: none !important;
             background: #ffffff !important;
             color: #000000 !important;
+            page-break-after: avoid !important;
           }
 
           /* Clean non-breaking rows */
