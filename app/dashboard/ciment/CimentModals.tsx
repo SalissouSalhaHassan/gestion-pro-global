@@ -1,7 +1,87 @@
 import React, { useState, useEffect } from "react";
-import { X, Search, Plus, CreditCard, Trash2, Loader2, AlertCircle, Printer } from "lucide-react";
+import { X, Search, Plus, CreditCard, Trash2, Loader2, AlertCircle, Printer, Copy, Check, Database } from "lucide-react";
 import type { CimentShipment } from "./page";
 import { createClient } from "@/lib/supabase/client";
+
+export const SQL_CIMENT_MIGRATION = `-- ==============================================================================
+-- MIGRATION: gestion_ciment & ciment_paiements (Gestion des Chargements de Ciment)
+-- ==============================================================================
+
+-- 1. Create Ciment Shipments Table
+CREATE TABLE IF NOT EXISTS public.gestion_ciment (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    client_tel TEXT NOT NULL,
+    camion_no TEXT NOT NULL,
+    transporteur TEXT,
+    type_ciment TEXT,
+    destination TEXT,
+    chauffeur TEXT,
+    chauffeur_tel TEXT,
+    bons TEXT,
+    arrivage TEXT,
+    tonnage NUMERIC NOT NULL DEFAULT 0,
+    pu NUMERIC NOT NULL DEFAULT 0,
+    frais_ciment NUMERIC DEFAULT 0,
+    frais_transport NUMERIC DEFAULT 0,
+    tva_pourcentage NUMERIC DEFAULT 19,
+    bic_pourcentage NUMERIC DEFAULT 2,
+    total NUMERIC NOT NULL DEFAULT 0,
+    montant_paye NUMERIC DEFAULT 0,
+    statut_paiement TEXT DEFAULT 'Non Payé',
+    utilisateur TEXT,
+    user_id UUID,
+    organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Ensure organization_id column exists if table was partially created
+ALTER TABLE public.gestion_ciment ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+-- 2. Create Ciment Payments Table
+CREATE TABLE IF NOT EXISTS public.ciment_paiements (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    ciment_id UUID NOT NULL REFERENCES public.gestion_ciment(id) ON DELETE CASCADE,
+    montant NUMERIC NOT NULL DEFAULT 0,
+    moyen_paiement TEXT NOT NULL,
+    reference TEXT,
+    date_paiement TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    utilisateur TEXT,
+    user_id UUID,
+    organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Ensure organization_id column exists if table was partially created
+ALTER TABLE public.ciment_paiements ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+-- 3. Indexes for High Performance
+CREATE INDEX IF NOT EXISTS idx_gestion_ciment_org ON public.gestion_ciment(organization_id);
+CREATE INDEX IF NOT EXISTS idx_gestion_ciment_camion ON public.gestion_ciment(camion_no);
+CREATE INDEX IF NOT EXISTS idx_gestion_ciment_client ON public.gestion_ciment(client_tel);
+CREATE INDEX IF NOT EXISTS idx_gestion_ciment_created ON public.gestion_ciment(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ciment_paiements_ciment_id ON public.ciment_paiements(ciment_id);
+CREATE INDEX IF NOT EXISTS idx_ciment_paiements_org ON public.ciment_paiements(organization_id);
+
+-- 4. Enable Row Level Security (RLS) & Policies
+ALTER TABLE public.gestion_ciment ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ciment_paiements ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Enable read for all on gestion_ciment" ON public.gestion_ciment;
+CREATE POLICY "Enable read for all on gestion_ciment" ON public.gestion_ciment FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Enable write for all on gestion_ciment" ON public.gestion_ciment;
+CREATE POLICY "Enable write for all on gestion_ciment" ON public.gestion_ciment FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Enable read for all on ciment_paiements" ON public.ciment_paiements;
+CREATE POLICY "Enable read for all on ciment_paiements" ON public.ciment_paiements FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Enable write for all on ciment_paiements" ON public.ciment_paiements;
+CREATE POLICY "Enable write for all on ciment_paiements" ON public.ciment_paiements FOR ALL USING (true);
+
+-- 5. Force Schema Cache Reload in PostgREST
+NOTIFY pgrst, 'reload schema';`;
 
 /* ═══════════════════════════════════════════════════════════════════
    CIMENT ENTRY MODAL
@@ -19,6 +99,7 @@ export function CimentEntryModal({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
   const [stockSelectorOpen, setStockSelectorOpen] = useState(false);
   const [clientSelectorOpen, setClientSelectorOpen] = useState(false);
   const [totalCalculated, setTotalCalculated] = useState(0);
@@ -95,6 +176,12 @@ export function CimentEntryModal({
     }
   };
 
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SQL_CIMENT_MIGRATION);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 3000);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
       <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-300">
@@ -110,9 +197,29 @@ export function CimentEntryModal({
 
         <form onSubmit={handleSubmit} className="p-8 max-h-[75vh] overflow-y-auto custom-scrollbar">
           {error && (
-            <div className="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-600 rounded-2xl flex items-center gap-3 font-bold">
-              <AlertCircle size={20} />
-              {error}
+            <div className="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl space-y-3">
+              <div className="flex items-center gap-3 font-bold">
+                <AlertCircle size={20} className="text-rose-600 shrink-0" />
+                <span>{error}</span>
+              </div>
+              {(error.includes("gestion_ciment") || error.includes("schema cache") || error.includes("does not exist") || error.includes("42P01")) && (
+                <div className="p-3.5 bg-white rounded-xl border border-rose-200 text-xs space-y-2 text-slate-700">
+                  <p className="font-bold text-slate-900">
+                    💡 La table <code className="font-mono text-rose-600 font-bold">gestion_ciment</code> doit être initialisée dans Supabase.
+                  </p>
+                  <p className="text-slate-500">
+                    Cliquez sur le bouton ci-dessous pour copier le script SQL complet en 1-clic, puis collez-le et exécutez-le dans votre <strong>Supabase SQL Editor</strong> :
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleCopySql}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl transition-all shadow-sm cursor-pointer"
+                  >
+                    {copiedSql ? <Check size={16} /> : <Copy size={16} />}
+                    <span>{copiedSql ? "Script SQL Copié avec succès !" : "Copier le Script SQL (1-Clic)"}</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

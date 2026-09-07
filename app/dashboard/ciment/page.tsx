@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { 
-  Plus, Search, Edit2, Trash2, Printer, DollarSign, Loader2, Package, Scale, CreditCard, Clock, AlertTriangle
+  Plus, Search, Edit2, Trash2, Printer, DollarSign, Loader2, Package, Scale, CreditCard, Clock, AlertTriangle, Database, Copy, Check, X
 } from "lucide-react";
 
 // Types
@@ -29,7 +29,7 @@ export type CimentShipment = {
   created_at: string;
 };
 
-import { CimentEntryModal, CimentPaymentModal, CimentPrintModal } from "./CimentModals";
+import { CimentEntryModal, CimentPaymentModal, CimentPrintModal, SQL_CIMENT_MIGRATION } from "./CimentModals";
 
 export default function CimentPage() {
   const [session, setSession] = useState<any>(null);
@@ -38,6 +38,10 @@ export default function CimentPage() {
   const [loading, setLoading] = useState(true);
   const [searchCamion, setSearchCamion] = useState("");
   const [searchClient, setSearchClient] = useState("");
+
+  const [dbNeedsSetup, setDbNeedsSetup] = useState(false);
+  const [sqlCopied, setSqlCopied] = useState(false);
+  const [isSqlModalOpen, setIsSqlModalOpen] = useState(false);
 
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -64,6 +68,12 @@ export default function CimentPage() {
     }
   }, []);
 
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SQL_CIMENT_MIGRATION);
+    setSqlCopied(true);
+    setTimeout(() => setSqlCopied(false), 3000);
+  };
+
   const fetchShipments = async () => {
     setLoading(true);
     try {
@@ -76,6 +86,7 @@ export default function CimentPage() {
       
       if (Array.isArray(data)) {
         setShipments(data);
+        setDbNeedsSetup(false);
         
         let tTonnage = 0, tFacture = 0, tEncaisse = 0;
         data.forEach(s => {
@@ -90,6 +101,10 @@ export default function CimentPage() {
           totalEncaisse: tEncaisse,
           resteAPayer: tFacture - tEncaisse
         });
+      } else {
+        if (data?.error && (data.error.includes("gestion_ciment") || data.error.includes("schema cache") || data.error.includes("does not exist") || data.error.includes("42P01"))) {
+          setDbNeedsSetup(true);
+        }
       }
     } catch (error) {
       console.error("Erreur:", error);
@@ -136,6 +151,40 @@ export default function CimentPage() {
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
       
+      {/* Database Missing Banner if needed */}
+      {dbNeedsSetup && (
+        <div className="p-5 rounded-[28px] bg-gradient-to-r from-amber-500/15 via-emerald-500/10 to-transparent border border-amber-500/30 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/30 shrink-0">
+              <Database size={24} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Module Gestion Ciment : Tables en attente d'initialisation
+              </h3>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Les tables <code className="px-1.5 py-0.5 rounded bg-amber-100 font-mono text-amber-800 font-bold">gestion_ciment</code> et <code className="px-1.5 py-0.5 rounded bg-amber-100 font-mono text-amber-800 font-bold">ciment_paiements</code> ne sont pas encore créées dans votre base Supabase.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleCopySql}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-amber-600/20 transition-all cursor-pointer"
+            >
+              {sqlCopied ? <Check size={16} /> : <Copy size={16} />}
+              <span>{sqlCopied ? "SQL Copié !" : "Copier SQL (1-Clic)"}</span>
+            </button>
+            <button
+              onClick={() => setIsSqlModalOpen(true)}
+              className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              Voir le script
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900 rounded-3xl p-6 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
@@ -300,6 +349,60 @@ export default function CimentPage() {
           shipment={selectedShipment}
           onClose={() => setIsPrintModalOpen(false)}
         />
+      )}
+
+      {/* SQL Migration Helper Modal */}
+      {isSqlModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-2xl w-full shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500/20 text-amber-400 rounded-2xl">
+                  <Database size={22} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Migration SQL - Gestion Ciment</h2>
+                  <p className="text-xs text-slate-400">À exécuter dans Supabase &gt; SQL Editor &gt; Run</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsSqlModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Ce script crée les tables <code className="text-amber-400 font-mono">gestion_ciment</code> et <code className="text-amber-400 font-mono">ciment_paiements</code>, ajoute la colonne d'isolation <code className="text-emerald-400 font-mono">organization_id</code>, configure les clés étrangères, les index de performance et les politiques de sécurité (RLS).
+            </p>
+
+            <div className="relative flex-1 overflow-hidden rounded-2xl border border-slate-700 bg-slate-950">
+              <div className="absolute top-3 right-3 z-10">
+                <button
+                  onClick={handleCopySql}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-md transition-all cursor-pointer"
+                >
+                  {sqlCopied ? <Check size={14} /> : <Copy size={14} />}
+                  <span>{sqlCopied ? "Copié !" : "Copier"}</span>
+                </button>
+              </div>
+              <pre className="p-4 text-xs font-mono text-emerald-400 overflow-y-auto max-h-[350px] leading-relaxed select-all">
+                {SQL_CIMENT_MIGRATION}
+              </pre>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-[11px] text-slate-500">Une fois exécuté dans Supabase, rechargez cette page.</span>
+              <button
+                onClick={() => setIsSqlModalOpen(false)}
+                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
