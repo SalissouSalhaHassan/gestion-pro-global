@@ -29,14 +29,15 @@ CREATE TABLE IF NOT EXISTS public.gestion_ciment (
     montant_paye NUMERIC DEFAULT 0,
     statut_paiement TEXT DEFAULT 'Non Payé',
     utilisateur TEXT,
-    user_id UUID,
+    user_id TEXT,
     organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Ensure organization_id column exists if table was partially created
+-- Ensure organization_id and text user_id exist if table was previously created
 ALTER TABLE public.gestion_ciment ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE;
+ALTER TABLE public.gestion_ciment ALTER COLUMN user_id TYPE TEXT USING user_id::text;
 
 -- 2. Create Ciment Payments Table
 CREATE TABLE IF NOT EXISTS public.ciment_paiements (
@@ -47,13 +48,14 @@ CREATE TABLE IF NOT EXISTS public.ciment_paiements (
     reference TEXT,
     date_paiement TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     utilisateur TEXT,
-    user_id UUID,
+    user_id TEXT,
     organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Ensure organization_id column exists if table was partially created
+-- Ensure organization_id and text user_id exist if table was previously created
 ALTER TABLE public.ciment_paiements ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE;
+ALTER TABLE public.ciment_paiements ALTER COLUMN user_id TYPE TEXT USING user_id::text;
 
 -- 3. Indexes for High Performance
 CREATE INDEX IF NOT EXISTS idx_gestion_ciment_org ON public.gestion_ciment(organization_id);

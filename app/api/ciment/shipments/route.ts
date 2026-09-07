@@ -102,7 +102,7 @@ export async function POST(request: Request) {
     const bic = base * bic_p / 100;
     const total = base + tva + bic;
 
-    const payload = {
+    let payload: any = {
       client_tel,
       camion_no,
       transporteur,
@@ -134,15 +134,31 @@ export async function POST(request: Request) {
       if (user.organization_id) {
         updateQuery = updateQuery.eq("organization_id", user.organization_id);
       }
-      const { data, error } = await updateQuery
+      let { data, error } = await updateQuery
         .select()
         .single();
       
+      // Fallback if user_id column in DB is UUID while session user.id is numeric
+      if (error && (error.code === "22P02" || error.message?.includes("invalid input syntax for type uuid"))) {
+        console.warn("Retrying ciment update with user_id: null due to UUID mismatch");
+        payload.user_id = null;
+        let retryQuery = supabase
+          .from("gestion_ciment")
+          .update(payload)
+          .eq("id", id);
+        if (user.organization_id) {
+          retryQuery = retryQuery.eq("organization_id", user.organization_id);
+        }
+        const retryRes = await retryQuery.select().single();
+        data = retryRes.data;
+        error = retryRes.error;
+      }
+
       if (error) throw error;
       return NextResponse.json({ success: true, id, message: "Chargement mis à jour" });
     } else {
       // Insert
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("gestion_ciment")
         .insert({
           ...payload,
@@ -152,6 +168,23 @@ export async function POST(request: Request) {
         .select()
         .single();
         
+      // Fallback if user_id column in DB is UUID while session user.id is numeric
+      if (error && (error.code === "22P02" || error.message?.includes("invalid input syntax for type uuid"))) {
+        console.warn("Retrying ciment insert with user_id: null due to UUID mismatch");
+        const retryRes = await supabase
+          .from("gestion_ciment")
+          .insert({
+            ...payload,
+            user_id: null,
+            montant_paye: 0,
+            statut_paiement: "Non Payé"
+          })
+          .select()
+          .single();
+        data = retryRes.data;
+        error = retryRes.error;
+      }
+
       if (error) throw error;
       return NextResponse.json({ success: true, id: data.id, message: "Chargement créé avec succès" });
     }

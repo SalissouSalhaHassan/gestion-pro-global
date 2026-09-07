@@ -154,7 +154,7 @@ export async function POST(request: Request) {
     }
 
     // Insert ciment_paiements
-    const { error: errPay } = await supabase
+    let { error: errPay } = await supabase
       .from("ciment_paiements")
       .insert({
         id: paymentId,
@@ -168,6 +168,25 @@ export async function POST(request: Request) {
         organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
       });
     
+    // Fallback if user_id in DB is UUID while session user.id is numeric
+    if (errPay && (errPay.code === "22P02" || errPay.message?.includes("invalid input syntax for type uuid"))) {
+      console.warn("Retrying ciment payment insert with user_id: null due to UUID mismatch");
+      const retryRes = await supabase
+        .from("ciment_paiements")
+        .insert({
+          id: paymentId,
+          ciment_id: shipmentId,
+          date_paiement: datePay,
+          montant: amount,
+          moyen_paiement: moyen,
+          reference: reference || "",
+          utilisateur: user.username,
+          user_id: null,
+          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
+        });
+      errPay = retryRes.error;
+    }
+
     if (errPay) throw errPay;
 
     // Recalculate Totals
