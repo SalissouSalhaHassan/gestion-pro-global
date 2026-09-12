@@ -833,6 +833,14 @@ export default function InvoicesPage() {
                             </button>
 
                             <button
+                              onClick={() => setEditInvoiceId(inv.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-all cursor-pointer"
+                              title={locale === "ar" ? "تعديل الفاتورة" : "Modifier la Facture"}
+                            >
+                              <Edit3 size={16} />
+                            </button>
+
+                            <button
                               onClick={() => setPaymentInvoice(inv)}
                               className="p-1.5 rounded-lg text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 transition-all cursor-pointer"
                               title="Encaisser un règlement"
@@ -952,6 +960,14 @@ export default function InvoicesPage() {
                         title="WhatsApp"
                       >
                         <Share2 size={16} />
+                      </button>
+
+                      <button
+                        onClick={() => setEditInvoiceId(inv.id)}
+                        className="p-2 rounded-xl text-amber-500 hover:bg-amber-50 transition-all cursor-pointer"
+                        title={locale === "ar" ? "تعديل" : "Modifier"}
+                      >
+                        <Edit3 size={16} />
                       </button>
 
                       <button
