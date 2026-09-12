@@ -170,72 +170,35 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    // --- CUSTOM AUTH LOGIC ---
-    const identifier = email.trim();
-    const { data: userRecord, error: fetchError } = await supabase
-      .from("users")
-      .select("*")
-      .ilike("utilisateur", identifier)
-      .eq("mot_de_passe", password)
-      .maybeSingle();
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: email.trim(),
+          password: password,
+        }),
+      });
 
-    if (fetchError || !userRecord) {
-      setError("L'identifiant ou le mot de passe est incorrect.");
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || "L'identifiant ou le mot de passe est incorrect.");
+        setLoading(false);
+        return;
+      }
+
+      // Ensure cookie is set in browser
+      if (data.access_token) {
+        document.cookie = `gp_session=${data.access_token}; path=/; max-age=604800; SameSite=Lax`;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err: any) {
+      console.error("Login request error:", err);
+      setError("Erreur de communication avec le serveur.");
       setLoading(false);
-      return;
     }
-
-    // Fetch user permissions
-    const { data: perms } = await supabase
-      .from("role_permissions")
-      .select("permissions(permission_key)")
-      .eq("role_id", userRecord.role_id);
-
-    const permissionKeys = perms?.map((p: any) => p.permissions?.permission_key).filter(Boolean) || [];
-
-    // Fetch user depots from user_warehouses as fallback
-    const { data: userWarehouses } = await supabase
-      .from("user_warehouses")
-      .select("depot_id, depots(nom)")
-      .eq("user_id", userRecord.id);
-
-    const userDepotsList = userWarehouses?.map((uw: any) => uw.depots?.nom).filter(Boolean) || [];
-    const depotsString = userDepotsList.length > 0 ? userDepotsList.join(", ") : (userRecord.emplacement || "BOUTIQUE");
-
-    // Determine primary depot (emplacement) dynamically with safe fallback
-    let primaryDepot = userRecord.emplacement || '';
-    if (!primaryDepot && userDepotsList.length > 0) {
-      primaryDepot = userDepotsList[0];
-    }
-    if (!primaryDepot) primaryDepot = 'BOUTIQUE';
-
-    // Fetch organization info for clean display
-    let orgName = "";
-    if (userRecord.organization_id) {
-      const { data: orgData } = await supabase
-        .from("organizations")
-        .select("name")
-        .eq("id", userRecord.organization_id)
-        .maybeSingle();
-      if (orgData?.name) orgName = orgData.name;
-    }
-
-    // Set custom session cookie (24 hours)
-    const sessionData = {
-      id: userRecord.id,
-      username: userRecord.utilisateur,
-      role: userRecord.role_id,
-      admin: userRecord.admin,
-      emplacement: primaryDepot,
-      depots: depotsString,
-      organization_id: userRecord.organization_id || "00000000-0000-0000-0000-000000000001",
-      organization_name: orgName,
-      permissions: permissionKeys.length > 0 ? permissionKeys : ['ALL']
-    };
-    document.cookie = `gp_session=${encodeURIComponent(JSON.stringify(sessionData))}; path=/; max-age=86400; SameSite=Lax`;
-
-    router.push("/dashboard");
-    router.refresh();
   };
 
   return (

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { signSession } from '@/lib/session';
 
 export async function POST(request: Request) {
   try {
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
       permissions: permissionKeys,
     };
 
-    const sessionToken = encodeURIComponent(JSON.stringify(sessionData));
+    const sessionToken = await signSession(sessionData);
 
     const response = NextResponse.json({
       access_token: sessionToken,
@@ -78,6 +79,14 @@ export async function POST(request: Request) {
       organization_id: sessionData.organization_id,
       permissions: permissionKeys,
       isAdmin: isAdmin
+    });
+
+    // Set signed cookie for web clients
+    response.cookies.set('gp_session', sessionToken, {
+      path: '/',
+      maxAge: 86400 * 7, // 7 days
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
     });
 
 

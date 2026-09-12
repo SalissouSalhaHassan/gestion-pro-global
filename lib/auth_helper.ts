@@ -1,4 +1,5 @@
 import { cookies, headers } from "next/headers";
+import { verifyAndDecodeSession } from "@/lib/session";
 
 export interface CustomSession {
   id: string | number;
@@ -15,6 +16,7 @@ export interface CustomSession {
 
 /**
  * Gets the custom user session from the 'gp_session' cookie or Authorization header.
+ * Automatically verifies cryptographic signature to prevent tampering.
  * @returns The session object or null if not found/invalid.
  */
 export async function getServerSession(): Promise<CustomSession | null> {
@@ -24,34 +26,19 @@ export async function getServerSession(): Promise<CustomSession | null> {
   if (!sessionRaw) {
     const head = await headers();
     const auth = head.get("authorization");
-    console.log('getServerSession: Cookie missing. Authorization header:', auth ? 'PRESENT' : 'MISSING');
     if (auth && auth.startsWith("Bearer ")) {
       sessionRaw = auth.substring(7);
-      console.log('getServerSession: Bearer token found length:', sessionRaw.length);
     }
-  } else {
-    console.log('getServerSession: Found session cookie');
   }
 
   if (!sessionRaw) return null;
 
   try {
-    // Try to decode if it looks like it's URL encoded
-    let decoded = sessionRaw;
-    if (sessionRaw.includes('%')) {
-      decoded = decodeURIComponent(sessionRaw);
-    }
-    
-    // If it's still double-encoded (sometimes happens with some clients)
-    if (decoded.includes('%')) {
-       decoded = decodeURIComponent(decoded);
-    }
-
-    const session = JSON.parse(decoded) as CustomSession;
-    console.log('getServerSession: Parsed session for user:', session.username);
-    return session;
+    const session = await verifyAndDecodeSession(sessionRaw);
+    if (!session) return null;
+    return session as CustomSession;
   } catch (error) {
-    console.error("Failed to parse session. Raw content:", sessionRaw.substring(0, 50) + '...');
+    console.error("Failed to verify session token:", error);
     return null;
   }
 }

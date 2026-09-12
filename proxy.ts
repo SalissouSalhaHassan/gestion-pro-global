@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { verifyAndDecodeSession } from '@/lib/session'
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -56,12 +57,9 @@ export async function proxy(request: NextRequest) {
 
   if (gpSessionCookie) {
     try {
-      let decoded = gpSessionCookie;
-      if (gpSessionCookie.includes('%')) decoded = decodeURIComponent(gpSessionCookie);
-      if (decoded.includes('%')) decoded = decodeURIComponent(decoded);
-      sessionData = JSON.parse(decoded);
+      sessionData = await verifyAndDecodeSession(gpSessionCookie);
     } catch (e) {
-      console.error('Proxy: Failed to parse session cookie')
+      console.error('Proxy: Failed to verify session cookie');
     }
   }
 

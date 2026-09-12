@@ -33,6 +33,14 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# scratch & local diagnostics
+/scratch/
+check_*.js
+search_*.js
+test_*.txt
+git_*.txt
+*.ps1
+
 # vercel
 .vercel
 

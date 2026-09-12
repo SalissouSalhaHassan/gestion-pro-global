@@ -55,12 +55,12 @@ export async function GET(request: Request) {
 
     const invoices = invoicesRaw || [];
 
-    // 2. Fetch Payments
+    // 2. Fetch Payments (Actual Cash Inflows)
     let payments: any[] = [];
     try {
       let paymentQuery = supabase
         .from("paiements")
-        .select("id, date_operation, montant_regle, moyen_reglement, reference_paiement, factures(id, bl_number, total_ttc, clients(nom))")
+        .select("id, date_operation, montant_regle, moyen_reglement, reference_paiement, utilisateur, factures(id, bl_number, total_ttc, vendeur, clients(nom))")
         .order("id", { ascending: false });
       if (session.organization_id) {
         paymentQuery = paymentQuery.eq("organization_id", session.organization_id);
@@ -68,13 +68,16 @@ export async function GET(request: Request) {
       if (start && end) {
         paymentQuery = paymentQuery.gte("date_operation", start).lte("date_operation", `${end}T23:59:59.999Z`);
       }
+      if (cashier && cashier !== "Tous") {
+        paymentQuery = paymentQuery.or(`utilisateur.eq.${cashier},factures.vendeur.eq.${cashier}`);
+      }
       const { data: paymentsRaw } = await paymentQuery;
       payments = paymentsRaw || [];
     } catch (e) {
       console.warn("Payment fetch warning in finance:", e);
     }
 
-    // 3. Fetch Expenses
+    // 3. Fetch Expenses (Actual Cash Outflows)
     let expenses: any[] = [];
     try {
       let expQuery = supabase
@@ -107,16 +110,23 @@ export async function GET(request: Request) {
 
     const clients = clientsRaw || [];
 
-    // Calculations
+    // Accounting Calculations:
+    // totalAttendu = Invoiced sales revenue (Accrual accounting)
     const totalAttendu = invoices.reduce((acc, f) => acc + money(f.total_ttc), 0);
-    const totalEncaisse = invoices.reduce((acc, f) => acc + money(f.montant_paye), 0);
+
+    // totalEncaisse = Actual cash collected in this period (Cash accounting)
+    const totalPaymentsReceived = payments.reduce((acc, p) => acc + money(p.montant_regle), 0);
+    const totalEncaisse = totalPaymentsReceived > 0 
+      ? totalPaymentsReceived 
+      : invoices.reduce((acc, f) => acc + money(f.montant_paye), 0);
+
     const totalImpaye = invoices.reduce((acc, f) => acc + Math.max(0, money(f.total_ttc) - money(f.montant_paye)), 0);
     const totalDepenses = expenses.reduce((acc, e) => acc + money(e.montant), 0);
     const soldeActuel = totalEncaisse - totalDepenses;
 
-    const tauxRecouvrement = totalAttendu > 0 ? (totalEncaisse / totalAttendu) * 100 : 100;
+    const tauxRecouvrement = totalAttendu > 0 ? Math.min(100, (totalEncaisse / totalAttendu) * 100) : 100;
 
-    // Time-based calculations
+    // Time-based calculations (Actual receipts per period)
     const todayStr = iso(now);
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay());
@@ -124,34 +134,33 @@ export async function GET(request: Request) {
     const startOfMonthStr = iso(new Date(now.getFullYear(), now.getMonth(), 1));
     const startOfYearStr = iso(new Date(now.getFullYear(), 0, 1));
 
-    const revenusAujourdhui = invoices
-      .filter((f) => f.date_facture === todayStr)
-      .reduce((acc, f) => acc + money(f.montant_paye), 0);
+    const calculateReceiptsSince = (sinceDate: string) => {
+      if (payments.length > 0) {
+        return payments
+          .filter((p) => p.date_operation && p.date_operation.slice(0, 10) >= sinceDate)
+          .reduce((acc, p) => acc + money(p.montant_regle), 0);
+      }
+      return invoices
+        .filter((f) => (f.date_facture || todayStr) >= sinceDate)
+        .reduce((acc, f) => acc + money(f.montant_paye), 0);
+    };
 
-    const revenusCetteSemaine = invoices
-      .filter((f) => f.date_facture >= startOfWeekStr)
-      .reduce((acc, f) => acc + money(f.montant_paye), 0);
-
-    const revenusCeMois = invoices
-      .filter((f) => f.date_facture >= startOfMonthStr)
-      .reduce((acc, f) => acc + money(f.montant_paye), 0);
-
-    const revenusCetteAnnee = invoices
-      .filter((f) => f.date_facture >= startOfYearStr)
-      .reduce((acc, f) => acc + money(f.montant_paye), 0);
+    const revenusAujourdhui = calculateReceiptsSince(todayStr);
+    const revenusCetteSemaine = calculateReceiptsSince(startOfWeekStr);
+    const revenusCeMois = calculateReceiptsSince(startOfMonthStr);
+    const revenusCetteAnnee = calculateReceiptsSince(startOfYearStr);
 
     // Client debt metrics
     const clientsPayesCount = clients.filter((c) => money(c.credit_facture) <= 0).length;
     const clientsImpayesCount = clients.filter((c) => money(c.credit_facture) > 0).length;
 
-    // Mode of payment breakdown (derived from paiements table)
+    // Mode of payment breakdown (derived from actual payments)
     const modeMap: Record<string, number> = {};
     payments.forEach((p) => {
       const mode = p.moyen_reglement || "Espèces";
       modeMap[mode] = (modeMap[mode] || 0) + money(p.montant_regle);
     });
 
-    // If no payments recorded yet, default from invoices
     if (Object.keys(modeMap).length === 0 && totalEncaisse > 0) {
       modeMap["Espèces"] = totalEncaisse;
     }
@@ -161,7 +170,7 @@ export async function GET(request: Request) {
       value: Math.round(modeMap[name]),
     }));
 
-    // Daily/Monthly timeline curve
+    // Daily timeline curve (Accrual Sales vs Cash Collections vs Expenses)
     const timelineMap: Record<string, { label: string; encaisse: number; attendu: number; depenses: number }> = {};
     invoices.forEach((f) => {
       const d = f.date_facture || todayStr;
@@ -169,11 +178,23 @@ export async function GET(request: Request) {
         timelineMap[d] = { label: d, encaisse: 0, attendu: 0, depenses: 0 };
       }
       timelineMap[d].attendu += money(f.total_ttc);
-      timelineMap[d].encaisse += money(f.montant_paye);
+      if (payments.length === 0) {
+        timelineMap[d].encaisse += money(f.montant_paye);
+      }
     });
 
+    if (payments.length > 0) {
+      payments.forEach((p) => {
+        const d = (p.date_operation || todayStr).slice(0, 10);
+        if (!timelineMap[d]) {
+          timelineMap[d] = { label: d, encaisse: 0, attendu: 0, depenses: 0 };
+        }
+        timelineMap[d].encaisse += money(p.montant_regle);
+      });
+    }
+
     expenses.forEach((e) => {
-      const d = e.date_depense || todayStr;
+      const d = (e.date_depense || todayStr).slice(0, 10);
       if (!timelineMap[d]) {
         timelineMap[d] = { label: d, encaisse: 0, attendu: 0, depenses: 0 };
       }

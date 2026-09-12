@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mxairvfgklibhamkpeqq.supabase.co';
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'sb_secret_Bj4CF6U_1aAwYu3DlLQuNg_XWQwE_N0';
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 function getAdminClient() {
   return createClient(SUPABASE_URL, SERVICE_KEY, {
@@ -19,20 +19,25 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const search = searchParams.get('search');
+    const orgId = searchParams.get('org') || searchParams.get('organization_id') || '00000000-0000-0000-0000-000000000001';
 
-    // 1. Fetch Company Info
-    const { data: company } = await supabase
+    // 1. Fetch Company Info (Scoped to Tenant)
+    let compQuery = supabase
       .from('informations_entreprise')
-      .select('nom_entreprise, telephone, adresse, email, logo_url')
-      .maybeSingle();
+      .select('nom_entreprise, telephone, adresse, email, logo_url');
+    if (orgId) compQuery = compQuery.eq('organization_id', orgId);
+    const { data: company } = await compQuery.maybeSingle();
 
-    // 2. Fetch Articles with Stock
+    // 2. Fetch Articles with Stock (Scoped to Tenant)
     let query = supabase
       .from('articles')
       .select('id, reference, designation, famille, p_vente_ttc, prix_gros, prix_special, image_path, code_barre, article_par_colis')
       .eq('is_deleted', false)
       .order('designation');
 
+    if (orgId) {
+      query = query.eq('organization_id', orgId);
+    }
     if (category && category !== 'ALL') {
       query = query.eq('famille', category);
     }
@@ -47,12 +52,15 @@ export async function GET(request: Request) {
         .select('id, reference, designation, famille, p_vente_ttc, image_path, code_barre, article_par_colis')
         .eq('is_deleted', false)
         .order('designation');
+      if (orgId) fallbackQuery = fallbackQuery.eq('organization_id', orgId);
       if (category && category !== 'ALL') fallbackQuery = fallbackQuery.eq('famille', category);
       if (search) fallbackQuery = fallbackQuery.or(`designation.ilike.%${search}%,reference.ilike.%${search}%`);
       articlesRes = await fallbackQuery;
     }
 
-    const stocksRes = await supabase.from('stocks').select('article_id, quantite');
+    let stockQ = supabase.from('stocks').select('article_id, quantite');
+    if (orgId) stockQ = stockQ.eq('organization_id', orgId);
+    const stocksRes = await stockQ;
 
     if (articlesRes.error) throw articlesRes.error;
 
