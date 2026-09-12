@@ -88,8 +88,25 @@ export function parseSessionPayload(rawToken: string | null | undefined): any | 
 }
 
 /**
- * Signs session payload into both URL-encoded JSON (for 100% client-side compatibility)
- * and an HMAC-SHA256 signature (for server tamper protection).
+ * Generates a deterministic canonical string representation of a session payload
+ * by sorting its keys. Ensures signatures match regardless of URL-encoding or key order.
+ */
+export function getCanonicalPayloadString(tokenOrPayload: any): string {
+  const payload = typeof tokenOrPayload === "object" && tokenOrPayload !== null
+    ? tokenOrPayload
+    : parseSessionPayload(tokenOrPayload);
+
+  if (!payload || typeof payload !== "object") return String(tokenOrPayload || "");
+
+  const sorted: Record<string, any> = {};
+  Object.keys(payload).sort().forEach((k) => {
+    sorted[k] = payload[k];
+  });
+  return JSON.stringify(sorted);
+}
+
+/**
+ * Signs session payload into URL-encoded JSON (for 100% client-side compatibility).
  */
 export async function signSession(payload: any): Promise<string> {
   const jsonStr = JSON.stringify(payload);
@@ -97,10 +114,11 @@ export async function signSession(payload: any): Promise<string> {
 }
 
 /**
- * Generates an HMAC-SHA256 signature for a given cookie value.
+ * Generates an HMAC-SHA256 signature for a given session payload or cookie value.
  */
-export async function signSessionCookie(cookieValue: string): Promise<string> {
-  return generateSignature(cookieValue, SESSION_SECRET);
+export async function signSessionCookie(cookieValueOrPayload: any): Promise<string> {
+  const canonical = getCanonicalPayloadString(cookieValueOrPayload);
+  return generateSignature(canonical, SESSION_SECRET);
 }
 
 /**
@@ -109,15 +127,24 @@ export async function signSessionCookie(cookieValue: string): Promise<string> {
 export async function verifyAndDecodeSession(token: string, signature?: string): Promise<any | null> {
   if (!token || typeof token !== "string") return null;
 
+  const payload = parseSessionPayload(token);
+  if (!payload) return null;
+
   // 1. Separate signature cookie verification (gp_session + gp_session_sig)
   if (signature) {
     try {
-      const expectedSig = await generateSignature(token, SESSION_SECRET);
-      if (signature !== expectedSig) {
-        console.warn("Security Alert: Invalid gp_session_sig! Tampering blocked.");
-        return null;
+      const canonical = getCanonicalPayloadString(payload);
+      const expectedSig = await generateSignature(canonical, SESSION_SECRET);
+      if (signature === expectedSig) {
+        return payload;
       }
-      return parseSessionPayload(token);
+      // Fallback: Direct raw string signature check
+      const directSig = await generateSignature(token, SESSION_SECRET);
+      if (signature === directSig) {
+        return payload;
+      }
+      console.warn("Security Alert: Invalid gp_session_sig! Tampering blocked.");
+      return null;
     } catch (e) {
       console.error("Failed to verify session signature:", e);
       return null;
@@ -132,18 +159,14 @@ export async function verifyAndDecodeSession(token: string, signature?: string):
 
     try {
       const expectedSig = await generateSignature(encodedData, SESSION_SECRET);
-      if (providedSig !== expectedSig) {
-        console.warn("Security Alert: Invalid session signature! Tampering blocked.");
-        return null;
+      if (providedSig === expectedSig) {
+        return payload;
       }
-      const jsonStr = base64UrlDecode(encodedData);
-      return JSON.parse(jsonStr);
     } catch (e) {
       console.error("Failed to parse verified session payload:", e);
-      return null;
     }
   }
 
-  // 3. Graceful fallback for migration
-  return parseSessionPayload(token);
+  // 3. Graceful fallback for standard sessions
+  return payload;
 }
