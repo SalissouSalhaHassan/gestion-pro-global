@@ -195,8 +195,8 @@ export default function LoginPage() {
         document.cookie = `gp_session_sig=${data.signature}; path=/; max-age=604800; SameSite=Lax`;
       }
 
-      router.push("/dashboard");
-      router.refresh();
+      // Hard redirect to ensure fresh cookies in Server Components and Layout
+      window.location.href = "/dashboard";
     } catch (err: any) {
       console.error("Login request error:", err);
       setError("Erreur de communication avec le serveur.");

@@ -27,28 +27,42 @@ export async function POST(request: Request) {
     }
 
     // 2. Fetch user permissions (optional but good for parity)
-    const { data: perms } = await supabase
-      .from('role_permissions')
-      .select('permissions(permission_key)')
-      .eq('role_id', userRecord.role_id);
-
-    const permissionKeys = perms?.map((p: any) => p.permissions.permission_key) || [];
+    let permissionKeys: string[] = [];
+    try {
+      const { data: perms } = await supabase
+        .from('role_permissions')
+        .select('permissions(permission_key)')
+        .eq('role_id', userRecord.role_id);
+      if (perms) {
+        permissionKeys = perms.map((p: any) => p.permissions?.permission_key).filter(Boolean);
+      }
+    } catch (e) {
+      console.warn("role_permissions lookup warning:", e);
+    }
 
     // Fetch user depots from user_warehouses as fallback
-    const { data: userWarehouses } = await supabase
-      .from('user_warehouses')
-      .select('depot_id, is_primary, depots(nom)')
-      .eq('user_id', userRecord.id);
+    let userDepotsList: string[] = [];
+    try {
+      const { data: userWarehouses } = await supabase
+        .from('user_warehouses')
+        .select('depot_id, depots(nom)')
+        .eq('user_id', userRecord.id);
 
-    const userDepotsList = userWarehouses?.map((uw: any) => uw.depots?.nom).filter(Boolean) || [];
+      if (userWarehouses) {
+        userDepotsList = userWarehouses.map((uw: any) => uw.depots?.nom).filter(Boolean);
+      }
+    } catch (e) {
+      console.warn("user_warehouses lookup warning:", e);
+    }
+
     const depotsString = userDepotsList.length > 0 ? userDepotsList.join(", ") : (userRecord.depots || "");
 
     // Determine primary depot (emplacement) dynamically with safe fallback
     let primaryDepot = userRecord.emplacement || '';
-    if (!primaryDepot && userWarehouses && userWarehouses.length > 0) {
-      const primaryUw = (userWarehouses as any[]).find((uw: any) => uw.is_primary) || userWarehouses[0];
-      primaryDepot = primaryUw.depots?.nom || '';
+    if (!primaryDepot && userDepotsList.length > 0) {
+      primaryDepot = userDepotsList[0];
     }
+    if (!primaryDepot) primaryDepot = 'BOUTIQUE';
 
     // 3. Create session data (parity with cookie logic)
     const adminVal = userRecord.admin?.toString().toLowerCase();
