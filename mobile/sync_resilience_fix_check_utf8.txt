@@ -1,0 +1,32 @@
+﻿Analyzing 2 items...                                            
+
+   info - Don't invoke 'print' in production code - lib\api\api_service.dart:72:7 - avoid_print
+   info - The local variable '_deductLocalStock' starts with an underscore - lib\api\api_service.dart:170:18 - no_leading_underscores_for_local_identifiers
+warning - The operand can't be 'null', so the condition is always 'false' - lib\api\api_service.dart:424:20 - unnecessary_null_comparison
+warning - Dead code - lib\api\api_service.dart:424:29 - dead_code
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:687:21 - unnecessary_type_check
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:1074:21 - unnecessary_type_check
+warning - The value of the local variable 'pending' isn't used - lib\api\api_service.dart:1242:13 - unused_local_variable
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:1256:13 - unnecessary_type_check
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:1293:13 - unnecessary_type_check
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:1812:13 - unnecessary_type_check
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:2080:13 - unnecessary_type_check
+   info - Use interpolation to compose strings and values - lib\api\api_service.dart:2100:46 - prefer_interpolation_to_compose_strings
+   info - Use interpolation to compose strings and values - lib\api\api_service.dart:2232:11 - prefer_interpolation_to_compose_strings
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:2431:17 - unnecessary_type_check
+   info - Don't invoke 'print' in production code - lib\api\api_service.dart:2878:7 - avoid_print
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:3230:13 - unnecessary_type_check
+   info - Statements in an if should be enclosed in a block - lib\api\api_service.dart:3331:7 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\api\api_service.dart:3862:7 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\api\api_service.dart:3864:7 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\api\api_service.dart:3866:7 - curly_braces_in_flow_control_structures
+   info - Use interpolation to compose strings and values - lib\api\api_service.dart:3890:27 - prefer_interpolation_to_compose_strings
+
+flutter : 21 issues found. (ran in 3.3s)
+At line:1 char:1
++ flutter analyze lib/api/api_service.dart lib/api/supabase_service.dar ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (21 issues found. (ran in 3.3s):Stri 
+   ng) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

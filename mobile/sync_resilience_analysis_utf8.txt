@@ -1,0 +1,38 @@
+﻿Analyzing 2 items...                                            
+
+   info - Don't invoke 'print' in production code - lib\api\api_service.dart:72:7 - avoid_print
+   info - The local variable '_deductLocalStock' starts with an underscore - lib\api\api_service.dart:170:18 - no_leading_underscores_for_local_identifiers
+  error - The method 'getLoginUsername' isn't defined for the type 'OfflineService' - lib\api\api_service.dart:297:57 - undefined_method
+  error - A value of type 'num' can't be assigned to a variable of type 'double' - lib\api\api_service.dart:328:36 - invalid_assignment
+  error - Expected to find ';' - lib\api\api_service.dart:328:68 - expected_token
+  error - Expected an identifier - lib\api\api_service.dart:328:72 - missing_identifier
+warning - The operand can't be 'null', so the condition is always 'false' - lib\api\api_service.dart:425:20 - unnecessary_null_comparison
+warning - Dead code - lib\api\api_service.dart:425:29 - dead_code
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:688:21 - unnecessary_type_check
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:1075:21 - unnecessary_type_check
+warning - The value of the local variable 'pending' isn't used - lib\api\api_service.dart:1243:13 - unused_local_variable
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:1257:13 - unnecessary_type_check
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:1294:13 - unnecessary_type_check
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:1813:13 - unnecessary_type_check
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:2081:13 - unnecessary_type_check
+   info - Use interpolation to compose strings and values - lib\api\api_service.dart:2101:46 - prefer_interpolation_to_compose_strings
+   info - Use interpolation to compose strings and values - lib\api\api_service.dart:2233:11 - prefer_interpolation_to_compose_strings
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:2432:17 - unnecessary_type_check
+   info - Don't invoke 'print' in production code - lib\api\api_service.dart:2879:7 - avoid_print
+warning - Unnecessary type check; the result is always 'true' - lib\api\api_service.dart:3231:13 - unnecessary_type_check
+   info - Statements in an if should be enclosed in a block - lib\api\api_service.dart:3332:7 - curly_braces_in_flow_control_structures
+  error - A value of type 'String?' can't be assigned to a variable of type 'bool' - lib\api\api_service.dart:3357:31 - invalid_assignment
+  error - A value of type 'String?' can't be assigned to a variable of type 'bool' - lib\api\api_service.dart:3799:30 - invalid_assignment
+   info - Statements in an if should be enclosed in a block - lib\api\api_service.dart:3861:7 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\api\api_service.dart:3863:7 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\api\api_service.dart:3865:7 - curly_braces_in_flow_control_structures
+   info - Use interpolation to compose strings and values - lib\api\api_service.dart:3889:27 - prefer_interpolation_to_compose_strings
+
+flutter : 27 issues found. (ran in 4.9s)
+At line:1 char:1
++ flutter analyze lib/api/api_service.dart lib/api/supabase_service.dar ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (27 issues found. (ran in 4.9s):Stri 
+   ng) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

@@ -1,0 +1,203 @@
+import psycopg
+from datetime import datetime
+import traceback
+from decimal import Decimal # <-- ✅ تم إضافة هذا السطر
+
+# معلومات الاتصال
+DB_CONFIG = "dbname=gestion_stock_pg user=gestion_user password=salissou1994S host=localhost port=5432"
+
+class InvoiceLogic:
+    def create_invoice(self, client_id, items, total_amount, user_name="MobileApp"):
+        """
+        Version améliorée qui vérifie le stock avant de créer la facture.
+        """
+        conn = None
+        try:
+            conn = psycopg.connect(DB_CONFIG)
+            cursor = conn.cursor()
+            
+            # --- Étape de pré-vérification du stock ---
+            for item in items:
+                requested_depot = item.depot or "Principal"
+                
+                cursor.execute("""
+                    SELECT quantite FROM stocks 
+                    WHERE article_id = %s AND depot_nom = %s
+                """, (item.article_id, requested_depot))
+                
+                res = cursor.fetchone()
+                stock_available = float(res[0]) if res else 0.0
+                
+                if stock_available < item.quantity:
+                    cursor.execute("SELECT designation FROM articles WHERE id = %s", (item.article_id,))
+                    art_name = cursor.fetchone()[0]
+                    conn.rollback()
+                    return False, f"Stock insuffisant pour '{art_name}' au dépôt '{requested_depot}'. Demandé: {item.quantity}, Disponible: {stock_available}"
+
+            # Si toutes les vérifications passent, on continue la création
+            # 1. Créer le numéro de référence
+            ref = f"MOB-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            
+            # 2. Insérer l'en-tête de la facture
+            cursor.execute("""
+                INSERT INTO factures 
+                (date_facture, bl_number, client_id, total_ttc, montant_restant, statut, vendeur)
+                VALUES (CURRENT_DATE, %s, %s, %s, %s, 'Non payée', %s)
+                RETURNING id
+            """, (ref, client_id, total_amount, total_amount, user_name))
+            
+            invoice_id = cursor.fetchone()[0]
+            
+            # 3. Traiter les articles
+            for item in items:
+                requested_depot = item.depot or "Principal"
+
+                cursor.execute("""
+                    SELECT a.reference, a.designation, COALESCE(a.taxe, 0)
+                    FROM articles a WHERE a.id = %s
+                """, (item.article_id,))
+                article_data = cursor.fetchone()
+                code_art, description, taux_tva = article_data[0], article_data[1], float(article_data[2])
+
+                # Calculs financiers
+                qty, pu_ttc = item.quantity, item.price
+                pu_ht = pu_ttc / (1 + (taux_tva / 100)) if taux_tva > 0 else pu_ttc
+                total_item_ttc, total_item_ht = pu_ttc * qty, pu_ht * qty
+                montant_tva_item = total_item_ttc - total_item_ht
+
+                # Insertion dans facture_items
+                cursor.execute("""
+                    INSERT INTO facture_items 
+                    (facture_id, article_id, code_art, description, qte, pu_ttc, pu_ht, taux_tva_item, montant_tva_item, total_item_ttc, total_item_ht, depot_origine)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (invoice_id, item.article_id, code_art, description, qty, pu_ttc, pu_ht, taux_tva, montant_tva_item, total_item_ttc, total_item_ht, requested_depot))
+                
+                # Déduction de la quantité du stock (maintenant on est sûr)
+                cursor.execute("""
+                    UPDATE stocks SET quantite = quantite - %s 
+                    WHERE article_id = %s AND depot_nom = %s
+                """, (qty, item.article_id, requested_depot))
+
+            # 4. Mettre à jour le solde du client
+            cursor.execute("UPDATE clients SET credit_facture = COALESCE(credit_facture, 0) + %s WHERE id = %s", (total_amount, client_id))
+
+            conn.commit()
+            return True, "Invoice created successfully"
+
+        except Exception as e:
+            if conn: conn.rollback()
+            print(f"Error creating invoice: {e}")
+            traceback.print_exc()
+            return False, str(e)
+            
+        finally:
+            if conn: conn.close()
+
+    def update_invoice(self, invoice_id, items, total_amount, user_name="MobileApp"):
+        """
+        Mise à jour de la facture avec une vérification de stock robuste.
+        """
+        conn = None
+        try:
+            conn = psycopg.connect(DB_CONFIG)
+            cursor = conn.cursor()
+            
+            # 1. Vérifier l'existence de la facture
+            cursor.execute("SELECT client_id, total_ttc FROM factures WHERE id = %s", (invoice_id,))
+            inv_data = cursor.fetchone()
+            if not inv_data:
+                return False, "Facture introuvable"
+            
+            old_client_id, old_total = inv_data
+            
+            # 2. Récupérer les anciens articles pour restaurer le stock
+            cursor.execute("SELECT article_id, qte, depot_origine FROM facture_items WHERE facture_id = %s", (invoice_id,))
+            old_items = cursor.fetchall()
+            
+            # 3. Restaurer l'ancien stock
+            for oid, oqty, odepot in old_items:
+                if odepot:
+                    cursor.execute("""
+                        UPDATE stocks SET quantite = quantite + %s 
+                        WHERE article_id = %s AND depot_nom = %s
+                    """, (oqty, oid, odepot))
+            
+            # 4. Annuler l'ancien solde client
+            cursor.execute("UPDATE clients SET credit_facture = credit_facture - %s WHERE id = %s", (old_total, old_client_id))
+            
+            # 5. Supprimer les anciens articles de la facture
+            cursor.execute("DELETE FROM facture_items WHERE facture_id = %s", (invoice_id,))
+            
+            # --- 6. Étape de pré-vérification du stock pour les NOUVEAUX articles ---
+            for item in items:
+                requested_depot = item.depot or "Principal"
+                
+                cursor.execute("SELECT designation FROM articles WHERE id = %s", (item.article_id,))
+                designation_res = cursor.fetchone()
+                designation = designation_res[0] if designation_res else f"Article ID {item.article_id}"
+                
+                # Vérifier le stock au dépôt demandé
+                cursor.execute("""
+                    SELECT quantite FROM stocks 
+                    WHERE article_id = %s AND depot_nom = %s
+                """, (item.article_id, requested_depot))
+                stock_res = cursor.fetchone()
+                stock_disponible = float(stock_res[0]) if stock_res else 0.0
+
+                if stock_disponible < item.quantity:
+                    # Si stock insuffisant au dépôt demandé
+                    error_msg = f"Stock insuffisant pour '{designation}' au dépôt '{requested_depot}'. Demandé: {item.quantity}, Disponible: {stock_disponible}."
+                    conn.rollback() # Annuler la transaction (y compris la restauration du stock)
+                    return False, error_msg
+
+            # --- 7. Insérer les nouveaux articles (si le stock est suffisant) ---
+            for item in items:
+                requested_depot = item.depot or "Principal"
+
+                cursor.execute("""
+                    SELECT a.reference, a.designation, COALESCE(a.taxe, 0)
+                    FROM articles a WHERE a.id = %s
+                """, (item.article_id,))
+                article_data = cursor.fetchone()
+                code_art, description, taux_tva = article_data[0], article_data[1], float(article_data[2])
+
+                qty = item.quantity
+                # ✅ التحويل هنا أيضاً لضمان التوافق
+                pu_ttc = Decimal(str(item.price))
+
+                pu_ht = pu_ttc / (Decimal('1') + (Decimal(str(taux_tva)) / Decimal('100'))) if taux_tva > 0 else pu_ttc
+                total_item_ttc = pu_ttc * qty
+                total_item_ht = pu_ht * qty
+                montant_tva_item = total_item_ttc - total_item_ht
+
+                cursor.execute("""
+                    INSERT INTO facture_items (facture_id, article_id, code_art, description, qte, pu_ttc, pu_ht, taux_tva_item, montant_tva_item, total_item_ttc, total_item_ht, depot_origine)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (invoice_id, item.article_id, code_art, description, qty, pu_ttc, pu_ht, taux_tva, montant_tva_item, total_item_ttc, total_item_ht, requested_depot))
+                
+                # Déduire le nouveau stock
+                cursor.execute("UPDATE stocks SET quantite = quantite - %s WHERE article_id = %s AND depot_nom = %s", (qty, item.article_id, requested_depot))
+            
+            # 8. Mettre à jour l'en-tête de la facture avec le nouveau total
+            cursor.execute("SELECT COALESCE(montant_paye, 0) FROM factures WHERE id = %s", (invoice_id,))
+            montant_paye = cursor.fetchone()[0]
+
+            # --- ✅ السطر الذي تم تصحيحه ---
+            # قم بتحويل total_amount إلى Decimal قبل إجراء عملية الطرح
+            montant_restant = Decimal(str(total_amount)) - montant_paye
+            
+            cursor.execute("UPDATE factures SET total_ttc = %s, montant_restant = %s WHERE id = %s", (Decimal(str(total_amount)), montant_restant, invoice_id))
+
+            # 9. Mettre à jour le solde du client avec le nouveau montant
+            cursor.execute("UPDATE clients SET credit_facture = credit_facture + %s WHERE id = %s", (Decimal(str(total_amount)), old_client_id))
+            
+            conn.commit()
+            return True, "Invoice updated successfully"
+
+        except Exception as e:
+            if conn: conn.rollback()
+            print(f"Error updating invoice: {e}")
+            traceback.print_exc()
+            return False, str(e)
+        finally:
+            if conn: conn.close()

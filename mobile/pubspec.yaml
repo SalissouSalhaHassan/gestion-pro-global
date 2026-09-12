@@ -1,0 +1,80 @@
+name: gestion_pro_mobile
+description: "Application de gestion commerciale moderne."
+publish_to: 'none'
+
+version: 1.0.1
+
+environment:
+  sdk: '>=3.10.1 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- واجهة المستخدم ---
+  cupertino_icons: ^1.0.6
+  
+  # --- التنسيق واللغة (تم التحديث) ---
+  flutter_localizations:
+    sdk: flutter
+  intl: 0.20.2  # تحديث لنسخة متوافقة وآمنة
+
+  # --- الشبكة والبيانات ---
+  http: ^0.13.6  # downgraded to match printing package requirements
+  provider: ^6.1.1
+  shared_preferences: ^2.2.2
+  flutter_secure_storage: ^9.0.0 # تم إضافته للأمان
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  connectivity_plus: ^5.0.2
+  supabase_flutter: ^2.6.0
+  bcrypt: ^1.1.3
+
+  # --- الـ API SDK ---
+  api_flutter:
+    path: ../packages/api_flutter
+
+  # --- الصور والملفات ---
+  image_picker: ^1.0.4
+
+  # --- الوظائف الإضافية ---
+  url_launcher: ^6.2.5 
+  local_auth: ^2.1.6
+  permission_handler: ^11.3.0
+  mobile_scanner: ^5.2.3
+  flutter_local_notifications: ^17.1.2
+
+  # --- الطباعة ---
+  pdf: ^3.8.1
+  printing: ^5.14.2
+  blue_thermal_printer: ^1.2.3
+  multicast_dns: ^0.3.0
+  fl_chart: ^0.65.0
+
+  # --- تصدير Excel ---
+  excel: ^4.0.3
+  path_provider: ^2.1.2
+  share_plus: ^7.2.1
+  uuid: ^4.5.3
+  package_info_plus: ^9.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  mockito: ^5.3.2
+  # flutter_launcher_icons removed to avoid conflict with esc_pos_utils image dependency
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/images/logo.png"
+  min_sdk_android: 21 # android min sdk value
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
