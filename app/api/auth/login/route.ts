@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { getAdminClient } from '@/lib/supabase/admin';
 import { signSession } from '@/lib/session';
 
 export async function POST(request: Request) {
@@ -10,20 +10,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Identifiant et mot de passe requis' }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    console.log('DEBUG: Auth Login - URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING');
-    console.log('DEBUG: Auth Login attempting for:', username);
+    const trimmedUser = String(username).trim();
+    const supabase = getAdminClient();
 
-    // 1. Verify user in database
+    // 1. Verify user in database (bypasses RLS on server, case-insensitive)
     const { data: userRecord, error: fetchError } = await supabase
       .from('users')
       .select('*')
-      .eq('utilisateur', username)
+      .ilike('utilisateur', trimmedUser)
       .eq('mot_de_passe', password)
       .maybeSingle();
 
     if (fetchError || !userRecord) {
-      console.log('DEBUG: Auth Login failed for:', username);
+      console.warn('Auth Login failed for:', trimmedUser, fetchError?.message);
       return NextResponse.json({ error: 'Identifiant ou mot de passe incorrect' }, { status: 401 });
     }
 

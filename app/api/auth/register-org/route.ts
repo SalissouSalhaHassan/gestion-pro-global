@@ -1,14 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mxairvfgklibhamkpeqq.supabase.co';
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-function getAdminClient() {
-  return createClient(SUPABASE_URL, SERVICE_KEY, {
-    auth: { persistSession: false }
-  });
-}
+import { getAdminClient } from '@/lib/supabase/admin';
 
 function generateSlug(name: string): string {
   const base = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
