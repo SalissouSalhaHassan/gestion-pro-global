@@ -53,11 +53,12 @@ export async function proxy(request: NextRequest) {
 
   // --- 2. CUSTOM AUTH PROTECTION (WEB PAGES ONLY) ---
   const gpSessionCookie = request.cookies.get('gp_session')?.value
+  const gpSessionSig = request.cookies.get('gp_session_sig')?.value
   let sessionData: any = null
 
   if (gpSessionCookie) {
     try {
-      sessionData = await verifyAndDecodeSession(gpSessionCookie);
+      sessionData = await verifyAndDecodeSession(gpSessionCookie, gpSessionSig);
     } catch (e) {
       console.error('Proxy: Failed to verify session cookie');
     }

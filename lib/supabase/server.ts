@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { parseSessionPayload } from '@/lib/session'
 
 export async function createClient() {
   const cookieStore = await cookies()
@@ -11,8 +12,7 @@ export async function createClient() {
   const sessionRaw = cookieStore.get('gp_session')?.value
   if (sessionRaw) {
     try {
-      const decoded = sessionRaw.includes('%') ? decodeURIComponent(sessionRaw) : sessionRaw
-      const parsed = JSON.parse(decoded)
+      const parsed = parseSessionPayload(sessionRaw)
       if (parsed?.organization_id) {
         orgId = parsed.organization_id
       }

@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
+import { parseSessionPayload } from '@/lib/session'
 
 export function createClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mxairvfgklibhamkpeqq.supabase.co'
@@ -10,8 +11,7 @@ export function createClient() {
     if (sessionCookie) {
       try {
         const val = sessionCookie.split('=')[1]
-        const decoded = val.includes('%') ? decodeURIComponent(val) : val
-        const parsed = JSON.parse(decoded)
+        const parsed = parseSessionPayload(val)
         if (parsed?.organization_id) {
           orgId = parsed.organization_id
         }

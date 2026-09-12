@@ -22,6 +22,7 @@ export interface CustomSession {
 export async function getServerSession(): Promise<CustomSession | null> {
   const cookieStore = await cookies();
   let sessionRaw = cookieStore.get("gp_session")?.value;
+  let sessionSig = cookieStore.get("gp_session_sig")?.value;
 
   if (!sessionRaw) {
     const head = await headers();
@@ -34,7 +35,7 @@ export async function getServerSession(): Promise<CustomSession | null> {
   if (!sessionRaw) return null;
 
   try {
-    const session = await verifyAndDecodeSession(sessionRaw);
+    const session = await verifyAndDecodeSession(sessionRaw, sessionSig);
     if (!session) return null;
     return session as CustomSession;
   } catch (error) {

@@ -39,6 +39,8 @@ import UnifiedSearch from "@/components/UnifiedSearch";
 import NotificationBell from "@/components/NotificationBell";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/lib/i18n/context";
+import { getClientSessionFromCookie } from "@/lib/client_helpers";
+import { parseSessionPayload } from "@/lib/session";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -49,14 +51,20 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { t, dir, locale } = useLanguage();
 
   useEffect(() => {
-    // Client-side session retrieval
-    const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
-    if (cookie) {
-      try {
-        const decoded = decodeURIComponent(cookie.split('=')[1]);
-        setUserSession(JSON.parse(decoded));
-      } catch (e) {
-        console.error("Failed to parse session at layout", e);
+    // Client-side session retrieval with universal safe parsing
+    const session = getClientSessionFromCookie();
+    if (session) {
+      setUserSession(session);
+    } else {
+      const cookie = document.cookie.split('; ').find(row => row.startsWith('gp_session='));
+      if (cookie) {
+        try {
+          const val = cookie.split('=')[1];
+          const parsed = parseSessionPayload(val);
+          if (parsed) setUserSession(parsed);
+        } catch (e) {
+          console.error("Failed to parse session at layout", e);
+        }
       }
     }
   }, []);

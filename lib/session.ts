@@ -8,7 +8,7 @@ const SESSION_SECRET =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   "gestion-pro-enterprise-secure-salt-2026-secret-key";
 
-async function generateSignature(data: string, secret: string): Promise<string> {
+export async function generateSignature(data: string, secret: string = SESSION_SECRET): Promise<string> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
   const key = await crypto.subtle.importKey(
@@ -49,21 +49,82 @@ function base64UrlDecode(str: string): string {
 }
 
 /**
- * Signs session payload into a cryptographically secured token: <base64url>.<hmac-sha256>
+ * Universal safe parser for session payload.
+ * Supports:
+ *   1. Direct or URL-encoded JSON
+ *   2. Cryptographically signed token: <base64url>.<signature>
+ */
+export function parseSessionPayload(rawToken: string | null | undefined): any | null {
+  if (!rawToken || typeof rawToken !== "string") return null;
+
+  try {
+    let clean = rawToken.trim();
+    if (clean.startsWith("gp_session=")) {
+      clean = clean.substring("gp_session=".length);
+    }
+
+    // 1. If dot-separated token: <encodedPayload>.<sig>
+    const dotIdx = clean.lastIndexOf(".");
+    if (dotIdx !== -1) {
+      try {
+        const jsonStr = base64UrlDecode(clean.substring(0, dotIdx));
+        return JSON.parse(jsonStr);
+      } catch {}
+    }
+
+    // 2. URL-encoded JSON
+    let decoded = clean;
+    if (clean.includes("%")) {
+      try { decoded = decodeURIComponent(clean); } catch {}
+    }
+    if (decoded.includes("%")) {
+      try { decoded = decodeURIComponent(decoded); } catch {}
+    }
+
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Signs session payload into both URL-encoded JSON (for 100% client-side compatibility)
+ * and an HMAC-SHA256 signature (for server tamper protection).
  */
 export async function signSession(payload: any): Promise<string> {
   const jsonStr = JSON.stringify(payload);
-  const encodedData = base64UrlEncode(jsonStr);
-  const signature = await generateSignature(encodedData, SESSION_SECRET);
-  return `${encodedData}.${signature}`;
+  return encodeURIComponent(jsonStr);
+}
+
+/**
+ * Generates an HMAC-SHA256 signature for a given cookie value.
+ */
+export async function signSessionCookie(cookieValue: string): Promise<string> {
+  return generateSignature(cookieValue, SESSION_SECRET);
 }
 
 /**
  * Verifies and decodes a session token. Rejects tampered payloads.
  */
-export async function verifyAndDecodeSession(token: string): Promise<any | null> {
+export async function verifyAndDecodeSession(token: string, signature?: string): Promise<any | null> {
   if (!token || typeof token !== "string") return null;
 
+  // 1. Separate signature cookie verification (gp_session + gp_session_sig)
+  if (signature) {
+    try {
+      const expectedSig = await generateSignature(token, SESSION_SECRET);
+      if (signature !== expectedSig) {
+        console.warn("Security Alert: Invalid gp_session_sig! Tampering blocked.");
+        return null;
+      }
+      return parseSessionPayload(token);
+    } catch (e) {
+      console.error("Failed to verify session signature:", e);
+      return null;
+    }
+  }
+
+  // 2. Dot-separated token verification: <encodedData>.<signature>
   const dotIdx = token.lastIndexOf(".");
   if (dotIdx !== -1) {
     const encodedData = token.substring(0, dotIdx);
@@ -83,14 +144,6 @@ export async function verifyAndDecodeSession(token: string): Promise<any | null>
     }
   }
 
-  // Graceful fallback for migration: Check if it's legacy URL-encoded JSON
-  try {
-    let decoded = token;
-    if (token.includes("%")) decoded = decodeURIComponent(token);
-    if (decoded.includes("%")) decoded = decodeURIComponent(decoded);
-    const parsed = JSON.parse(decoded);
-    return parsed;
-  } catch {
-    return null;
-  }
+  // 3. Graceful fallback for migration
+  return parseSessionPayload(token);
 }

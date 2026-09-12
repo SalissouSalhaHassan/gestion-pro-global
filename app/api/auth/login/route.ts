@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabase/admin';
-import { signSession } from '@/lib/session';
+import { signSession, signSessionCookie } from '@/lib/session';
 
 export async function POST(request: Request) {
   try {
@@ -66,9 +66,11 @@ export async function POST(request: Request) {
     };
 
     const sessionToken = await signSession(sessionData);
+    const sessionSignature = await signSessionCookie(sessionToken);
 
     const response = NextResponse.json({
       access_token: sessionToken,
+      signature: sessionSignature,
       token_type: 'bearer',
       role: isAdmin ? 'admin' : 'vendeur',
       username: userRecord.utilisateur,
@@ -80,8 +82,15 @@ export async function POST(request: Request) {
       isAdmin: isAdmin
     });
 
-    // Set signed cookie for web clients
+    // Set cookies for web clients
     response.cookies.set('gp_session', sessionToken, {
+      path: '/',
+      maxAge: 86400 * 7, // 7 days
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    });
+
+    response.cookies.set('gp_session_sig', sessionSignature, {
       path: '/',
       maxAge: 86400 * 7, // 7 days
       sameSite: 'lax',

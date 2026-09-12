@@ -187,9 +187,12 @@ export default function LoginPage() {
         return;
       }
 
-      // Ensure cookie is set in browser
+      // Ensure cookies are set in browser
       if (data.access_token) {
         document.cookie = `gp_session=${data.access_token}; path=/; max-age=604800; SameSite=Lax`;
+      }
+      if (data.signature) {
+        document.cookie = `gp_session_sig=${data.signature}; path=/; max-age=604800; SameSite=Lax`;
       }
 
       router.push("/dashboard");

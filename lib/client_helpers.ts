@@ -21,16 +21,19 @@ export interface ClientSession {
   permissions?: string[];
 }
 
+import { parseSessionPayload } from "./session";
+
 /**
  * Reads the gp_session cookie on the client side.
  */
 export function getClientSessionFromCookie(): ClientSession | null {
   try {
+    if (typeof document === "undefined") return null;
     const cookies = document.cookie.split("; ");
     const sessionCookie = cookies.find((cookie) => cookie.startsWith("gp_session="));
     if (!sessionCookie) return null;
-    const decoded = decodeURIComponent(sessionCookie.split("=")[1]);
-    return JSON.parse(decoded) as ClientSession;
+    const val = sessionCookie.split("=")[1];
+    return parseSessionPayload(val) as ClientSession;
   } catch (error) {
     console.error("Failed to read client session:", error);
     return null;
