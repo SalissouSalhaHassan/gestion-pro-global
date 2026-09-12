@@ -686,7 +686,7 @@ export async function POST(request: Request) {
       const randRef = Math.random().toString(36).substring(2, 7).toUpperCase();
       const blNumber = `FA-${year}-${randRef}`;
 
-      // 2. Insert Invoice
+      // 2. Prepare Payloads
       const invoicePayload: any = {
         client_id: clientId,
         vendeur: user.username ?? "Caisse",
@@ -703,81 +703,7 @@ export async function POST(request: Request) {
 
       if (canonicalDepotName) invoicePayload.emplacement = canonicalDepotName;
 
-      let { data: createdInvoice, error: invError } = await supabase
-        .from("factures")
-        .insert([invoicePayload])
-        .select("id, bl_number, date_facture, total_ht, total_ttc, total_tva, montant_paye, montant_restant, statut, client_id, vendeur, organization_id")
-        .single();
-
-      // Graceful fallback if any column is missing in remote Supabase schema cache
-      while (invError && invError.message) {
-        const match = invError.message.match(/Could not find the '([^']+)' column of 'factures'/i);
-        if (match && match[1] && invoicePayload[match[1]] !== undefined) {
-          console.warn(`Stripping missing column '${match[1]}' from factures insert payload.`);
-          delete invoicePayload[match[1]];
-          const retryRes = await supabase
-            .from("factures")
-            .insert([invoicePayload])
-            .select("id, bl_number, date_facture, total_ht, total_ttc, total_tva, montant_paye, montant_restant, statut, client_id, vendeur, organization_id")
-            .single();
-          createdInvoice = retryRes.data;
-          invError = retryRes.error;
-        } else {
-          break;
-        }
-      }
-
-      if (invError) throw invError;
-      if (!createdInvoice) {
-        throw new Error("Erreur: Impossible de créer la facture.");
-      }
-
-      // 3. Batch Insertions & Updates in Parallel
-      const itemsPayload = lineItemsToInsert.map((li: any) => ({
-        ...li,
-        facture_id: createdInvoice.id,
-        organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
-      }));
-
-      const stockMapForLookup = new Map<string, { id: any; quantite: number }>();
-      ((stockLevels as any[] | null | undefined) || []).forEach((curr) => {
-        const key = `${curr.article_id}_${normalizeDepotName(curr.depot_nom || "")}`;
-        stockMapForLookup.set(key, { id: curr.id, quantite: Number(curr.quantite || 0) });
-      });
-
-      const parallelTasks: any[] = [
-        supabase.from("facture_items").insert(itemsPayload),
-      ];
-
-      // Stock updates (in-memory lookup avoids slow sequential select queries)
-      for (const item of items) {
-        const qte = Number(item.quantite || 1);
-        const itemDepot = (item as any).depot_origine || canonicalDepotName;
-        const key = `${item.id}_${normalizeDepotName(itemDepot)}`;
-        const existingStock = stockMapForLookup.get(key);
-
-        if (existingStock?.id) {
-          let updateStockQ = supabase
-            .from("stocks")
-            .update({ quantite: existingStock.quantite - qte })
-            .eq("id", existingStock.id);
-          if (user.organization_id) {
-            updateStockQ = updateStockQ.eq("organization_id", user.organization_id);
-          }
-          parallelTasks.push(updateStockQ);
-        } else {
-          parallelTasks.push(
-            supabase.from("stocks").insert([{
-              article_id: Number(item.id),
-              depot_nom: itemDepot,
-              quantite: -qte,
-              organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
-            }])
-          );
-        }
-      }
-
-      // Batch movements insert
+      // Prepare items, movements, and payments payloads
       const mouvementsPayload = items.map((item: any) => {
         const qte = Number(item.quantite || 1);
         const itemDepot = (item as any).depot_origine || canonicalDepotName;
@@ -796,17 +722,14 @@ export async function POST(request: Request) {
           organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
         };
       });
-      parallelTasks.push(supabase.from("mouvements").insert(mouvementsPayload));
 
-      // Initial Payment insertion
       const paymentsToInsert: any[] = [];
       if (initialPaye > 0 && !isDebt) {
         paymentsToInsert.push({
-          facture_id: createdInvoice.id,
           date_operation: new Date().toISOString().split("T")[0],
           montant_regle: initialPaye,
           moyen_reglement: normalizedPaymentMethod,
-          reference_paiement: `REG-${createdInvoice.id}`,
+          reference_paiement: `REG-${blNumber}`,
           utilisateur: user.username || "Système",
           user_id: user.id,
           regle: true,
@@ -814,11 +737,10 @@ export async function POST(request: Request) {
         });
       } else if (cashVersement > 0 && isDebt) {
         paymentsToInsert.push({
-          facture_id: createdInvoice.id,
           date_operation: new Date().toISOString().split("T")[0],
           montant_regle: cashVersement,
           moyen_reglement: "Espèce",
-          reference_paiement: `REG-${createdInvoice.id}`,
+          reference_paiement: `REG-${blNumber}`,
           utilisateur: user.username || "Système",
           user_id: user.id,
           regle: true,
@@ -828,7 +750,6 @@ export async function POST(request: Request) {
 
       for (const advP of advancePaymentsToInsert) {
         paymentsToInsert.push({
-          facture_id: createdInvoice.id,
           date_operation: new Date().toISOString().split("T")[0],
           montant_regle: advP.montant_regle,
           moyen_reglement: "Avance",
@@ -841,11 +762,112 @@ export async function POST(request: Request) {
         });
       }
 
-      if (paymentsToInsert.length > 0) {
-        parallelTasks.push(supabase.from("paiements").insert(paymentsToInsert));
+      // --- 3. ATOMIC POS SALE EXECUTION (Primary Path) ---
+      let atomicExecuted = false;
+      try {
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc("atomic_process_pos_sale", {
+          p_invoice: invoicePayload,
+          p_items: lineItemsToInsert,
+          p_movements: mouvementsPayload,
+          p_payments: paymentsToInsert,
+        });
+
+        if (!rpcErr && rpcRes && rpcRes.id) {
+          createdInvoice = rpcRes;
+          atomicExecuted = true;
+          console.log("⚡ Atomic POS checkout executed successfully (ACID & Race-condition free)");
+        } else if (rpcErr) {
+          console.warn("Atomic POS RPC not available or failed, using graceful fallback:", rpcErr.message);
+        }
+      } catch (ex) {
+        console.warn("Atomic POS RPC exception, using graceful fallback:", ex);
       }
 
-      await Promise.all(parallelTasks);
+      // --- 4. DIRECT FALLBACK EXECUTION (if RPC not yet applied in DB) ---
+      if (!atomicExecuted) {
+        let { data: fallbackInvoice, error: invError } = await supabase
+          .from("factures")
+          .insert([invoicePayload])
+          .select("id, bl_number, date_facture, total_ht, total_ttc, total_tva, montant_paye, montant_restant, statut, client_id, vendeur, organization_id")
+          .single();
+
+        while (invError && invError.message) {
+          const match = invError.message.match(/Could not find the '([^']+)' column of 'factures'/i);
+          if (match && match[1] && invoicePayload[match[1]] !== undefined) {
+            delete invoicePayload[match[1]];
+            const retryRes = await supabase
+              .from("factures")
+              .insert([invoicePayload])
+              .select("id, bl_number, date_facture, total_ht, total_ttc, total_tva, montant_paye, montant_restant, statut, client_id, vendeur, organization_id")
+              .single();
+            fallbackInvoice = retryRes.data;
+            invError = retryRes.error;
+          } else {
+            break;
+          }
+        }
+
+        if (invError) throw invError;
+        if (!fallbackInvoice) throw new Error("Erreur: Impossible de créer la facture.");
+        createdInvoice = fallbackInvoice;
+
+        const itemsPayload = lineItemsToInsert.map((li: any) => ({
+          ...li,
+          facture_id: createdInvoice.id,
+          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
+        }));
+
+        const stockMapForLookup = new Map<string, { id: any; quantite: number }>();
+        ((stockLevels as any[] | null | undefined) || []).forEach((curr) => {
+          const key = `${curr.article_id}_${normalizeDepotName(curr.depot_nom || "")}`;
+          stockMapForLookup.set(key, { id: curr.id, quantite: Number(curr.quantite || 0) });
+        });
+
+        const parallelTasks: any[] = [
+          supabase.from("facture_items").insert(itemsPayload),
+        ];
+
+        for (const item of items) {
+          const qte = Number(item.quantite || 1);
+          const itemDepot = (item as any).depot_origine || canonicalDepotName;
+          const key = `${item.id}_${normalizeDepotName(itemDepot)}`;
+          const existingStock = stockMapForLookup.get(key);
+
+          if (existingStock?.id) {
+            let updateStockQ = supabase
+              .from("stocks")
+              .update({ quantite: existingStock.quantite - qte })
+              .eq("id", existingStock.id);
+            if (user.organization_id) {
+              updateStockQ = updateStockQ.eq("organization_id", user.organization_id);
+            }
+            parallelTasks.push(updateStockQ);
+          } else {
+            parallelTasks.push(
+              supabase.from("stocks").insert([{
+                article_id: Number(item.id),
+                depot_nom: itemDepot,
+                quantite: -qte,
+                organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
+              }])
+            );
+          }
+        }
+
+        parallelTasks.push(supabase.from("mouvements").insert(mouvementsPayload));
+
+        const directPayments = paymentsToInsert.map((p) => ({
+          ...p,
+          facture_id: createdInvoice.id,
+          reference_paiement: `REG-${createdInvoice.id}`,
+        }));
+
+        if (directPayments.length > 0) {
+          parallelTasks.push(supabase.from("paiements").insert(directPayments));
+        }
+
+        await Promise.all(parallelTasks);
+      }
 
       // Fire non-blocking audits & rewards
       Promise.allSettled([
