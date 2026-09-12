@@ -29,24 +29,34 @@ export async function GET() {
     const todaySales = salesData?.reduce((sum, f) => sum + Number(f.total_ttc || 0), 0) || 0;
     const todayInvoices = salesData?.length || 0;
 
-    // 2. Stock Faible (Scoped)
-    let stockQuery = supabase
-      .from("articles")
-      .select(`
-        id, qte_min,
-        stocks ( quantite, depot_nom )
-      `)
-      .eq("is_deleted", false);
-    
-    stockQuery = applyUserScope(stockQuery as any, user, 'articles');
-    const { data: stockData, error: stockError } = await stockQuery;
+    // 2. Stock Faible (Fast Server-Side Aggregation)
+    let lowStockCount = 0;
+    try {
+      const { data: countData, error: countError } = await supabase.rpc("get_low_stock_count", {
+        p_org_id: user.organization_id || null,
+      });
 
-    if (stockError) throw stockError;
+      if (!countError && typeof countData === "number") {
+        lowStockCount = countData;
+      } else {
+        // Fallback: bounded lightweight query if RPC not yet created in remote DB
+        let stockQuery = supabase
+          .from("articles")
+          .select(`id, qte_min, stocks(quantite)`)
+          .eq("is_deleted", false)
+          .limit(250);
 
-    const lowStockCount = stockData?.filter(art => {
-      const totalStock = art.stocks?.reduce((sum: number, s: any) => sum + Number(s.quantite || 0), 0) || 0;
-      return totalStock < (art.qte_min || 0);
-    }).length || 0;
+        stockQuery = applyUserScope(stockQuery as any, user, "articles");
+        const { data: stockData } = await stockQuery;
+
+        lowStockCount = (stockData || []).filter((art: any) => {
+          const totalStock = art.stocks?.reduce((sum: number, s: any) => sum + Number(s.quantite || 0), 0) || 0;
+          return totalStock < (art.qte_min || 0);
+        }).length;
+      }
+    } catch (e) {
+      console.warn("Fast low stock count error, defaulting to 0:", e);
+    }
 
     // 3. Activité Récente (Scoped)
     let activityQuery = supabase

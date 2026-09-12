@@ -76,8 +76,23 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadAll();
-    const interval = setInterval(loadAll, 45000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        loadAll();
+      }
+    }, 45000);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadAll();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   const stats = [
