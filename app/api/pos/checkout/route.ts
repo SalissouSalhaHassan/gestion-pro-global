@@ -764,6 +764,7 @@ export async function POST(request: Request) {
 
       // --- 3. ATOMIC POS SALE EXECUTION (Primary Path) ---
       let atomicExecuted = false;
+      let createdInvoice: any = null;
       try {
         const { data: rpcRes, error: rpcErr } = await supabase.rpc("atomic_process_pos_sale", {
           p_invoice: invoicePayload,
