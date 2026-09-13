@@ -10,27 +10,39 @@ class AppConfig {
   // Production Web Backend URL
   static const String defaultProductionApiUrl = 'https://gestion-pro-global.vercel.app';
   
+  // Database Pooler Configuration (matching Supabase project mxairvfgklibhamkpeqq)
+  static const String defaultDbHost = 'aws-0-eu-central-1.pooler.supabase.com';
+  static const String defaultDbPort = '6543';
+  static const String defaultDbName = 'postgres';
+  static const String defaultDbUser = 'postgres.mxairvfgklibhamkpeqq';
+
   // Local development fallback
   static const String localApiUrl = 'http://10.0.2.2:3000'; // Standard Android Emulator loopback
 
   static String _currentApiUrl = defaultProductionApiUrl;
-  static String _currentSupabaseUrl = defaultSupabaseUrl;
-  static String _currentSupabaseKey = defaultSupabaseAnonKey;
+  static const String _currentSupabaseUrl = defaultSupabaseUrl;
+  static const String _currentSupabaseKey = defaultSupabaseAnonKey;
 
   static String get apiUrl => _currentApiUrl;
-  static String get supabaseUrl => _currentSupabaseUrl;
-  static String get supabaseAnonKey => _currentSupabaseKey;
+  static String get supabaseUrl => defaultSupabaseUrl;
+  static String get supabaseAnonKey => defaultSupabaseAnonKey;
 
   /// Load persisted configuration overrides from SharedPreferences
   static Future<void> init() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       _currentApiUrl = prefs.getString('custom_api_url') ?? defaultProductionApiUrl;
-      _currentSupabaseUrl = prefs.getString('supabase_url') ?? defaultSupabaseUrl;
-      _currentSupabaseKey = prefs.getString('supabase_key') ?? defaultSupabaseAnonKey;
+      
+      // FROZEN: Always enforce official GESTION PRO GLOBAL Supabase credentials
+      // Overwrite any legacy or incorrect values in SharedPreferences
+      await prefs.setString('supabase_url', defaultSupabaseUrl);
+      await prefs.setString('supabase_key', defaultSupabaseAnonKey);
+      await prefs.setString('db_host', defaultDbHost);
+      await prefs.setString('db_port', defaultDbPort);
+      await prefs.setString('db_name', defaultDbName);
+      await prefs.setString('db_user', defaultDbUser);
 
-      debugPrint('AppConfig: Loaded API URL -> $_currentApiUrl');
-      debugPrint('AppConfig: Loaded Supabase URL -> $_currentSupabaseUrl');
+      debugPrint('AppConfig: Enforced Frozen Supabase URL -> $defaultSupabaseUrl');
     } catch (e) {
       debugPrint('AppConfig init error: $e');
     }
@@ -47,11 +59,13 @@ class AppConfig {
   /// Reset to default production server
   static Future<void> resetToDefaults() async {
     _currentApiUrl = defaultProductionApiUrl;
-    _currentSupabaseUrl = defaultSupabaseUrl;
-    _currentSupabaseKey = defaultSupabaseAnonKey;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('custom_api_url');
-    await prefs.remove('supabase_url');
-    await prefs.remove('supabase_key');
+    await prefs.setString('supabase_url', defaultSupabaseUrl);
+    await prefs.setString('supabase_key', defaultSupabaseAnonKey);
+    await prefs.setString('db_host', defaultDbHost);
+    await prefs.setString('db_port', defaultDbPort);
+    await prefs.setString('db_name', defaultDbName);
+    await prefs.setString('db_user', defaultDbUser);
   }
 }
