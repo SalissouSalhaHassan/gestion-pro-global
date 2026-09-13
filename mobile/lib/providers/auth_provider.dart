@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:local_auth/local_auth.dart';
 import '../api/api_service.dart';
 import '../api/supabase_service.dart';
 
@@ -58,8 +59,86 @@ class AuthProvider with ChangeNotifier {
     } catch (_) {}
   }
   
+  bool _isLocked = false;
+  DateTime _lastActivity = DateTime.now();
+
   bool get isAuthenticated => _token != null;
   bool get isAuth => _token != null;
+  bool get isLocked => _isLocked;
+  DateTime get lastActivity => _lastActivity;
+
+  void registerActivity() {
+    if (!_isLocked) {
+      _lastActivity = DateTime.now();
+    }
+  }
+
+  void lock() {
+    if (_token != null && !_isLocked) {
+      _isLocked = true;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> unlock(String password) async {
+    final trimmedPass = password.trim();
+    if (trimmedPass.isEmpty) return false;
+
+    // 1. Fast local verification against stored password
+    final savedPassword = await _storage.read(key: 'saved_password');
+    if (savedPassword != null && savedPassword == trimmedPass) {
+      _isLocked = false;
+      _lastActivity = DateTime.now();
+      notifyListeners();
+      return true;
+    }
+
+    // 2. Server API verification
+    if (_username != null) {
+      try {
+        final res = await _apiService.login(_username!, trimmedPass);
+        if (res != null) {
+          _isLocked = false;
+          _lastActivity = DateTime.now();
+          await _storage.write(key: 'saved_password', value: trimmedPass);
+          notifyListeners();
+          return true;
+        }
+      } catch (e) {
+        debugPrint("Unlock API verification error: $e");
+      }
+    }
+    return false;
+  }
+
+  Future<bool> unlockWithBiometrics() async {
+    try {
+      final isEnabled = await getBiometricEnabled();
+      if (!isEnabled) return false;
+
+      final localAuth = LocalAuthentication();
+      final canCheck = await localAuth.canCheckBiometrics && await localAuth.isDeviceSupported();
+      if (!canCheck) return false;
+
+      final authenticated = await localAuth.authenticate(
+        localizedReason: 'Déverrouiller Gestion Pro',
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: true,
+        ),
+      );
+
+      if (authenticated) {
+        _isLocked = false;
+        _lastActivity = DateTime.now();
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint("Biometric unlock error: $e");
+    }
+    return false;
+  }
   
   bool get isAdmin => _role?.toLowerCase() == "admin" || _role?.toLowerCase() == "administrateur" || _role?.toLowerCase() == "gerant";
   
@@ -160,6 +239,7 @@ class AuthProvider with ChangeNotifier {
     _username = null;
     _role = null;
     _userId = null;
+    _isLocked = false;
     _emplacement = null;
     _organizationId = null;
     _organizationName = null;

@@ -41,6 +41,7 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useLanguage } from "@/lib/i18n/context";
 import { getClientSessionFromCookie } from "@/lib/client_helpers";
 import { parseSessionPayload } from "@/lib/session";
+import InactivityLock from "@/components/InactivityLock";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -246,6 +247,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div className="relative z-10">
           {children}
         </div>
+
+        {/* 3-Minute Inactivity Auto-Lock Overlay */}
+        <InactivityLock userSession={userSession} />
       </main>
 
       <style jsx global>{`

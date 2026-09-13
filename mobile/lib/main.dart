@@ -12,6 +12,7 @@ import 'providers/rent_provider.dart';
 import 'providers/ciment_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'utils/session_timer.dart';
 
 import 'api/supabase_service.dart';
 import 'config/app_config.dart';
@@ -56,7 +57,7 @@ class MyApp extends StatelessWidget {
             darkTheme: AppThemes.darkTheme,
             themeMode: themeProvider.themeMode,
             home: auth.isAuth
-                ? const HomeScreen()
+                ? const SessionTimer(child: HomeScreen())
                 : FutureBuilder(
                     future: auth.tryAutoLogin(),
                     builder: (ctx, snapshot) =>
@@ -64,7 +65,9 @@ class MyApp extends StatelessWidget {
                         ? const Scaffold(
                             body: Center(child: CircularProgressIndicator()),
                           )
-                        : const LoginScreen(),
+                        : (auth.isAuth
+                            ? const SessionTimer(child: HomeScreen())
+                            : const LoginScreen()),
                   ),
           );
         },
