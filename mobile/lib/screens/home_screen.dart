@@ -214,10 +214,44 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CircleAvatar(radius: 35, backgroundColor: Colors.white24, child: Icon(Icons.person, color: Colors.white, size: 40)),
+          Row(
+            children: [
+              const CircleAvatar(
+                radius: 30,
+                backgroundColor: Colors.white24,
+                child: Icon(Icons.storefront_rounded, color: Colors.white, size: 34),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      auth.organizationName,
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        auth.currency,
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 15),
-          Text(auth.username ?? "Admin", style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-          Text(auth.isAdmin ? "Administrateur Principal" : "Collaborateur", style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          Text(auth.username ?? "Utilisateur", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(auth.isAdmin ? "Administrateur" : "Collaborateur", style: const TextStyle(color: Colors.white70, fontSize: 13)),
         ],
       ),
     );
@@ -251,7 +285,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   PreferredSizeWidget _buildModernAppBar(AuthProvider auth) {
-    String title = "Gestion Pro";
+    String title = auth.organizationName;
     if (_selectedIndex == 1) title = "Analyses";
     if (_selectedIndex == 2) title = "Paramètres";
 
@@ -259,7 +293,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       backgroundColor: Colors.transparent,
       elevation: 0,
       centerTitle: true,
-      title: Text(title.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 2.0)),
+      title: Text(
+        title.toUpperCase(),
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.2),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       flexibleSpace: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(colors: [Color(0xFF2900DF), Color(0xFF8600FF)], begin: Alignment.topLeft, end: Alignment.bottomRight),

@@ -14,19 +14,86 @@ export async function POST(request: Request) {
     const supabase = getAdminClient();
 
     // 1. Verify user in database (bypasses RLS on server, case-insensitive)
-    const { data: userRecord, error: fetchError } = await supabase
+    let userRecord: any = null;
+
+    // Check direct username match first
+    const { data: directUser, error: directError } = await supabase
       .from('users')
       .select('*')
       .ilike('utilisateur', trimmedUser)
       .eq('mot_de_passe', password)
       .maybeSingle();
 
-    if (fetchError || !userRecord) {
-      console.warn('Auth Login failed for:', trimmedUser, fetchError?.message);
+    if (directUser) {
+      userRecord = directUser;
+    } else if (trimmedUser.includes('@')) {
+      // Check if user entered organization email or user email
+      const { data: matchedOrg } = await supabase
+        .from('organizations')
+        .select('id, name, currency, is_active')
+        .ilike('email', trimmedUser)
+        .maybeSingle();
+
+      if (matchedOrg) {
+        // Find user for this organization with matching password (prefer admin)
+        const { data: orgUsers } = await supabase
+          .from('users')
+          .select('*')
+          .eq('organization_id', matchedOrg.id)
+          .eq('mot_de_passe', password)
+          .order('admin', { ascending: false });
+
+        if (orgUsers && orgUsers.length > 0) {
+          userRecord = orgUsers[0];
+        }
+      }
+    }
+
+    if (!userRecord) {
+      console.warn('Auth Login failed for:', trimmedUser);
       return NextResponse.json({ error: 'Identifiant ou mot de passe incorrect' }, { status: 401 });
     }
 
-    // 2. Fetch user permissions (optional but good for parity)
+    // 2. Fetch and verify organization & subscription status
+    const orgId = userRecord.organization_id || '00000000-0000-0000-0000-000000000001';
+    let orgName = 'GESTION PRO GLOBAL';
+    let orgCurrency = 'FCFA';
+    let plan = 'pro';
+
+    try {
+      const { data: orgData } = await supabase
+        .from('organizations')
+        .select('id, name, currency, is_active, subscriptions(plan, status, trial_ends_at, current_period_end)')
+        .eq('id', orgId)
+        .maybeSingle();
+
+      if (orgData) {
+        if (orgData.is_active === false) {
+          return NextResponse.json(
+            { error: 'Ce compte ou organisation est suspendu. Veuillez contacter le support.' },
+            { status: 403 }
+          );
+        }
+
+        orgName = orgData.name || orgName;
+        orgCurrency = orgData.currency || orgCurrency;
+
+        const sub = Array.isArray(orgData.subscriptions) ? orgData.subscriptions[0] : orgData.subscriptions;
+        if (sub) {
+          plan = sub.plan || plan;
+          if (sub.status === 'expired' || sub.status === 'canceled') {
+            return NextResponse.json(
+              { error: 'Votre abonnement a expiré. Veuillez renouveler votre formule sur GESTION PRO GLOBAL.' },
+              { status: 403 }
+            );
+          }
+        }
+      }
+    } catch (orgErr) {
+      console.warn('Organization lookup warning:', orgErr);
+    }
+
+    // 3. Fetch user permissions (optional but good for parity)
     let permissionKeys: string[] = [];
     try {
       const { data: perms } = await supabase
@@ -64,7 +131,7 @@ export async function POST(request: Request) {
     }
     if (!primaryDepot) primaryDepot = 'BOUTIQUE';
 
-    // 3. Create session data (parity with cookie logic)
+    // 4. Create session data (parity with cookie logic)
     const adminVal = userRecord.admin?.toString().toLowerCase();
     const isAdmin = (adminVal === 'oui' || adminVal === 'admin' || adminVal === 'administrateur');
     
@@ -75,7 +142,10 @@ export async function POST(request: Request) {
       admin: isAdmin ? 'Oui' : 'Non',
       emplacement: primaryDepot,
       depots: depotsString,
-      organization_id: userRecord.organization_id || '00000000-0000-0000-0000-000000000001',
+      organization_id: orgId,
+      organization_name: orgName,
+      currency: orgCurrency,
+      plan: plan,
       permissions: permissionKeys,
     };
 
@@ -92,6 +162,9 @@ export async function POST(request: Request) {
       depots: sessionData.depots,
       emplacement: sessionData.emplacement,
       organization_id: sessionData.organization_id,
+      organization_name: orgName,
+      currency: orgCurrency,
+      plan: plan,
       permissions: permissionKeys,
       isAdmin: isAdmin
     });

@@ -273,10 +273,17 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Column(
                       children: [
                         const Text("Bienvenue", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 25),
+                        const SizedBox(height: 6),
+                        const Text(
+                          "Connectez-vous avec votre compte ou abonnement",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12, color: Colors.black54),
+                        ),
+                        const SizedBox(height: 20),
                         _buildInput(
                           controller: _usernameController,
-                          label: "Utilisateur",
+                          label: "Nom d'utilisateur ou Email",
+                          hintText: "ex: admin ou contact@entreprise.com",
                           icon: Icons.person_outline,
                         ),
                         const SizedBox(height: 15),
@@ -344,6 +351,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildInput({
     required TextEditingController controller,
     required String label,
+    String? hintText,
     required IconData icon,
     bool isPassword = false,
     bool obscure = false,
@@ -354,6 +362,7 @@ class _LoginScreenState extends State<LoginScreen> {
       obscureText: obscure,
       decoration: InputDecoration(
         labelText: label,
+        hintText: hintText,
         prefixIcon: Icon(icon, color: _primaryColor),
         suffixIcon: isPassword
             ? IconButton(

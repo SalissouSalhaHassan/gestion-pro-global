@@ -12,6 +12,8 @@ class AuthProvider with ChangeNotifier {
   String? _userId; 
   String? _emplacement; 
   String? _organizationId;
+  String? _organizationName;
+  String? _currency;
   List<String> _permissions = [];
   List<String> _depots = []; 
   final ApiService _apiService = ApiService();
@@ -24,6 +26,8 @@ class AuthProvider with ChangeNotifier {
   String? get userId => _userId;
   String? get emplacement => _emplacement;
   String? get organizationId => _organizationId;
+  String get organizationName => _organizationName ?? 'GESTION PRO GLOBAL';
+  String get currency => _currency ?? 'FCFA';
   List<String> get permissions => _permissions;
   List<String> get depots => _depots;
   
@@ -92,6 +96,8 @@ class AuthProvider with ChangeNotifier {
         _userId = responseData['user_id']?.toString();
         _emplacement = responseData['emplacement'];
         _organizationId = responseData['organization_id']?.toString();
+        _organizationName = responseData['organization_name']?.toString();
+        _currency = responseData['currency']?.toString();
         
         if (responseData['permissions'] != null && responseData['permissions'] is List) {
           _permissions = (responseData['permissions'] as List).map((p) => p.toString()).toList();
@@ -118,6 +124,8 @@ class AuthProvider with ChangeNotifier {
         if (_userId != null) await prefs.setString('auth_userId', _userId!);
         if (_emplacement != null) await prefs.setString('auth_emplacement', _emplacement!);
         if (_organizationId != null) await prefs.setString('auth_organizationId', _organizationId!);
+        if (_organizationName != null) await prefs.setString('auth_organizationName', _organizationName!);
+        if (_currency != null) await prefs.setString('auth_currency', _currency!);
         await prefs.setStringList('auth_permissions', _permissions);
         await prefs.setStringList('auth_depots', _depots);
         await prefs.setInt('auth_depots_ts', DateTime.now().millisecondsSinceEpoch);
@@ -154,6 +162,8 @@ class AuthProvider with ChangeNotifier {
     _userId = null;
     _emplacement = null;
     _organizationId = null;
+    _organizationName = null;
+    _currency = null;
     _permissions = [];
     _depots = [];
     
@@ -164,6 +174,8 @@ class AuthProvider with ChangeNotifier {
     await prefs.remove('auth_userId');
     await prefs.remove('auth_emplacement');
     await prefs.remove('auth_organizationId');
+    await prefs.remove('auth_organizationName');
+    await prefs.remove('auth_currency');
     await prefs.remove('auth_permissions');
     await prefs.remove('auth_depots');
     await prefs.remove('auth_depots_ts');
@@ -203,6 +215,8 @@ class AuthProvider with ChangeNotifier {
     _userId = prefs.getString('auth_userId');
     _emplacement = prefs.getString('auth_emplacement');
     _organizationId = prefs.getString('auth_organizationId') ?? await _storage.read(key: 'auth_organization_id');
+    _organizationName = prefs.getString('auth_organizationName');
+    _currency = prefs.getString('auth_currency');
     _permissions = prefs.getStringList('auth_permissions') ?? [];
     _depots = prefs.getStringList('auth_depots') ?? [];
     

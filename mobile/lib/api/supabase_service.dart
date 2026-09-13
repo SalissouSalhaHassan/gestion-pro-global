@@ -179,8 +179,38 @@ class SupabaseService {
     if (!_isInitialized) await init();
     if (!_isInitialized) throw Exception("Cloud non initialisé");
     try {
-      final response = await _client!.from('users').select().eq('utilisateur', username).maybeSingle();
-      if (response == null) throw Exception("Utilisateur non trouvé");
+      final trimmed = username.trim();
+      dynamic response;
+
+      // 1. Direct username lookup
+      response = await _client!.from('users').select().ilike('utilisateur', trimmed).maybeSingle();
+
+      // 2. Fallback: If input is an email, lookup organization by email and get its users
+      if (response == null && trimmed.contains('@')) {
+        final org = await _client!.from('organizations').select('id').ilike('email', trimmed).maybeSingle();
+        if (org != null) {
+          final orgUsers = await _client!
+              .from('users')
+              .select()
+              .eq('organization_id', org['id'])
+              .order('admin', ascending: false);
+          if (orgUsers is List && orgUsers.isNotEmpty) {
+            for (var u in orgUsers) {
+              final hPass = u['mot_de_passe'] as String?;
+              bool isMatch = false;
+              try { isMatch = BCrypt.checkpw(password, hPass ?? ''); } catch (_) { isMatch = (password == hPass); }
+              if (isMatch) {
+                response = u;
+                break;
+              }
+            }
+            response ??= orgUsers.first;
+          }
+        }
+      }
+
+      if (response == null) throw Exception("Utilisateur ou Email non trouvé");
+
       final hashedPassword = response['mot_de_passe'] as String?;
       if (hashedPassword == null) throw Exception("Pas de mot de passe");
       bool isValid = false;
@@ -188,6 +218,25 @@ class SupabaseService {
       if (isValid) {
         final adminVal = response['admin']?.toString().toLowerCase();
         final isAdmin = (adminVal == 'oui' || adminVal == 'admin' || adminVal == 'administrateur');
+
+        final orgId = response['organization_id']?.toString() ?? '00000000-0000-0000-0000-000000000001';
+        String orgName = 'GESTION PRO GLOBAL';
+        String currency = 'FCFA';
+
+        // Check organization active status & get branding
+        try {
+          final orgData = await _client!.from('organizations').select('id, name, currency, is_active').eq('id', orgId).maybeSingle();
+          if (orgData != null) {
+            if (orgData['is_active'] == false) {
+              throw Exception("Ce compte ou organisation est suspendu. Veuillez contacter le support.");
+            }
+            orgName = orgData['name'] ?? orgName;
+            currency = orgData['currency'] ?? currency;
+          }
+        } catch (orgErr) {
+          debugPrint('Direct login org check warning: $orgErr');
+          if (orgErr.toString().contains('suspendu')) rethrow;
+        }
 
         // Fetch explicitly assigned depots logic here (Deny-by-Default system)
         List<String> assignedDepots = [];
@@ -212,12 +261,14 @@ class SupabaseService {
         return {
           'access_token': 'direct_access',
           'token_type': 'bearer',
-          // Only users flagged as admin in DB are admins.
           'role': isAdmin ? 'admin' : 'vendeur',
           'username': response['utilisateur'],
           'user_id': response['id'], 
           'depots': isAdmin ? '' : assignedDepots.join(','), 
-          'emplacement': response['emplacement'] ?? ''
+          'emplacement': response['emplacement'] ?? '',
+          'organization_id': orgId,
+          'organization_name': orgName,
+          'currency': currency,
         };
       }
       throw Exception("Mot de passe incorrect");
@@ -227,7 +278,10 @@ class SupabaseService {
   Future<String?> getOrganizationId() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getString('auth_organizationId');
+      final id = prefs.getString('auth_organizationId');
+      if (id != null && id.isNotEmpty) return id;
+      const storage = FlutterSecureStorage();
+      return await storage.read(key: 'auth_organization_id');
     } catch (_) {
       return null;
     }
@@ -239,7 +293,21 @@ class SupabaseService {
       dynamic query = _client!.from(table).select();
       final orgId = await getOrganizationId();
       if (orgId != null && orgId.isNotEmpty) {
-        const orgTables = ['articles', 'factures', 'facture_items', 'clients', 'fournisseurs', 'mouvements', 'depots', 'caisse_journal'];
+        const orgTables = [
+          'articles',
+          'factures',
+          'facture_items',
+          'clients',
+          'fournisseurs',
+          'mouvements',
+          'depots',
+          'caisse_journal',
+          'informations_entreprise',
+          'depenses',
+          'loyers',
+          'contrats',
+          'parametres_numerotation'
+        ];
         if (orgTables.contains(table)) {
           query = query.eq('organization_id', orgId);
         }

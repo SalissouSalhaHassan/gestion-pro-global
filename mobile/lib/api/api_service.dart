@@ -1953,7 +1953,12 @@ class ApiService {
   
   Future<Map<String, dynamic>> getCompanyInfo(String token) async {
     if (await _ensureSupabaseReady()) {
-      final data = await _supabaseService.client!.from('informations_entreprise').select().maybeSingle();
+      final orgId = await _supabaseService.getOrganizationId();
+      dynamic query = _supabaseService.client!.from('informations_entreprise').select();
+      if (orgId != null && orgId.isNotEmpty) {
+        query = query.eq('organization_id', orgId);
+      }
+      final data = await query.maybeSingle();
       return data ?? {};
     }
     return {};
