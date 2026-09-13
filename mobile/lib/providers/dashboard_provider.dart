@@ -49,6 +49,9 @@ class DashboardProvider with ChangeNotifier {
         _salesToday = (basicData['daily_sales'] ?? 0).toDouble();
         _clientsCount = basicData['total_clients'] ?? 0;
         _articlesCount = basicData['total_products'] ?? 0;
+        if (_clientsCount == 0 || _articlesCount == 0) {
+          await _fetchCountsFromSupabase();
+        }
       } else {
         await _fetchFromSupabase(vendeur: vendeur);
       }
@@ -80,6 +83,29 @@ class DashboardProvider with ChangeNotifier {
     }
   }
 
+  Future<void> _fetchCountsFromSupabase() async {
+    if (!_supabaseService.isInitialized) await _supabaseService.init();
+    final client = _supabaseService.client;
+    if (client == null) return;
+    try {
+      final orgId = await _supabaseService.getOrganizationId();
+      if (_clientsCount == 0) {
+        var cq = client.from('clients').select('id').or('is_deleted.eq.false,is_deleted.is.null');
+        if (orgId != null && orgId.isNotEmpty) cq = cq.eq('organization_id', orgId);
+        final cRes = await cq;
+        _clientsCount = (cRes as List).length;
+      }
+      if (_articlesCount == 0) {
+        var pq = client.from('articles').select('id').or('is_deleted.eq.false,is_deleted.is.null');
+        if (orgId != null && orgId.isNotEmpty) pq = pq.eq('organization_id', orgId);
+        final pRes = await pq;
+        _articlesCount = (pRes as List).length;
+      }
+    } catch (e) {
+      debugPrint("Error fetching counts from Supabase: $e");
+    }
+  }
+
   Future<void> _fetchFromSupabase({String? vendeur}) async {
     if (!_supabaseService.isInitialized) await _supabaseService.init();
     final client = _supabaseService.client;
@@ -88,7 +114,19 @@ class DashboardProvider with ChangeNotifier {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     try {
-      var facturesQuery = client.from('factures').select('total_ttc').eq('date_facture', today).neq('statut', 'Annulée');
+      final orgId = await _supabaseService.getOrganizationId();
+
+      var facturesQuery = client
+          .from('factures')
+          .select('total_ttc')
+          .gte('date_facture', today)
+          .lte('date_facture', today)
+          .neq('statut', 'Annulée')
+          .or('is_deleted.eq.false,is_deleted.is.null');
+
+      if (orgId != null && orgId.isNotEmpty) {
+        facturesQuery = facturesQuery.eq('organization_id', orgId);
+      }
       if (vendeur != null) {
         facturesQuery = facturesQuery.eq('vendeur', vendeur);
       }
@@ -100,10 +138,18 @@ class DashboardProvider with ChangeNotifier {
       }
       _salesToday = sales;
 
-      final clientsRes = await client.from('clients').select('id');
+      var clientsQuery = client.from('clients').select('id').or('is_deleted.eq.false,is_deleted.is.null');
+      if (orgId != null && orgId.isNotEmpty) {
+        clientsQuery = clientsQuery.eq('organization_id', orgId);
+      }
+      final clientsRes = await clientsQuery;
       _clientsCount = (clientsRes as List).length;
 
-      final productsRes = await client.from('articles').select('id');
+      var productsQuery = client.from('articles').select('id').or('is_deleted.eq.false,is_deleted.is.null');
+      if (orgId != null && orgId.isNotEmpty) {
+        productsQuery = productsQuery.eq('organization_id', orgId);
+      }
+      final productsRes = await productsQuery;
       _articlesCount = (productsRes as List).length;
     } catch (e) {
       debugPrint("Error fetching from Supabase: $e");

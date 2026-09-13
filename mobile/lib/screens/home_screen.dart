@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../services/update_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:intl/intl.dart';
 
 // --- استيراد الشاشات ---
 import 'login_screen.dart';
@@ -363,7 +364,7 @@ class _HomeDashboardFragment extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 10),
-                _buildHeaderStats(username, authProvider.isAdmin, dashboard),
+                _buildHeaderStats(context, username, authProvider.isAdmin, dashboard),
                 const SizedBox(height: 20),
                 _buildSectionTitle("Opérations Rapides", Icons.bolt_rounded),
                 _buildQuickActionsGrid(context),
@@ -382,7 +383,10 @@ class _HomeDashboardFragment extends StatelessWidget {
     );
   }
 
-  Widget _buildHeaderStats(String username, bool isAdmin, DashboardProvider dashboard) {
+  Widget _buildHeaderStats(BuildContext context, String username, bool isAdmin, DashboardProvider dashboard) {
+    final currencyFormatter = NumberFormat("#,##0", "fr_FR");
+    final formattedSales = currencyFormatter.format(dashboard.todaySales).replaceAll(',', ' ');
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(24),
@@ -425,9 +429,27 @@ class _HomeDashboardFragment extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildStatItem("Ventes Jour", "${dashboard.todaySales.toStringAsFixed(0)} F", Icons.trending_up, Colors.white),
-              _buildStatItem("Articles", "${dashboard.totalArticles}", Icons.inventory, Colors.white),
-              _buildStatItem("Clients", "${dashboard.totalClients}", Icons.group, Colors.white),
+              _buildStatItem(
+                label: "Ventes Jour",
+                value: "$formattedSales F",
+                icon: Icons.trending_up,
+                color: Colors.white,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InvoicesListScreen())),
+              ),
+              _buildStatItem(
+                label: "Articles",
+                value: "${dashboard.totalArticles}",
+                icon: Icons.inventory,
+                color: Colors.white,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductsScreen())),
+              ),
+              _buildStatItem(
+                label: "Clients",
+                value: "${dashboard.totalClients}",
+                icon: Icons.group,
+                color: Colors.white,
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ClientsListScreen())),
+              ),
             ],
           ),
         ],
@@ -435,27 +457,45 @@ class _HomeDashboardFragment extends StatelessWidget {
     );
   }
 
-  Widget _buildStatItem(String label, String value, IconData icon, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color.withAlpha(216), size: 14),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(color: color.withAlpha(200), fontSize: 11, fontWeight: FontWeight.w500),
-            ),
-          ],
+  Widget _buildStatItem({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color color,
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        splashColor: Colors.white24,
+        highlightColor: Colors.white10,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: color.withAlpha(216), size: 14),
+                  const SizedBox(width: 5),
+                  Text(
+                    label,
+                    style: TextStyle(color: color.withAlpha(200), fontSize: 11, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                value,
+                style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-      ],
+      ),
     );
   }
 

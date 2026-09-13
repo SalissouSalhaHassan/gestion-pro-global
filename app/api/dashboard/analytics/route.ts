@@ -31,7 +31,7 @@ export async function GET() {
     let topProductsQuery = supabase
       .from("facture_items")
       .select("article_id, qte, articles(designation), factures!inner(is_deleted, date_facture, vendeur, organization_id)")
-      .eq("factures.is_deleted", false)
+      .or("is_deleted.eq.false,is_deleted.is.null", { foreignTable: "factures" })
       .eq("factures.organization_id", orgId)
       .gte("factures.date_facture", firstDayCurrentMonth)
       .lte("factures.date_facture", lastDayCurrentMonth);
@@ -60,7 +60,7 @@ export async function GET() {
     let sellerQuery = supabase
       .from("factures")
       .select("vendeur, total_ttc")
-      .eq("is_deleted", false)
+      .or("is_deleted.eq.false,is_deleted.is.null")
       .gte("date_facture", firstDayCurrentMonth)
       .lte("date_facture", lastDayCurrentMonth);
 
@@ -84,7 +84,7 @@ export async function GET() {
     let curMonthQuery = supabase
       .from("factures")
       .select("date_facture, total_ttc")
-      .eq("is_deleted", false)
+      .or("is_deleted.eq.false,is_deleted.is.null")
       .gte("date_facture", firstDayCurrentMonth)
       .lte("date_facture", lastDayCurrentMonth);
     curMonthQuery = applyUserScope(curMonthQuery as any, user, 'factures');
@@ -93,7 +93,7 @@ export async function GET() {
     let prevMonthQuery = supabase
       .from("factures")
       .select("date_facture, total_ttc")
-      .eq("is_deleted", false)
+      .or("is_deleted.eq.false,is_deleted.is.null")
       .gte("date_facture", firstDayPrevMonth)
       .lte("date_facture", lastDayPrevMonth);
     prevMonthQuery = applyUserScope(prevMonthQuery as any, user, 'factures');

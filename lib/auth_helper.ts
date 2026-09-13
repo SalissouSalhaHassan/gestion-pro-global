@@ -37,6 +37,18 @@ export async function getServerSession(): Promise<CustomSession | null> {
   try {
     const session = await verifyAndDecodeSession(sessionRaw, sessionSig);
     if (!session) return null;
+
+    // Multi-tenant header synchronization for Mobile/API clients
+    try {
+      const head = await headers();
+      const orgIdHeader = head.get("x-organization-id");
+      if (orgIdHeader && orgIdHeader.trim().length > 0) {
+        if (!session.organization_id || session.organization_id === "00000000-0000-0000-0000-000000000001" || isSuperAdmin(session as CustomSession)) {
+          session.organization_id = orgIdHeader.trim();
+        }
+      }
+    } catch (_) {}
+
     return session as CustomSession;
   } catch (error) {
     console.error("Failed to verify session token:", error);

@@ -251,7 +251,8 @@ class ApiService {
         depots = await refreshUserDepots(force: refresh);
       }
     }
-    return { 'isAdmin': isAdmin, 'userId': userId, 'username': username, 'allowedDepots': depots };
+    final orgId = prefs.getString('auth_organizationId') ?? await _supabaseService.getOrganizationId();
+    return { 'isAdmin': isAdmin, 'userId': userId, 'username': username, 'allowedDepots': depots, 'organizationId': orgId };
   }
 
   // --- Core Data Fetching ---
@@ -1732,27 +1733,81 @@ class ApiService {
         secureToken = prefs.getString('auth_token');
       }
       
-      final effectiveToken = secureToken ?? token;
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId'] as String?;
+      final effectiveVendeur = _effectiveVendeur(authCtx, vendeur);
+
       final uri = Uri.parse('$_baseUrl/api/dashboard');
+      
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $effectiveToken',
+      };
+      if (orgId != null && orgId.isNotEmpty) {
+        headers['x-organization-id'] = orgId;
+      }
       
       final response = await http.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $effectiveToken',
-        },
+        headers: headers,
       ).timeout(const Duration(seconds: 5));
 
       debugPrint('ApiService: getDashboardStats response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        int totalClients = (data['totalClients'] as num?)?.toInt() ?? (data['total_clients'] as num?)?.toInt() ?? 0;
+        int totalProducts = (data['totalProducts'] as num?)?.toInt() ?? (data['total_products'] as num?)?.toInt() ?? 0;
+        double dailySales = (data['todaySales'] as num?)?.toDouble() ?? (data['daily_sales'] as num?)?.toDouble() ?? 0.0;
+        int invoiceCount = (data['todayInvoices'] as num?)?.toInt() ?? (data['invoice_count'] as num?)?.toInt() ?? 0;
+        int lowStock = (data['lowStockCount'] as num?)?.toInt() ?? (data['low_stock'] as num?)?.toInt() ?? 0;
+
+        // Fallback to direct scoped count from Supabase if 0 (e.g. initial load or lightweight API)
+        if (totalClients == 0 || totalProducts == 0 || dailySales == 0.0) {
+          try {
+            if (await _ensureSupabaseReady()) {
+              final client = _supabaseService.client!;
+              if (totalClients == 0) {
+                var cq = client.from('clients').select('id').or('is_deleted.eq.false,is_deleted.is.null');
+                if (orgId != null && orgId.isNotEmpty) cq = cq.eq('organization_id', orgId);
+                final cRes = await cq;
+                totalClients = (cRes as List).length;
+              }
+              if (totalProducts == 0) {
+                var pq = client.from('articles').select('id').or('is_deleted.eq.false,is_deleted.is.null');
+                if (orgId != null && orgId.isNotEmpty) pq = pq.eq('organization_id', orgId);
+                final pRes = await pq;
+                totalProducts = (pRes as List).length;
+              }
+              if (dailySales == 0.0 && invoiceCount == 0) {
+                final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+                var sq = client.from('factures')
+                    .select('total_ttc')
+                    .gte('date_facture', today)
+                    .lte('date_facture', today)
+                    .neq('statut', 'Annulée')
+                    .or('is_deleted.eq.false,is_deleted.is.null');
+                if (orgId != null && orgId.isNotEmpty) sq = sq.eq('organization_id', orgId);
+                if (effectiveVendeur != null) sq = sq.eq('vendeur', effectiveVendeur);
+                final sRes = await sq;
+                final sList = sRes as List;
+                if (sList.isNotEmpty) {
+                  invoiceCount = sList.length;
+                  for (var f in sList) {
+                    dailySales += (f['total_ttc'] as num?)?.toDouble() ?? 0.0;
+                  }
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
         return {
-          'daily_sales': (data['todaySales'] as num?)?.toDouble() ?? 0.0,
-          'invoice_count': (data['todayInvoices'] as num?)?.toInt() ?? 0,
-          'total_clients': 0, // Not provided by dashboard API but can be 0 or fetched separately
-          'total_products': 0,
-          'low_stock': (data['lowStockCount'] as num?)?.toInt() ?? 0,
+          'daily_sales': dailySales,
+          'invoice_count': invoiceCount,
+          'total_clients': totalClients,
+          'total_products': totalProducts,
+          'low_stock': lowStock,
         };
       } else {
         debugPrint('ApiService: getDashboardStats ERROR Body: ${response.body}');
@@ -1766,12 +1821,18 @@ class ApiService {
           final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
           final authCtx = await _getAuthContext();
           final effectiveVendeur = _effectiveVendeur(authCtx, vendeur);
+          final orgId = authCtx['organizationId'] as String?;
           
           var q = client.from('factures')
               .select('total_ttc')
-              .eq('date_facture', today)
-              .neq('statut', 'Annulée');
+              .gte('date_facture', today)
+              .lte('date_facture', today)
+              .neq('statut', 'Annulée')
+              .or('is_deleted.eq.false,is_deleted.is.null');
           
+          if (orgId != null && orgId.isNotEmpty) {
+            q = q.eq('organization_id', orgId);
+          }
           if (effectiveVendeur != null) {
             q = q.eq('vendeur', effectiveVendeur);
           }
@@ -1783,8 +1844,14 @@ class ApiService {
             dailyTotal += (f['total_ttc'] as num?)?.toDouble() ?? 0.0;
           }
 
-          final clientsRes = await client.from('clients').select('id');
-          final articlesRes = await client.from('articles').select('id');
+          var cq = client.from('clients').select('id').or('is_deleted.eq.false,is_deleted.is.null');
+          if (orgId != null && orgId.isNotEmpty) cq = cq.eq('organization_id', orgId);
+          final clientsRes = await cq;
+
+          var aq = client.from('articles').select('id').or('is_deleted.eq.false,is_deleted.is.null');
+          if (orgId != null && orgId.isNotEmpty) aq = aq.eq('organization_id', orgId);
+          final articlesRes = await aq;
+
           final invCount = facturesList.length;
 
           return {
@@ -2560,12 +2627,17 @@ class ApiService {
         final startDate = DateFormat('yyyy-MM-dd').format(lastWeek);
         final authCtx = await _getAuthContext();
         final effectiveVendeur = _effectiveVendeur(authCtx, vendeur);
+        final orgId = authCtx['organizationId'] as String?;
         
         var q = client.from('factures')
             .select('date_facture, total_ttc')
             .gte('date_facture', startDate)
-            .neq('statut', 'Annulée');
+            .neq('statut', 'Annulée')
+            .or('is_deleted.eq.false,is_deleted.is.null');
             
+        if (orgId != null && orgId.isNotEmpty) {
+          q = q.eq('organization_id', orgId);
+        }
         if (effectiveVendeur != null) {
           q = q.eq('vendeur', effectiveVendeur);
         }
@@ -2574,7 +2646,7 @@ class ApiService {
 
         final Map<String, double> grouped = {};
         for (var f in (res as List)) {
-          final dateStr = f['date_facture'] as String;
+          final dateStr = (f['date_facture'] as String).substring(0, 10);
           final date = DateFormat('yyyy-MM-dd').parse(dateStr);
           final dayName = DateFormat('dd/MM').format(date); // Use dd/MM to match screenshot
           
@@ -2606,10 +2678,16 @@ class ApiService {
         final client = _supabaseService.client!;
         final authCtx = await _getAuthContext();
         final effectiveVendeur = _effectiveVendeur(authCtx, vendeur);
+        final orgId = authCtx['organizationId'] as String?;
         
         var q = client.from('facture_items')
-            .select('description, qte, total_item_ttc, factures!inner(vendeur)');
+            .select('description, qte, total_item_ttc, factures!inner(vendeur, organization_id, is_deleted, statut)')
+            .neq('factures.statut', 'Annulée')
+            .or('factures.is_deleted.eq.false,factures.is_deleted.is.null');
         
+        if (orgId != null && orgId.isNotEmpty) {
+          q = q.eq('factures.organization_id', orgId);
+        }
         if (effectiveVendeur != null) {
           q = q.eq('factures.vendeur', effectiveVendeur);
         }
@@ -2679,10 +2757,15 @@ class ApiService {
         final client = _supabaseService.client!;
         final authCtx = await _getAuthContext();
         final effectiveVendeur = _effectiveVendeur(authCtx, vendeur);
+        final orgId = authCtx['organizationId'] as String?;
         var q = client.from('factures')
             .select('total_ttc, clients(nom)')
-            .neq('statut', 'Annulée');
+            .neq('statut', 'Annulée')
+            .or('is_deleted.eq.false,is_deleted.is.null');
             
+        if (orgId != null && orgId.isNotEmpty) {
+          q = q.eq('organization_id', orgId);
+        }
         if (effectiveVendeur != null) {
           q = q.eq('vendeur', effectiveVendeur);
         }
@@ -2714,13 +2797,18 @@ class ApiService {
         final startDate = DateFormat('yyyy-MM-dd').format(lastMonth);
         final authCtx = await _getAuthContext();
         final effectiveVendeur = _effectiveVendeur(authCtx, vendeur);
+        final orgId = authCtx['organizationId'] as String?;
 
         // Fetch sales
         var sq = client.from('factures')
             .select('date_facture, total_ttc')
             .gte('date_facture', startDate)
-            .neq('statut', 'Annulée');
+            .neq('statut', 'Annulée')
+            .or('is_deleted.eq.false,is_deleted.is.null');
             
+        if (orgId != null && orgId.isNotEmpty) {
+          sq = sq.eq('organization_id', orgId);
+        }
         if (effectiveVendeur != null) {
           sq = sq.eq('vendeur', effectiveVendeur);
         }
@@ -2732,6 +2820,9 @@ class ApiService {
             .select('date_depense, montant')
             .gte('date_depense', startDate);
             
+        if (orgId != null && orgId.isNotEmpty) {
+          eq = eq.eq('organization_id', orgId);
+        }
         if (effectiveVendeur != null) {
           eq = eq.eq('operateur', effectiveVendeur);
         }
@@ -2741,14 +2832,14 @@ class ApiService {
         final Map<String, Map<String, double>> grouped = {};
         
         for (var f in (salesRes as List)) {
-          final date = f['date_facture'] as String;
+          final date = (f['date_facture'] as String).substring(0, 10);
           final amt = (f['total_ttc'] as num?)?.toDouble() ?? 0.0;
           if (!grouped.containsKey(date)) grouped[date] = {'sales': 0.0, 'expenses': 0.0};
           grouped[date]!['sales'] = (grouped[date]!['sales'] ?? 0.0) + amt;
         }
 
         for (var d in (expensesRes as List)) {
-          final date = d['date_depense'] as String;
+          final date = (d['date_depense'] as String).substring(0, 10);
           final amt = (d['montant'] as num?)?.toDouble() ?? 0.0;
           if (!grouped.containsKey(date)) grouped[date] = {'sales': 0.0, 'expenses': 0.0};
           grouped[date]!['expenses'] = (grouped[date]!['expenses'] ?? 0.0) + amt;
