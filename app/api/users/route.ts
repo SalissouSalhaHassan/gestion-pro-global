@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { getAdminClient } from '@/lib/supabase/admin';
 import { getServerSession, isAdminOrManager, isSuperAdmin } from '@/lib/auth_helper';
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,7 @@ export const revalidate = 0;
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = getAdminClient();
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
@@ -97,7 +97,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = getAdminClient();
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
@@ -185,7 +185,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = getAdminClient();
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 

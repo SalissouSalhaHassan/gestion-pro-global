@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getAdminClient } from '@/lib/supabase/admin';
 import { getServerSession } from '@/lib/auth_helper';
 
 export const dynamic = "force-dynamic";
@@ -8,6 +9,7 @@ export const revalidate = 0;
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
+    const adminClient = getAdminClient();
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
@@ -20,7 +22,7 @@ export async function GET(request: Request) {
 
     // 1. Fetch users, monthly targets, invoices, and payouts in parallel
     const [usersRes, targetsRes, invoicesRes, payoutsRes] = await Promise.all([
-      supabase.from('users').select('id, utilisateur, nom_prenom, role_name, emplacement').eq('organization_id', orgId).order('nom_prenom'),
+      adminClient.from('users').select('id, utilisateur, nom_prenom, emplacement').eq('organization_id', orgId).order('nom_prenom'),
       supabase.from('objectifs_vendeurs').select('*').eq('mois_annee', month),
       supabase
         .from('factures')

@@ -1,6 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { applyUserScope } from '@/lib/utils/scoping';
 import { getAllowedDepots } from '@/lib/auth_helper';
+import { getAdminClient } from '@/lib/supabase/admin';
 
 export type InvoiceItem = {
   id?: number;
@@ -75,7 +76,7 @@ export class InvoiceService {
     if (allowedDepotNames.length === 0) return [];
 
     try {
-      let uQ = this.supabase
+      let uQ = getAdminClient()
         .from('users')
         .select('utilisateur')
         .in('emplacement', allowedDepotNames);
@@ -131,7 +132,7 @@ export class InvoiceService {
       const uniqueVendors = [...new Set(data.map((inv: any) => inv.vendeur).filter(Boolean))];
       if (uniqueVendors.length > 0) {
         try {
-          const { data: vUsers } = await this.supabase
+          const { data: vUsers } = await getAdminClient()
             .from('users')
             .select('utilisateur, emplacement')
             .in('utilisateur', uniqueVendors);
@@ -191,7 +192,7 @@ export class InvoiceService {
               ? this.supabase.from('mouvements').select('article_id, depot').eq('nr_doc', data.bl_number)
               : Promise.resolve({ data: null }),
             needsSellerLookup
-              ? this.supabase.from('users').select('emplacement').eq('utilisateur', data.vendeur).maybeSingle()
+              ? getAdminClient().from('users').select('emplacement').eq('utilisateur', data.vendeur).maybeSingle()
               : Promise.resolve({ data: null })
           ]);
 

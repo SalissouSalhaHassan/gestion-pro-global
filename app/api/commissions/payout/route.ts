@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getAdminClient } from '@/lib/supabase/admin';
 import { getServerSession } from '@/lib/auth_helper';
 
 export const dynamic = "force-dynamic";
@@ -8,6 +9,7 @@ export const revalidate = 0;
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
+    const adminClient = getAdminClient();
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
@@ -21,7 +23,7 @@ export async function POST(request: Request) {
     const orgId = session.organization_id || "00000000-0000-0000-0000-000000000001";
 
     // Verify user belongs to same organization
-    const { data: targetUser } = await supabase
+    const { data: targetUser } = await adminClient
       .from('users')
       .select('id')
       .eq('id', Number(user_id))

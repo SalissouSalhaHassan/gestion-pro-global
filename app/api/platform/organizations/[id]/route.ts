@@ -19,7 +19,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const [orgRes, subRes, usersRes, facturesRes] = await Promise.all([
       supabase.from('organizations').select('*').eq('id', id).single(),
       supabase.from('subscriptions').select('*').eq('organization_id', id).maybeSingle(),
-      supabase.from('users').select('id, utilisateur, nom_prenom, role_name, is_active').eq('organization_id', id),
+      supabase.from('users').select('id, utilisateur, nom_prenom, admin, emplacement, created_at').eq('organization_id', id),
       supabase.from('factures').select('id, total_ttc').eq('organization_id', id),
     ]);
 
