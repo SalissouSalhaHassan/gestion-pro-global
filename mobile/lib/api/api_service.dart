@@ -226,6 +226,10 @@ class ApiService {
         final res = await _supabaseService.loginDirect(username, password);
         if (res != null) return res;
       } catch (err) {
+        final errStr = err.toString();
+        if (errStr.contains('42501') || errStr.contains('permission denied')) {
+          throw Exception("Identifiant ou mot de passe incorrect.");
+        }
         rethrow;
       }
     }

@@ -8,7 +8,7 @@ class AppConfig {
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14YWlydmZna2xpYmhhbWtwZXFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNTYyNzgsImV4cCI6MjEwMzgzMjI3OH0.Juzca1wdXt7wXTTEXvqzZd4qiMWsSKavukA1c-PDYck';
 
   // Production Web Backend URL
-  static const String defaultProductionApiUrl = 'https://gestion-pro-global.vercel.app';
+  static const String defaultProductionApiUrl = 'https://gestion-pro-global-tege.vercel.app';
   
   // Database Pooler Configuration (matching Supabase project mxairvfgklibhamkpeqq)
   static const String defaultDbHost = 'aws-0-eu-central-1.pooler.supabase.com';
@@ -31,7 +31,15 @@ class AppConfig {
   static Future<void> init() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _currentApiUrl = prefs.getString('custom_api_url') ?? defaultProductionApiUrl;
+      
+      // Auto-heal and enforce production API URL
+      final savedApiUrl = prefs.getString('custom_api_url');
+      if (savedApiUrl == null || !savedApiUrl.contains('-tege')) {
+        _currentApiUrl = defaultProductionApiUrl;
+        await prefs.setString('custom_api_url', defaultProductionApiUrl);
+      } else {
+        _currentApiUrl = savedApiUrl;
+      }
       
       // FROZEN: Always enforce official GESTION PRO GLOBAL Supabase credentials
       // Overwrite any legacy or incorrect values in SharedPreferences
@@ -42,6 +50,7 @@ class AppConfig {
       await prefs.setString('db_name', defaultDbName);
       await prefs.setString('db_user', defaultDbUser);
 
+      debugPrint('AppConfig: Loaded API URL -> $_currentApiUrl');
       debugPrint('AppConfig: Enforced Frozen Supabase URL -> $defaultSupabaseUrl');
     } catch (e) {
       debugPrint('AppConfig init error: $e');

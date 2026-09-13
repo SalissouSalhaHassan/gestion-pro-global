@@ -184,29 +184,38 @@ class SupabaseService {
       dynamic response;
 
       // 1. Direct username lookup
-      response = await _client!.from('users').select().ilike('utilisateur', trimmed).maybeSingle();
+      try {
+        response = await _client!.from('users').select().ilike('utilisateur', trimmed).maybeSingle();
+      } catch (postgrestErr) {
+        debugPrint('Direct users select blocked by RLS: $postgrestErr');
+        throw Exception("Identifiant ou mot de passe incorrect.");
+      }
 
       // 2. Fallback: If input is an email, lookup organization by email and get its users
       if (response == null && trimmed.contains('@')) {
-        final org = await _client!.from('organizations').select('id').ilike('email', trimmed).maybeSingle();
-        if (org != null) {
-          final orgUsers = await _client!
-              .from('users')
-              .select()
-              .eq('organization_id', org['id'])
-              .order('admin', ascending: false);
-          if (orgUsers is List && orgUsers.isNotEmpty) {
-            for (var u in orgUsers) {
-              final hPass = u['mot_de_passe'] as String?;
-              bool isMatch = false;
-              try { isMatch = BCrypt.checkpw(password, hPass ?? ''); } catch (_) { isMatch = (password == hPass); }
-              if (isMatch) {
-                response = u;
-                break;
+        try {
+          final org = await _client!.from('organizations').select('id').ilike('email', trimmed).maybeSingle();
+          if (org != null) {
+            final orgUsers = await _client!
+                .from('users')
+                .select()
+                .eq('organization_id', org['id'])
+                .order('admin', ascending: false);
+            if (orgUsers is List && orgUsers.isNotEmpty) {
+              for (var u in orgUsers) {
+                final hPass = u['mot_de_passe'] as String?;
+                bool isMatch = false;
+                try { isMatch = BCrypt.checkpw(password, hPass ?? ''); } catch (_) { isMatch = (password == hPass); }
+                if (isMatch) {
+                  response = u;
+                  break;
+                }
               }
+              response ??= orgUsers.first;
             }
-            response ??= orgUsers.first;
           }
+        } catch (orgErr) {
+          debugPrint('Direct org users query warning: $orgErr');
         }
       }
 
