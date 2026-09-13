@@ -65,8 +65,10 @@ class _AddClientScreenState extends State<AddClientScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final token = Provider.of<AuthProvider>(context, listen: false).token;
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final token = auth.token;
       if (token == null) throw Exception("Non authentifié");
+      final orgId = auth.organizationId;
 
       // Prepare data map
       final clientData = {
@@ -89,7 +91,8 @@ class _AddClientScreenState extends State<AddClientScreen> {
         "commerciale": _nomCommercialController.text.trim(),
         "montant_plafond": double.tryParse(_plafondController.text) ?? 0.0,
         "pre_client": _prePaiement,
-        "art_imp": _artImpController.text.trim(), // NEW
+        "art_imp": _artImpController.text.trim(),
+        if (orgId != null && orgId.isNotEmpty) "organization_id": orgId,
       };
 
       final success = await ApiService().createClientFull(clientData, token);
@@ -97,7 +100,10 @@ class _AddClientScreenState extends State<AddClientScreen> {
       if (mounted) {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Client ajouté avec succès")),
+            const SnackBar(
+              content: Text("Client ajouté avec succès"),
+              backgroundColor: Colors.green,
+            ),
           );
           Navigator.pop(context, true); // Return true to refresh list
         } else {

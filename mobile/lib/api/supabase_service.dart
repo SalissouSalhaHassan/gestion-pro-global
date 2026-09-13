@@ -322,6 +322,12 @@ class SupabaseService {
           query = query.eq('organization_id', orgId);
         }
       }
+      if (table == 'clients' || table == 'fournisseurs' || table == 'articles') {
+        query = query.eq('is_deleted', false);
+      }
+      if (table == 'clients') {
+        query = query.order('nom', ascending: true);
+      }
       if (from != null && to != null) {
         query = query.range(from, to);
       }
@@ -659,27 +665,32 @@ class SupabaseService {
   Future<bool> syncClientDirect(Map<String, dynamic> data) async {
     if (!_isInitialized) await init();
     try {
+      final orgId = data['organization_id'] ?? await getOrganizationId();
       final payload = {
         'ref_client': data['ref_client'] ?? 'CLT-${DateTime.now().millisecondsSinceEpoch}',
         'nom': data['nom'],
-        'tel': data['tel'] ?? data['telephone'],
-        'email': data['email'],
-        'site': data['site'] ?? data['site_web'],
-        'adresse': data['adresse'],
-        'contact': data['contact'] ?? data['personne_contact'],
-        'gsm': data['gsm'],
-        'fax': data['fax'],
-        'ice': data['ice'],
-        'rc': data['rc'],
-        'patente': data['patente'],
-        'nif': data['nif'],
-        'art_imp': data['art_imp'] ?? '',
-        'n_compte': data['n_compte'] ?? data['compte_bancaire'],
-        'montant_plafond': (data['montant_plafond'] ?? 0).toDouble(),
-        'pre_client': data['pre_client'] ?? data['pre_paiement'] == true,
+        'tel': (data['tel'] ?? data['telephone'])?.toString().trim().isEmpty == true ? null : (data['tel'] ?? data['telephone']),
+        'email': data['email']?.toString().trim().isEmpty == true ? null : data['email'],
+        'site': (data['site'] ?? data['site_web'])?.toString().trim().isEmpty == true ? null : (data['site'] ?? data['site_web']),
+        'adresse': data['adresse']?.toString().trim().isEmpty == true ? null : data['adresse'],
+        'contact': (data['contact'] ?? data['personne_contact'])?.toString().trim().isEmpty == true ? null : (data['contact'] ?? data['personne_contact']),
+        'gsm': data['gsm']?.toString().trim().isEmpty == true ? null : data['gsm'],
+        'fax': data['fax']?.toString().trim().isEmpty == true ? null : data['fax'],
+        'ice': data['ice']?.toString().trim().isEmpty == true ? null : data['ice'],
+        'rc': data['rc']?.toString().trim().isEmpty == true ? null : data['rc'],
+        'patente': data['patente']?.toString().trim().isEmpty == true ? null : data['patente'],
+        'nif': data['nif']?.toString().trim().isEmpty == true ? null : data['nif'],
+        'art_imp': data['art_imp']?.toString().trim().isEmpty == true ? null : data['art_imp'],
+        'n_compte': (data['n_compte'] ?? data['compte_bancaire'])?.toString().trim().isEmpty == true ? null : (data['n_compte'] ?? data['compte_bancaire']),
+        'montant_plafond': (data['montant_plafond'] is num)
+            ? (data['montant_plafond'] as num).toDouble()
+            : (double.tryParse(data['montant_plafond']?.toString() ?? '0') ?? 0.0),
+        'pre_client': data['pre_client'] == true || data['pre_paiement'] == true,
         'prix_client': data['prix_client'] ?? 1,
-        'commerciale': data['commerciale'] ?? data['nom_commercial'],
+        'commerciale': (data['commerciale'] ?? data['nom_commercial'])?.toString().trim().isEmpty == true ? null : (data['commerciale'] ?? data['nom_commercial']),
+        'type_client': data['type_client'] ?? 'Détail',
         'is_deleted': false,
+        if (orgId != null && orgId.toString().isNotEmpty) 'organization_id': orgId.toString(),
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       };
@@ -689,7 +700,7 @@ class SupabaseService {
       await logActivity(
         actionType: 'CREATE',
         entityType: 'client',
-        entityId: data['nom'],
+        entityId: data['nom']?.toString() ?? '',
         details: 'Nouveau client: ${data['nom']}',
         username: 'MobileApp',
       );
@@ -706,6 +717,10 @@ class SupabaseService {
     try {
       final payload = Map<String, dynamic>.from(data);
       payload.remove('id');
+      final orgId = payload['organization_id'] ?? await getOrganizationId();
+      if (orgId != null && orgId.toString().isNotEmpty) {
+        payload['organization_id'] = orgId.toString();
+      }
       await _client!.from('fournisseurs').insert(payload);
       return true;
     } catch (_) { return false; }

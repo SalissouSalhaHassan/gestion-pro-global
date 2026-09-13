@@ -134,7 +134,7 @@ class _ClientsListScreenState extends State<ClientsListScreen> {
             MaterialPageRoute(builder: (context) => const AddClientScreen()),
           );
           if (result == true) {
-            _loadClients(); // Refresh list if client added
+            _loadClients(forceRefresh: true); // Refresh list if client added
           }
         },
         child: const Icon(Icons.add, color: Colors.white),

@@ -914,6 +914,45 @@ class ApiService {
   }
 
   Future<bool> createClientFull(Map<String, dynamic> data, String token) async {
+    try {
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+      
+      const storage = FlutterSecureStorage();
+      String? secureToken = await storage.read(key: 'auth_token');
+      if (secureToken == null || secureToken.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        secureToken = prefs.getString('auth_token');
+      }
+      final effectiveToken = secureToken ?? token;
+      
+      final body = Map<String, dynamic>.from(data);
+      if (orgId != null && orgId.isNotEmpty && !body.containsKey('organization_id')) {
+        body['organization_id'] = orgId;
+      }
+
+      final uri = Uri.parse('$_baseUrl/api/clients');
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $effectiveToken',
+          if (orgId != null && orgId.isNotEmpty) 'x-organization-id': orgId,
+        },
+        body: json.encode(body),
+      ).timeout(const Duration(seconds: 8));
+
+      debugPrint('ApiService: createClientFull response: ${response.statusCode}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        debugPrint('✅ ApiService: Client created successfully via API');
+        return true;
+      }
+      debugPrint('⚠️ ApiService: /api/clients returned ${response.statusCode}: ${response.body}, falling back to Supabase direct...');
+    } catch (e) {
+      debugPrint('⚠️ ApiService: createClientFull API error: $e, falling back to Supabase direct');
+    }
+
     if (await _ensureSupabaseReady()) {
       return await _supabaseService.syncClientDirect(data);
     }

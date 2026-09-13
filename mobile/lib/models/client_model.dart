@@ -56,9 +56,14 @@ class Client {
       patente: json['patente'] ?? "",
       compteBancaire: json['compte_bancaire'] ?? json['n_compte'] ?? "",
       nomCommercial: json['nom_commercial'] ?? json['commerciale'] ?? "",
-      montantPlafond: (json['montant_plafond'] ?? 0).toDouble(),
+      montantPlafond: (json['montant_plafond'] is num)
+          ? (json['montant_plafond'] as num).toDouble()
+          : (double.tryParse(json['montant_plafond']?.toString() ?? '0') ?? 0.0),
       prePaiement: (json['pre_paiement'] ?? json['pre_client'] ?? "false").toString(),
-      solde: (json['credit_facture'] ?? json['solde'] ?? 0).toDouble(),
+      solde: (num.tryParse(json['credit_facture']?.toString() ?? '') ??
+              num.tryParse(json['solde']?.toString() ?? '') ??
+              0)
+          .toDouble(),
     );
   }
   
