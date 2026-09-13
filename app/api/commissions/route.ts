@@ -22,7 +22,19 @@ export async function GET(request: Request) {
 
     // 1. Fetch users, monthly targets, invoices, and payouts in parallel
     const [usersRes, targetsRes, invoicesRes, payoutsRes] = await Promise.all([
-      adminClient.from('users').select('id, utilisateur, nom_prenom, emplacement').eq('organization_id', orgId).order('nom_prenom'),
+      adminClient
+        .from('users')
+        .select(`
+          id,
+          utilisateur,
+          nom_prenom,
+          emplacement,
+          roles!fk_users_role_id (
+            role_name
+          )
+        `)
+        .eq('organization_id', orgId)
+        .order('nom_prenom'),
       supabase.from('objectifs_vendeurs').select('*').eq('mois_annee', month),
       supabase
         .from('factures')
@@ -39,7 +51,7 @@ export async function GET(request: Request) {
     const payouts = payoutsRes.data || [];
 
     // 2. Aggregate sales per user
-    const performanceList = users.map((user) => {
+    const performanceList = users.map((user: any) => {
       const userInvoices = invoices.filter((inv) => String(inv.created_by) === String(user.id));
       const totalVentes = userInvoices.reduce((sum, inv) => sum + (Number(inv.total_ttc) || 0), 0);
       const targetObj = targets.find((t) => String(t.user_id) === String(user.id));
@@ -61,7 +73,7 @@ export async function GET(request: Request) {
       return {
         userId: user.id,
         nom: user.nom_prenom || user.utilisateur,
-        role: user.role_name,
+        role: user.roles?.role_name || user.role_name || 'Vendeur',
         emplacement: user.emplacement,
         totalVentes,
         nombreFactures: userInvoices.length,
