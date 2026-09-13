@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@gestion-pro/core": ["./packages/core/src"],
+      "@gestion-pro/api": ["./packages/api/src"]
     }
   },
   "include": [
@@ -30,5 +32,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "scratch", ".gemini"]
+  "exclude": ["node_modules", "scratch", ".gemini", "packages", "mobile"]
 }
