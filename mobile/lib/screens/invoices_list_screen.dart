@@ -238,7 +238,7 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
     }
   }
 
-  Future<void> _previewInvoice(Invoice inv) async {
+  Future<void> _previewInvoice(Invoice inv, {String mode = 'Invoice'}) async {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -252,28 +252,26 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
       final companyInfoMap = await api.getCompanyInfo(auth.token!);
       final companyInfo = CompanyInfo.fromJson(companyInfoMap);
       final itemsData = await api.getInvoiceItems(inv.id.toString(), auth.token!);
-      
-      List<Article> articles = [];
-      try {
-        final arts = await api.getArticles(auth.token!);
-        articles = arts.map((e) => Article.fromJson(e)).toList();
-      } catch (_) {}
 
       final List<Map<String, dynamic>> pdfItems = itemsData.map((item) {
         final price = (item['pu_ttc'] ?? item['price'] ?? 0) as num;
         final qty = (item['qte'] ?? item['quantity'] ?? 1) as num;
         return {
-          "name": item['designation'] ?? "Inconnu",
-          "quantity": qty.toInt(),
+          "code_art": (item['code_art'] ?? item['reference'] ?? item['code'] ?? "-").toString(),
+          "name": (item['designation'] ?? item['description'] ?? "Article").toString(),
+          "depot": (item['depot_origine'] ?? item['depots']?['nom'] ?? (inv.emplacement.isNotEmpty ? inv.emplacement : "Boutique")).toString(),
+          "quantity": qty.toDouble(),
           "price": price.toDouble(),
-          "total": (item['total'] as num?)?.toDouble() ?? (price.toDouble() * qty.toInt()),
+          "total": (item['total_item_ttc'] ?? item['total'] as num?)?.toDouble() ?? (price.toDouble() * qty.toDouble()),
         };
       }).toList();
 
       if (pdfItems.isEmpty) {
         pdfItems.add({
+          "code_art": "-",
           "name": "Détails non disponibles",
-          "quantity": 1,
+          "depot": inv.emplacement.isNotEmpty ? inv.emplacement : "Boutique",
+          "quantity": 1.0,
           "price": inv.totalTTC,
           "total": inv.totalTTC,
         });
@@ -295,7 +293,9 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
           MaterialPageRoute(
             builder: (context) => PdfPreviewScreen(
               invoiceRef: inv.blNumber,
-              buildPdf: (format) async {
+              initialMode: mode,
+              enableModeToggle: true,
+              buildPdfWithMode: (format, currentMode) async {
                 return PdfInvoiceGenerator.generateInvoice(
                   company: companyInfo,
                   clientName: inv.clientName,
@@ -307,6 +307,9 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
                   location: inv.emplacement,
                   payments: payments,
                   pageFormat: format,
+                  mode: currentMode,
+                  invoiceDate: DateTime.tryParse(inv.date),
+                  invoiceId: inv.id,
                 );
               },
             ),
@@ -632,9 +635,16 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
                 },
               ),
             ListTile(
-              leading: const CircleAvatar(backgroundColor: Colors.blue, child: Icon(Icons.print, color: Colors.white)),
-              title: const Text("Imprimer / Aperçu", style: TextStyle(fontWeight: FontWeight.bold)),
-              onTap: () { Navigator.pop(context); _previewInvoice(inv); },
+              leading: const CircleAvatar(backgroundColor: Color(0xFF059669), child: Icon(Icons.receipt_long, color: Colors.white)),
+              title: const Text("Facture de Vente (Reçu)", style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text("Reçu officiel conforme au Web"),
+              onTap: () { Navigator.pop(context); _previewInvoice(inv, mode: 'Invoice'); },
+            ),
+            ListTile(
+              leading: const CircleAvatar(backgroundColor: Color(0xFFEA580C), child: Icon(Icons.local_shipping_outlined, color: Colors.white)),
+              title: const Text("Bon de Livraison (BL)", style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text("Bordereau sans montants financiers"),
+              onTap: () { Navigator.pop(context); _previewInvoice(inv, mode: 'BL'); },
             ),
             if (!isCancelled && auth.canDeleteInvoice)
               ListTile(

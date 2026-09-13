@@ -278,16 +278,24 @@ class _CartScreenState extends State<CartScreen> {
       }
 
       final invoiceForPrint = {
+        'id': resultId,
         'date': DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now()),
         'client': _selectedClient!.nom,
+        'client_adresse': _selectedClient!.adresse,
+        'client_telephone': _selectedClient!.telephone,
         'total_amount': cart.totalAmount,
+        'paid_amount': paymentAmount,
+        'payment_method': _paymentMethod,
         'bl_number': blLocal,
         'items': cart.items
             .map(
               (item) => {
+                'code_art': item.article.reference.isNotEmpty ? item.article.reference : item.article.codeBarres,
                 'name': item.article.designation,
+                'depot': auth.emplacement ?? (auth.allowedDepots.isNotEmpty ? auth.allowedDepots.first : "Boutique"),
                 'quantity': item.quantity,
                 'price': item.unitPrice,
+                'total': item.unitPrice * item.quantity,
               },
             )
             .toList(),
@@ -320,51 +328,57 @@ class _CartScreenState extends State<CartScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text("Succès"),
-        content: const Text(
-          "Facture enregistrée ! Comment voulez-vous imprimer ?",
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green),
+            SizedBox(width: 8),
+            Text("Vente Enregistrée"),
+          ],
         ),
+        content: const Text(
+          "Facture créée avec succès ! Choisissez le document à imprimer :",
+        ),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               Navigator.pop(ctx);
             },
-            child: const Text("Ignorer", style: TextStyle(color: Colors.grey)),
+            child: const Text("Fermer", style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton.icon(
-            icon: const Icon(Icons.picture_as_pdf),
-            label: const Text("PDF A4"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.receipt_long),
+            label: const Text("Facture"),
             onPressed: () async {
               Navigator.pop(ctx);
-              final companyInfo = await ApiService().getCompanyInfo(
-                auth.token!,
-              );
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => PdfPreviewScreen(
-                    invoiceRef: invoiceData['bl_number'],
-                    buildPdf: (format) async {
-                      return PdfInvoiceGenerator.generateInvoice(
-                        company: CompanyInfo.fromJson(companyInfo),
-                        clientName: invoiceData['client'],
-                        items: invoiceData['items'],
-                        totalAmount: invoiceData['total_amount'],
-                        invoiceRef: invoiceData['bl_number'],
-                        sellerName: auth.username ?? "Admin",
-                        location: auth.emplacement ?? (auth.allowedDepots.isNotEmpty ? auth.allowedDepots.first : ""),
-                        pageFormat: format,
-                      );
-                    },
-                  ),
-                ),
-              );
+              _openPdfPreview(invoiceData, auth, initialMode: 'Invoice');
+            },
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEA580C),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.local_shipping_outlined),
+            label: const Text("Bon de Livraison"),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              _openPdfPreview(invoiceData, auth, initialMode: 'BL');
             },
           ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: _primaryColor,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             icon: const Icon(Icons.print),
             label: const Text("Thermique"),
@@ -378,6 +392,50 @@ class _CartScreenState extends State<CartScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _openPdfPreview(
+    Map<String, dynamic> invoiceData,
+    AuthProvider auth, {
+    String initialMode = 'Invoice',
+  }) async {
+    final companyInfo = await ApiService().getCompanyInfo(auth.token!);
+    final company = CompanyInfo.fromJson(companyInfo);
+    if (!mounted) return;
+
+    final seller = auth.username ?? "Admin";
+    final location = auth.emplacement ?? (auth.allowedDepots.isNotEmpty ? auth.allowedDepots.first : "Boutique");
+    final List<Map<String, dynamic>> items = (invoiceData['items'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => PdfPreviewScreen(
+          invoiceRef: invoiceData['bl_number'] ?? '',
+          initialMode: initialMode,
+          enableModeToggle: true,
+          buildPdfWithMode: (format, mode) async {
+            return PdfInvoiceGenerator.generateInvoice(
+              company: company,
+              clientName: invoiceData['client'] ?? 'Client Divers',
+              clientAddress: invoiceData['client_adresse'],
+              clientTel: invoiceData['client_telephone'],
+              items: items,
+              totalAmount: (invoiceData['total_amount'] as num?)?.toDouble() ?? 0.0,
+              paidAmount: (invoiceData['paid_amount'] as num?)?.toDouble(),
+              invoiceRef: invoiceData['bl_number'] ?? '',
+              sellerName: seller,
+              location: location,
+              pageFormat: format,
+              mode: mode,
+              invoiceDate: DateTime.now(),
+              invoiceId: invoiceData['id']?.toString(),
+            );
+          },
+        ),
       ),
     );
   }

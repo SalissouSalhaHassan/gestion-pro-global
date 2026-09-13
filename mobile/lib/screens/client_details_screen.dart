@@ -100,17 +100,23 @@ class _ClientDetailsScreenState extends State<ClientDetailsScreen> {
           MaterialPageRoute(
             builder: (_) => PdfPreviewScreen(
               invoiceRef: (inv['bl_number'] ?? '').toString(),
-              buildPdf: (format) async {
+              enableModeToggle: true,
+              buildPdfWithMode: (format, mode) async {
                 return PdfInvoiceGenerator.generateInvoice(
                   company: company,
                   clientName: _client.nom,
+                  clientAddress: _client.adresse,
+                  clientTel: _client.telephone,
                   items: pdfItems,
                   totalAmount: (inv['total_ttc'] as num?)?.toDouble() ?? 0.0,
                   invoiceRef: (inv['bl_number'] ?? '').toString(),
                   sellerName: auth.username ?? "Utilisateur",
                   paidAmount: (inv['montant_paye'] as num?)?.toDouble() ?? 0.0,
-                  location: (inv['emplacement'] ?? '').toString(), // NEW
+                  location: (inv['emplacement'] ?? '').toString(),
                   pageFormat: format,
+                  mode: mode,
+                  invoiceDate: DateTime.tryParse(inv['date_facture']?.toString() ?? ''),
+                  invoiceId: inv['id']?.toString(),
                 );
               },
             ),
