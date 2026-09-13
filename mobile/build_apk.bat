@@ -50,10 +50,18 @@ if %errorlevel% neq 0 (
 )
 
 echo.
+if exist "android\gradlew.bat" (
+    echo [*] Stopping any stale Gradle daemons to free up memory...
+    pushd android
+    call gradlew.bat --stop >nul 2>&1
+    popd
+)
+
+echo.
 echo ---------------------------------------------------
 echo [2/2] Building Release APK (flutter build apk --release)...
 echo ---------------------------------------------------
-call "%FLUTTER_BIN%" build apk --release
+call "%FLUTTER_BIN%" build apk --release --no-tree-shake-icons
 if %errorlevel% neq 0 (
     echo [ERROR] Build failed! Check Android SDK / Java settings.
     pause
