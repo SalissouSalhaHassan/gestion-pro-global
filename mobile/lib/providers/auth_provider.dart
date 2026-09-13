@@ -72,6 +72,7 @@ class AuthProvider with ChangeNotifier {
   bool get canAccessPurchases => hasPermission('purchases.view') || isAdmin;
   bool get canAccessFinance => hasPermission('finance.view') || hasPermission('caisse.view') || isAdmin;
   bool get canAccessReports => hasPermission('reports.view') || isAdmin;
+  bool get canViewReports => canAccessReports;
   bool get canDeleteInvoice => hasPermission('invoices.delete') || isAdmin;
   bool get canAdjustStock => hasPermission('stock.adjust') || isAdmin;
   bool get canManageUsers => hasPermission('users.manage') || isAdmin;
