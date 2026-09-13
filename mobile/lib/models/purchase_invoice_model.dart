@@ -87,6 +87,7 @@ class PurchaseInvoice {
   final List<PurchaseInvoiceItem> items;
   final List<PurchasePayment> payments;
   final String? notes;
+  final String? depotNom;
 
   PurchaseInvoice({
     this.id,
@@ -104,6 +105,7 @@ class PurchaseInvoice {
     required this.items,
     this.payments = const [],
     this.notes,
+    this.depotNom,
   });
 
   factory PurchaseInvoice.fromJson(Map<String, dynamic> json) {
@@ -140,6 +142,7 @@ class PurchaseInvoice {
       totalAmount: double.tryParse(json['montant_total']?.toString() ?? json['total_amount']?.toString() ?? '0') ?? 0.0,
       paidAmount: double.tryParse(json['montant_paye']?.toString() ?? json['paid_amount']?.toString() ?? '0') ?? 0.0,
       status: json['statut'] ?? json['status'] ?? 'Non Payée',
+      depotNom: json['depot_nom']?.toString(),
       items: (itemsRaw as List<dynamic>?)
               ?.map((item) => PurchaseInvoiceItem.fromJson(item))
               .toList() ??
@@ -157,6 +160,7 @@ class PurchaseInvoice {
       'id': id,
       'fournisseur_id': supplierId,
       'fournisseur_nom': supplierName,
+      'depot_nom': depotNom,
       'date_achat': DateFormat('yyyy-MM-dd').format(date),
       'sous_total': sousTotal,
       'remise': remise,

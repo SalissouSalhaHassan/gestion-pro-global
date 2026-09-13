@@ -467,33 +467,61 @@ class ApiService {
   }
 
   Future<List<dynamic>> getPurchases(String token, {bool forceRefresh = false}) async {
+    // 1. Try Next.js API first
+    try {
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+      
+      const storage = FlutterSecureStorage();
+      String? secureToken = await storage.read(key: 'auth_token');
+      if (secureToken == null || secureToken.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        secureToken = prefs.getString('auth_token');
+      }
+      final effectiveToken = secureToken ?? token;
+
+      final uri = Uri.parse('$_baseUrl/api/purchases');
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $effectiveToken',
+          if (orgId != null && orgId.isNotEmpty) 'x-organization-id': orgId,
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is List) {
+          debugPrint('ApiService: Fetched ${data.length} purchases from Next.js API');
+          return data;
+        }
+      } else {
+        debugPrint('ApiService: Purchases API returned status ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('ApiService: Purchases API failed ($e), falling back to Supabase');
+    }
+
+    // 2. Fallback to Supabase
     if (await _ensureSupabaseReady()) {
       try {
         final client = _supabaseService.client!;
         final authCtx = await _getAuthContext();
-        debugPrint('ApiService: Fetching purchases...');
-        final bool isAdmin = authCtx['isAdmin'];
-        final List<String> allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
-        if (!isAdmin && allowedDepots.isEmpty) return [];
-        
-        try {
-          // 1. Try with join
-          var q = client
-              .from('achats')
-              .select('*, fournisseurs!fournisseur_id(nom)');
-          if (!isAdmin) q = q.inFilter('depot_nom', allowedDepots);
-          final headers = await q.order('date_achat', ascending: false);
-          debugPrint('ApiService: Fetched ${headers.length} purchase headers (with join)');
-          return headers;
-        } catch (joinErr) {
-          debugPrint('ApiService: Purchase join failed ($joinErr), falling back to raw headers');
-          // 2. Fallback to simple select
-          var q = client.from('achats').select();
-          if (!isAdmin) q = q.inFilter('depot_nom', allowedDepots);
-          final headers = await q.order('date_achat', ascending: false);
-          debugPrint('ApiService: Fetched ${headers.length} purchase headers (fallback)');
-          return headers;
+        final bool isAdmin = authCtx['isAdmin'] ?? false;
+        final List<String> allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>? ?? []);
+        final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+
+        var q = client.from('achats').select();
+        if (orgId != null && orgId.isNotEmpty) {
+          q = q.eq('organization_id', orgId);
         }
+        if (!isAdmin && allowedDepots.isNotEmpty) {
+          q = q.inFilter('depot_nom', allowedDepots);
+        }
+        final headers = await q.order('date_achat', ascending: false);
+        debugPrint('ApiService: Fetched ${headers.length} purchase headers from Supabase');
+        return headers;
       } catch (e) {
         debugPrint('ApiService Global Error (getPurchases): $e');
         return [];
@@ -503,64 +531,124 @@ class ApiService {
   }
 
   Future<String> getNextPurchaseRef() async {
+    // Try API first
+    try {
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+      const storage = FlutterSecureStorage();
+      String? secureToken = await storage.read(key: 'auth_token');
+      if (secureToken == null || secureToken.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        secureToken = prefs.getString('auth_token');
+      }
+
+      final uri = Uri.parse('$_baseUrl/api/purchases/next-ref');
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          if (secureToken != null && secureToken.isNotEmpty) 'Authorization': 'Bearer $secureToken',
+          if (orgId != null && orgId.isNotEmpty) 'x-organization-id': orgId,
+        },
+      ).timeout(const Duration(seconds: 4));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['nextRef'] != null) {
+          return data['nextRef'].toString();
+        }
+      }
+    } catch (_) {}
+
     if (await _ensureSupabaseReady()) {
       try {
-        final res = await _supabaseService.client!
-            .from('achats')
-            .select('id');
+        final authCtx = await _getAuthContext();
+        final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+        var q = _supabaseService.client!.from('achats').select('id');
+        if (orgId != null && orgId.isNotEmpty) {
+          q = q.eq('organization_id', orgId);
+        }
+        final res = await q;
         final count = (res as List).length;
         final dateStr = DateFormat('ddMMyy').format(DateTime.now());
-        return "MOB-ACH-$dateStr-${(count + 1).toString().padLeft(5, '0')}";
+        return "ACH-$dateStr-${(count + 1).toString().padLeft(4, '0')}";
       } catch (e) {
         debugPrint('ApiService Error (getNextPurchaseRef): $e');
         final dateStr = DateFormat('ddMMyy').format(DateTime.now());
-        return "MOB-ACH-$dateStr-00001";
+        return "ACH-$dateStr-0001";
       }
     }
     final dateStr = DateFormat('ddMMyy').format(DateTime.now());
-    return "MOB-ACH-$dateStr-00001";
+    return "ACH-$dateStr-0001";
   }
 
   Future<Map<String, dynamic>?> getPurchaseWithItems(String id) async {
+    // 1. Try Next.js API first
+    try {
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+      const storage = FlutterSecureStorage();
+      String? secureToken = await storage.read(key: 'auth_token');
+      if (secureToken == null || secureToken.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        secureToken = prefs.getString('auth_token');
+      }
+
+      final uri = Uri.parse('$_baseUrl/api/purchases/$id');
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          if (secureToken != null && secureToken.isNotEmpty) 'Authorization': 'Bearer $secureToken',
+          if (orgId != null && orgId.isNotEmpty) 'x-organization-id': orgId,
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map<String, dynamic>) {
+          return data;
+        }
+      }
+    } catch (e) {
+      debugPrint('ApiService: API getPurchaseWithItems failed ($e), falling back to Supabase');
+    }
+
+    // 2. Fallback to Supabase
     if (await _ensureSupabaseReady()) {
       try {
         final client = _supabaseService.client!;
         debugPrint('ApiService: Starting FULL fetch for Purchase ID: $id');
 
-        // 1. Fetch the Purchase Header with Supplier Join
-        final purchase = await client.from('achats').select('*, fournisseurs!fournisseur_id(nom)').eq('id', id).maybeSingle();
+        final purchase = await client.from('achats').select().eq('id', id).maybeSingle();
         if (purchase == null) {
           debugPrint('ApiService: Purchase record NOT found for ID: $id');
           return null;
         }
         final authCtx = await _getAuthContext();
-        final bool isAdmin = authCtx['isAdmin'];
-        final List<String> allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
-        if (!isAdmin) {
+        final bool isAdmin = authCtx['isAdmin'] ?? false;
+        final List<String> allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>? ?? []);
+        if (!isAdmin && allowedDepots.isNotEmpty) {
           final depotName = purchase['depot_nom']?.toString().trim() ?? '';
-          _assertDepotsAccess(allowedDepots, [depotName]);
+          if (depotName.isNotEmpty) {
+            _assertDepotsAccess(allowedDepots, [depotName]);
+          }
         }
         final result = Map<String, dynamic>.from(purchase);
 
-        // 2. Fetch associated Items (Direct Query)
         try {
           final items = await client.from('achat_items').select().eq('achat_id', id);
-          debugPrint('ApiService: Items query returned ${items.length} rows for $id');
           result['items'] = items;
           result['achat_items'] = items;
         } catch (e) {
-          debugPrint('ApiService: Error in items query: $e');
           result['items'] = [];
         }
 
-        // 3. Fetch associated Payments (Direct Query)
         try {
           final payments = await client.from('paiements').select().eq('achat_id', id).order('date_operation', ascending: true);
-          debugPrint('ApiService: Payments query returned ${payments.length} rows for $id');
           result['payments'] = payments;
           result['paiements'] = payments;
         } catch (e) {
-          debugPrint('ApiService: Error in payments query: $e');
           result['payments'] = [];
         }
         
@@ -964,15 +1052,206 @@ class ApiService {
   }
 
   Future<bool> createPurchase(Map<String, dynamic> data, String token) async {
+    // 1. Try Next.js API first
+    try {
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+
+      const storage = FlutterSecureStorage();
+      String? secureToken = await storage.read(key: 'auth_token');
+      if (secureToken == null || secureToken.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        secureToken = prefs.getString('auth_token');
+      }
+      final effectiveToken = secureToken ?? token;
+
+      final body = Map<String, dynamic>.from(data);
+      if (orgId != null && orgId.isNotEmpty && !body.containsKey('organization_id')) {
+        body['organization_id'] = orgId;
+      }
+
+      final uri = Uri.parse('$_baseUrl/api/purchases');
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $effectiveToken',
+          if (orgId != null && orgId.isNotEmpty) 'x-organization-id': orgId,
+        },
+        body: json.encode(body),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        debugPrint('✅ ApiService: Purchase created via Next.js API');
+        return true;
+      }
+      debugPrint('⚠️ ApiService: /api/purchases POST returned ${response.statusCode}: ${response.body}');
+    } catch (e) {
+      debugPrint('ApiService: createPurchase API failed ($e), falling back to Supabase');
+    }
+
+    // 2. Direct Supabase Fallback
     if (await _ensureSupabaseReady()) {
-       final authCtx = await _getAuthContext();
-       final isAdmin = authCtx['isAdmin'] as bool;
-       final allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
-       if (!isAdmin) {
-         final depotName = (data['depot_nom'] ?? 'Boutique').toString();
-         _assertDepotsAccess(allowedDepots, [depotName]);
-       }
-       return await _supabaseService.createPurchaseDirect(data);
+      final authCtx = await _getAuthContext();
+      final isAdmin = authCtx['isAdmin'] as bool? ?? false;
+      final allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>? ?? []);
+      if (!isAdmin && allowedDepots.isNotEmpty) {
+        final depotName = (data['depot_nom'] ?? 'Boutique').toString();
+        if (depotName.isNotEmpty) {
+          _assertDepotsAccess(allowedDepots, [depotName]);
+        }
+      }
+      return await _supabaseService.createPurchaseDirect(data);
+    }
+    return false;
+  }
+
+  Future<bool> deletePurchase(String purchaseId, String token) async {
+    // 1. Try Next.js API first
+    try {
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+
+      const storage = FlutterSecureStorage();
+      String? secureToken = await storage.read(key: 'auth_token');
+      if (secureToken == null || secureToken.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        secureToken = prefs.getString('auth_token');
+      }
+      final effectiveToken = secureToken ?? token;
+
+      final uri = Uri.parse('$_baseUrl/api/purchases/$purchaseId');
+      final response = await http.delete(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $effectiveToken',
+          if (orgId != null && orgId.isNotEmpty) 'x-organization-id': orgId,
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        debugPrint('✅ ApiService: Purchase deleted via Next.js API');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('ApiService: deletePurchase API failed ($e), falling back to Supabase');
+    }
+
+    // 2. Direct Supabase Fallback
+    if (await _ensureSupabaseReady()) {
+      return await _supabaseService.deletePurchaseDirect(purchaseId);
+    }
+    return false;
+  }
+
+  Future<bool> payPurchase(String purchaseId, double amount, String method, String token) async {
+    // 1. Try Next.js API first
+    try {
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+
+      const storage = FlutterSecureStorage();
+      String? secureToken = await storage.read(key: 'auth_token');
+      if (secureToken == null || secureToken.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        secureToken = prefs.getString('auth_token');
+      }
+      final effectiveToken = secureToken ?? token;
+
+      final uri = Uri.parse('$_baseUrl/api/purchases/$purchaseId/payments');
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $effectiveToken',
+          if (orgId != null && orgId.isNotEmpty) 'x-organization-id': orgId,
+        },
+        body: json.encode({
+          'amount': amount,
+          'method': method,
+          'reference': 'REC-MOB-${DateTime.now().millisecondsSinceEpoch}',
+        }),
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        debugPrint('✅ ApiService: Purchase payment recorded via Next.js API');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('ApiService: payPurchase API failed ($e), falling back to Supabase');
+    }
+
+    // 2. Direct Supabase Fallback
+    if (await _ensureSupabaseReady()) {
+      try {
+        final client = _supabaseService.client!;
+        final purRes = await client.from('achats').select('montant_total, montant_paye').eq('id', purchaseId).single();
+        final double currentPaid = ((purRes['montant_paye'] ?? 0) as num).toDouble();
+        final double total = ((purRes['montant_total'] ?? 0) as num).toDouble();
+        final double newPaid = currentPaid + amount;
+        String status = "Partiellement Payée";
+        if (newPaid >= total) status = "Payée";
+
+        await client.from('paiements').insert({
+          'achat_id': int.tryParse(purchaseId) ?? 0,
+          'date_operation': DateTime.now().toIso8601String().split('T')[0],
+          'montant_regle': amount,
+          'moyen_reglement': method,
+          'reference_paiement': 'MOB-${DateTime.now().millisecondsSinceEpoch}',
+          'utilisateur': 'MobileApp',
+        });
+
+        await client.from('achats').update({
+          'montant_paye': newPaid,
+          'statut': status,
+        }).eq('id', purchaseId);
+
+        return true;
+      } catch (e) {
+        debugPrint('Supabase payPurchase failed: $e');
+        return false;
+      }
+    }
+    return false;
+  }
+
+  Future<bool> updatePurchase(String purchaseId, Map<String, dynamic> data, String token) async {
+    // 1. Try Next.js API first
+    try {
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+
+      const storage = FlutterSecureStorage();
+      String? secureToken = await storage.read(key: 'auth_token');
+      if (secureToken == null || secureToken.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        secureToken = prefs.getString('auth_token');
+      }
+      final effectiveToken = secureToken ?? token;
+
+      final uri = Uri.parse('$_baseUrl/api/purchases/$purchaseId');
+      final response = await http.put(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $effectiveToken',
+          if (orgId != null && orgId.isNotEmpty) 'x-organization-id': orgId,
+        },
+        body: json.encode(data),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        debugPrint('✅ ApiService: Purchase updated via Next.js API');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('ApiService: updatePurchase API failed ($e), falling back to Supabase');
+    }
+
+    // 2. Direct Supabase Fallback
+    if (await _ensureSupabaseReady()) {
+      return await _supabaseService.updatePurchaseDirect(purchaseId, data);
     }
     return false;
   }
