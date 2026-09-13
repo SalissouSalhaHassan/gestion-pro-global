@@ -43,7 +43,7 @@ Write-Host "---------------------------------------------------" -ForegroundColo
 Write-Host "[1/2] Fetching dependencies (flutter pub get)..." -ForegroundColor Yellow
 Write-Host "---------------------------------------------------" -ForegroundColor Yellow
 
-& flutter pub get
+& $flutterCmd.Source pub get
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Failed to fetch dependencies!" -ForegroundColor Red
     Read-Host "Press Enter to exit"
@@ -55,7 +55,7 @@ Write-Host "---------------------------------------------------" -ForegroundColo
 Write-Host "[2/2] Building Release APK (flutter build apk --release)..." -ForegroundColor Yellow
 Write-Host "---------------------------------------------------" -ForegroundColor Yellow
 
-& flutter build apk --release
+& $flutterCmd.Source build apk --release
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Build failed! Check Android SDK / Java settings." -ForegroundColor Red
     Read-Host "Press Enter to exit"

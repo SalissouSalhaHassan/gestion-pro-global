@@ -8,18 +8,25 @@ echo.
 cd /d "%~dp0"
 echo [*] Working Directory: %CD%
 
-set "PATH=C:\src\flutter\bin;C:\flutter\bin;%PATH%"
+set "PATH=C:\src\flutter\bin;C:\Program Files\Git\cmd;C:\Windows\System32;C:\Windows\System32\WindowsPowerShell\v1.0;%PATH%"
 
-set "FLUTTER_BIN=flutter"
-where flutter >nul 2>&1
-if %errorlevel% equ 0 goto :FLUTTER_READY
-
+set "FLUTTER_BIN="
 if exist "C:\src\flutter\bin\flutter.bat" (
     set "FLUTTER_BIN=C:\src\flutter\bin\flutter.bat"
     goto :FLUTTER_READY
 )
 if exist "C:\flutter\bin\flutter.bat" (
     set "FLUTTER_BIN=C:\flutter\bin\flutter.bat"
+    goto :FLUTTER_READY
+)
+if exist "%USERPROFILE%\flutter\bin\flutter.bat" (
+    set "FLUTTER_BIN=%USERPROFILE%\flutter\bin\flutter.bat"
+    goto :FLUTTER_READY
+)
+
+where flutter.bat >nul 2>&1
+if %errorlevel% equ 0 (
+    set "FLUTTER_BIN=flutter.bat"
     goto :FLUTTER_READY
 )
 
