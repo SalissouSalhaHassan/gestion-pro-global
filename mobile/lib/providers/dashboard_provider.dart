@@ -120,7 +120,7 @@ class DashboardProvider with ChangeNotifier {
           .from('factures')
           .select('total_ttc')
           .gte('date_facture', today)
-          .lte('date_facture', today)
+          .lte('date_facture', '${today}T23:59:59.999Z')
           .neq('statut', 'Annulée')
           .or('is_deleted.eq.false,is_deleted.is.null');
 

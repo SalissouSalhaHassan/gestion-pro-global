@@ -290,7 +290,7 @@ class _CartScreenState extends State<CartScreen> {
         'items': cart.items
             .map(
               (item) => {
-                'code_art': item.article.reference.isNotEmpty ? item.article.reference : item.article.codeBarres,
+                'code_art': item.article.reference.isNotEmpty ? item.article.reference : (item.article.codeBarre ?? ''),
                 'name': item.article.designation,
                 'depot': auth.emplacement ?? (auth.allowedDepots.isNotEmpty ? auth.allowedDepots.first : "Boutique"),
                 'quantity': item.quantity,

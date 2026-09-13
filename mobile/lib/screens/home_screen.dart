@@ -143,6 +143,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         currentIndex: _selectedIndex,
         onTap: (index) {
           setState(() => _selectedIndex = index);
+          if (index == 1) {
+            final auth = Provider.of<AuthProvider>(context, listen: false);
+            if (auth.token != null) {
+              Provider.of<DashboardProvider>(context, listen: false).fetchDashboardData(
+                auth.token!,
+                forceRefresh: true,
+                vendeur: auth.isAdmin ? null : auth.username,
+              );
+            }
+          }
         },
         selectedItemColor: const Color(0xFFD500F9),
         unselectedItemColor: Colors.white.withAlpha(128),
@@ -717,10 +727,10 @@ class _ProductProfitabilityDialogState extends State<_ProductProfitabilityDialog
                        itemBuilder: (context, index) {
                          final p = _filteredProducts[index];
                          final double margin = (p['prix_vente'] ?? 0).toDouble() - (p['prix_achat'] ?? 0).toDouble();
-                         return ListTile(
-                           title: Text(p['nom'] ?? 'Sans nom', style: const TextStyle(fontWeight: FontWeight.bold)),
-                           trailing: Text("${margin.toStringAsFixed(0)} F", style: TextStyle(color: margin >= 0 ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
-                         );
+                          return ListTile(
+                            title: Text(p['designation'] ?? p['nom'] ?? 'Sans nom', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            trailing: Text("${margin.toStringAsFixed(0)} F", style: TextStyle(color: margin >= 0 ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
+                          );
                        },
                      ),
               ),

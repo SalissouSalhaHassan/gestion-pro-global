@@ -57,6 +57,17 @@ class ApiService {
     return _supabaseService.isInitialized && _supabaseService.client != null;
   }
 
+  Future<String> _getEffectiveToken(String token) async {
+    if (token.isNotEmpty) return token;
+    const storage = FlutterSecureStorage();
+    String? secureToken = await storage.read(key: 'auth_token');
+    if (secureToken == null || secureToken.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      secureToken = prefs.getString('auth_token');
+    }
+    return secureToken ?? '';
+  }
+
   List<String> _normalizeDepotNames(List<String> depots) {
     return depots.map((d) => d.trim()).where((d) => d.isNotEmpty).toSet().toList();
   }
@@ -69,7 +80,12 @@ class ApiService {
   Future<List<String>> _fetchAllActiveDepots() async {
     final client = _supabaseService.client!;
     try {
-      final res = await client.from('depots').select('nom, is_active, is_deleted');
+      final orgId = await _supabaseService.getOrganizationId();
+      var q = client.from('depots').select('nom, is_active, is_deleted');
+      if (orgId != null && orgId.isNotEmpty) {
+        q = q.eq('organization_id', orgId);
+      }
+      final res = await q;
       final names = <String>[];
       for (final d in (res as List)) {
         final name = d['nom']?.toString().trim();
@@ -83,8 +99,17 @@ class ApiService {
       }
       return names.toSet().toList();
     } catch (_) {
-      final res = await client.from('depots').select('nom');
-      return (res as List).map((e) => e['nom'].toString()).toSet().toList();
+      try {
+        final orgId = await _supabaseService.getOrganizationId();
+        var q = client.from('depots').select('nom');
+        if (orgId != null && orgId.isNotEmpty) {
+          q = q.eq('organization_id', orgId);
+        }
+        final res = await q;
+        return (res as List).map((e) => e['nom'].toString()).toSet().toList();
+      } catch (_) {
+        return [];
+      }
     }
   }
 
@@ -331,14 +356,22 @@ class ApiService {
       }
       
       final effectiveToken = secureToken ?? token;
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId'] as String?;
+
       final uri = Uri.parse('$_baseUrl/api/clients');
       
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $effectiveToken',
+      };
+      if (orgId != null && orgId.isNotEmpty) {
+        headers['x-organization-id'] = orgId;
+      }
+
       final response = await http.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $effectiveToken',
-        },
+        headers: headers,
       ).timeout(const Duration(seconds: 5));
 
       debugPrint('ApiService: getClients response: ${response.statusCode}');
@@ -354,7 +387,16 @@ class ApiService {
       if (await _ensureSupabaseReady()) {
         try {
           debugPrint('ApiService: Supabase Fallback getClients');
-          final data = await _supabaseService.getTableData('clients');
+          final authCtx = await _getAuthContext();
+          final orgId = authCtx['organizationId'] as String?;
+          var q = _supabaseService.client!
+              .from('clients')
+              .select()
+              .or('is_deleted.eq.false,is_deleted.is.null');
+          if (orgId != null && orgId.isNotEmpty) {
+            q = q.eq('organization_id', orgId);
+          }
+          final data = await q.order('nom');
           debugPrint('ApiService: Supabase Fallback getClients SUCCESS, found ${data.length} items');
           return data;
         } catch (sbErr) {
@@ -378,43 +420,50 @@ class ApiService {
       }
       
       final effectiveToken = secureToken ?? token;
-      
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId'] as String?;
+
       // Build query parameters
       final Map<String, String> params = {};
-      if (search != null) params['search'] = search;
+      if (vendeur != null) params['vendeur'] = vendeur;
       if (page != null) params['page'] = page.toString();
       if (pageSize != null) params['pageSize'] = pageSize.toString();
+      if (search != null && search.isNotEmpty) params['search'] = search;
       
       final queryString = params.isNotEmpty ? '?' + params.entries.map((e) => '${e.key}=${e.value}').join('&') : '';
       final uri = Uri.parse('$_baseUrl/api/invoices$queryString');
       
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $effectiveToken',
+      };
+      if (orgId != null && orgId.isNotEmpty) {
+        headers['x-organization-id'] = orgId;
+      }
+
       final response = await http.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $effectiveToken',
-        },
-      );
+        headers: headers,
+      ).timeout(const Duration(seconds: 8));
 
       debugPrint('ApiService: getInvoices response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        // The API returns a list of invoices directly or an object with items
-        if (data is List) return data;
-        if (data is Map && data['items'] != null) return data['items'];
-        return data as List<dynamic>;
+        final res = json.decode(response.body);
+        if (res is List) return res;
+        if (res is Map && res.containsKey('data')) return res['data'] as List<dynamic>;
+        return [];
       } else {
         debugPrint('ApiService: getInvoices ERROR Body: ${response.body}');
         throw Exception('HTTP ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('ApiService: ERROR in getInvoices: $e');
+      debugPrint('ApiService: ERROR in getInvoices: $e — falling back to Supabase');
       // Fallback to Supabase
       if (await _ensureSupabaseReady()) {
         int? from, to;
         if (page != null && pageSize != null) {
-          from = page * pageSize;
+          from = (page - 1) * pageSize;
           to = from + pageSize - 1;
         }
         final authCtx = await _getAuthContext();
@@ -665,12 +714,25 @@ class ApiService {
   Future<List<dynamic>> getUsers(String token) async {
     if (await _ensureSupabaseReady()) {
       try {
-        return await _supabaseService.client!
+        final orgId = await _supabaseService.getOrganizationId();
+        var q = _supabaseService.client!
             .from('users')
-            .select('*, user_depots(depots(nom))')
-            .order('utilisateur');
+            .select('*, user_depots(depots(nom))');
+        if (orgId != null && orgId.isNotEmpty) {
+          q = q.eq('organization_id', orgId);
+        }
+        return await q.order('utilisateur');
       } catch (_) {
-        return await _supabaseService.client!.from('users').select().order('utilisateur');
+        try {
+          final orgId = await _supabaseService.getOrganizationId();
+          var q = _supabaseService.client!.from('users').select();
+          if (orgId != null && orgId.isNotEmpty) {
+            q = q.eq('organization_id', orgId);
+          }
+          return await q.order('utilisateur');
+        } catch (_) {
+          return [];
+        }
       }
     }
     return [];
@@ -688,6 +750,8 @@ class ApiService {
       }
       
       final effectiveToken = secureToken ?? token;
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId'] as String?;
       
       final Map<String, String> params = {};
       if (startDate != null) params['start'] = startDate;
@@ -696,12 +760,17 @@ class ApiService {
       final queryString = params.isNotEmpty ? '?' + params.entries.map((e) => '${e.key}=${e.value}').join('&') : '';
       final uri = Uri.parse('$_baseUrl/api/expenses$queryString');
       
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $effectiveToken',
+      };
+      if (orgId != null && orgId.isNotEmpty) {
+        headers['x-organization-id'] = orgId;
+      }
+
       final response = await http.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $effectiveToken',
-        },
+        headers: headers,
       );
 
       debugPrint('ApiService: getExpenses response: ${response.statusCode}');
@@ -717,10 +786,15 @@ class ApiService {
       if (await _ensureSupabaseReady()) {
         final authCtx = await _getAuthContext();
         final bool isAdmin = authCtx['isAdmin'];
+        final orgId = authCtx['organizationId'] as String?;
         final allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
 
         var query = _supabaseService.client!.from('depenses').select();
         
+        if (orgId != null && orgId.isNotEmpty) {
+          query = query.eq('organization_id', orgId);
+        }
+
         if (!isAdmin) {
           if (allowedDepots.isNotEmpty) {
             query = query.inFilter('emplacement', allowedDepots);
@@ -749,14 +823,21 @@ class ApiService {
       }
       
       final effectiveToken = secureToken ?? token;
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId'] as String?;
       final uri = Uri.parse('$_baseUrl/api/advances');
       
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $effectiveToken',
+      };
+      if (orgId != null && orgId.isNotEmpty) {
+        headers['x-organization-id'] = orgId;
+      }
+
       final response = await http.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $effectiveToken',
-        },
+        headers: headers,
       ).timeout(const Duration(seconds: 5));
 
       debugPrint('ApiService: getDeposits response: ${response.statusCode}');
@@ -772,10 +853,14 @@ class ApiService {
       if (await _ensureSupabaseReady()) {
         try {
           final authCtx = await _getAuthContext();
+          final orgId = authCtx['organizationId'] as String?;
           final effectiveVendeur = _effectiveVendeur(authCtx, vendeur);
           debugPrint('ApiService: Supabase Fallback getDeposits (vendeur: $effectiveVendeur)');
           
           var query = _supabaseService.client!.from('avances_clients').select('*, clients(nom)');
+          if (orgId != null && orgId.isNotEmpty) {
+            query = query.eq('organization_id', orgId);
+          }
           if (effectiveVendeur != null) {
             query = query.eq('utilisateur', effectiveVendeur);
           }
@@ -785,7 +870,13 @@ class ApiService {
         } catch (sbErr) {
           debugPrint('ApiService: Supabase Fallback getDeposits join failed: $sbErr — trying simple select');
           try {
-             final simpleData = await _supabaseService.client!.from('avances_clients').select().order('date_avance', ascending: false).limit(50);
+             final authCtx = await _getAuthContext();
+             final orgId = authCtx['organizationId'] as String?;
+             var sq = _supabaseService.client!.from('avances_clients').select();
+             if (orgId != null && orgId.isNotEmpty) {
+               sq = sq.eq('organization_id', orgId);
+             }
+             final simpleData = await sq.order('date_avance', ascending: false).limit(50);
              return simpleData;
           } catch (simpleErr) {
              debugPrint('ApiService: Supabase Fallback getDeposits CRITICAL ERROR: $simpleErr');
@@ -1108,18 +1199,25 @@ class ApiService {
   }
 
   Future<bool> deletePurchase(String purchaseId, String token) async {
+    final authCtx = await _getAuthContext();
+    final isAdmin = authCtx['isAdmin'] as bool;
+    if (!isAdmin) {
+      final allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
+      if (await _ensureSupabaseReady()) {
+        final purchase = await _supabaseService.client!
+            .from('achats')
+            .select('depot_nom')
+            .eq('id', purchaseId)
+            .maybeSingle();
+        final depotName = purchase?['depot_nom']?.toString() ?? '';
+        _assertDepotsAccess(allowedDepots, [depotName]);
+      }
+    }
+
     // 1. Try Next.js API first
     try {
-      final authCtx = await _getAuthContext();
       final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
-
-      const storage = FlutterSecureStorage();
-      String? secureToken = await storage.read(key: 'auth_token');
-      if (secureToken == null || secureToken.isEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        secureToken = prefs.getString('auth_token');
-      }
-      final effectiveToken = secureToken ?? token;
+      final effectiveToken = await _getEffectiveToken(token);
 
       final uri = Uri.parse('$_baseUrl/api/purchases/$purchaseId');
       final response = await http.delete(
@@ -1146,19 +1244,26 @@ class ApiService {
     return false;
   }
 
-  Future<bool> payPurchase(String purchaseId, double amount, String method, String token) async {
+  Future<bool> payPurchase(String purchaseId, double amount, String method, String token, {String? reference, String? date}) async {
+    final authCtx = await _getAuthContext();
+    final isAdmin = authCtx['isAdmin'] as bool;
+    if (!isAdmin) {
+      final allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
+      if (await _ensureSupabaseReady()) {
+        final purchase = await _supabaseService.client!
+            .from('achats')
+            .select('depot_nom')
+            .eq('id', purchaseId)
+            .maybeSingle();
+        final depotName = purchase?['depot_nom']?.toString() ?? '';
+        _assertDepotsAccess(allowedDepots, [depotName]);
+      }
+    }
+
     // 1. Try Next.js API first
     try {
-      final authCtx = await _getAuthContext();
       final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
-
-      const storage = FlutterSecureStorage();
-      String? secureToken = await storage.read(key: 'auth_token');
-      if (secureToken == null || secureToken.isEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        secureToken = prefs.getString('auth_token');
-      }
-      final effectiveToken = secureToken ?? token;
+      final effectiveToken = await _getEffectiveToken(token);
 
       final uri = Uri.parse('$_baseUrl/api/purchases/$purchaseId/payments');
       final response = await http.post(
@@ -1171,7 +1276,8 @@ class ApiService {
         body: json.encode({
           'amount': amount,
           'method': method,
-          'reference': 'REC-MOB-${DateTime.now().millisecondsSinceEpoch}',
+          'reference': reference ?? 'REC-MOB-${DateTime.now().millisecondsSinceEpoch}',
+          if (date != null) 'date': date,
         }),
       ).timeout(const Duration(seconds: 8));
 
@@ -1185,51 +1291,39 @@ class ApiService {
 
     // 2. Direct Supabase Fallback
     if (await _ensureSupabaseReady()) {
-      try {
-        final client = _supabaseService.client!;
-        final purRes = await client.from('achats').select('montant_total, montant_paye').eq('id', purchaseId).single();
-        final double currentPaid = ((purRes['montant_paye'] ?? 0) as num).toDouble();
-        final double total = ((purRes['montant_total'] ?? 0) as num).toDouble();
-        final double newPaid = currentPaid + amount;
-        String status = "Partiellement Payée";
-        if (newPaid >= total) status = "Payée";
-
-        await client.from('paiements').insert({
-          'achat_id': int.tryParse(purchaseId) ?? 0,
-          'date_operation': DateTime.now().toIso8601String().split('T')[0],
-          'montant_regle': amount,
-          'moyen_reglement': method,
-          'reference_paiement': 'MOB-${DateTime.now().millisecondsSinceEpoch}',
-          'utilisateur': 'MobileApp',
-        });
-
-        await client.from('achats').update({
-          'montant_paye': newPaid,
-          'statut': status,
-        }).eq('id', purchaseId);
-
-        return true;
-      } catch (e) {
-        debugPrint('Supabase payPurchase failed: $e');
-        return false;
-      }
+      return await _supabaseService.payPurchaseDirect(
+        purchaseId,
+        amount,
+        method,
+        reference: reference,
+        date: date,
+        utilisateur: authCtx['username']?.toString(),
+      );
     }
     return false;
   }
 
   Future<bool> updatePurchase(String purchaseId, Map<String, dynamic> data, String token) async {
+    final authCtx = await _getAuthContext();
+    final isAdmin = authCtx['isAdmin'] as bool;
+    if (!isAdmin) {
+      final allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
+      String depotName = data['depot_nom']?.toString() ?? '';
+      if (depotName.isEmpty && await _ensureSupabaseReady()) {
+        final purchase = await _supabaseService.client!
+            .from('achats')
+            .select('depot_nom')
+            .eq('id', purchaseId)
+            .maybeSingle();
+        depotName = purchase?['depot_nom']?.toString() ?? '';
+      }
+      _assertDepotsAccess(allowedDepots, [depotName]);
+    }
+
     // 1. Try Next.js API first
     try {
-      final authCtx = await _getAuthContext();
       final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
-
-      const storage = FlutterSecureStorage();
-      String? secureToken = await storage.read(key: 'auth_token');
-      if (secureToken == null || secureToken.isEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        secureToken = prefs.getString('auth_token');
-      }
-      final effectiveToken = secureToken ?? token;
+      final effectiveToken = await _getEffectiveToken(token);
 
       final uri = Uri.parse('$_baseUrl/api/purchases/$purchaseId');
       final response = await http.put(
@@ -1399,74 +1493,6 @@ class ApiService {
       await _requireAdmin();
       await _supabaseService.cancelInvoiceDirect(id);
     }
-  }
-
-  Future<bool> deletePurchase(String id, String token) async {
-    if (await _ensureSupabaseReady()) {
-      final authCtx = await _getAuthContext();
-      final isAdmin = authCtx['isAdmin'] as bool;
-      if (!isAdmin) {
-        final allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
-        final purchase = await _supabaseService.client!
-            .from('achats')
-            .select('depot_nom')
-            .eq('id', id)
-            .maybeSingle();
-        final depotName = purchase?['depot_nom']?.toString() ?? '';
-        _assertDepotsAccess(allowedDepots, [depotName]);
-      }
-      return await _supabaseService.deletePurchaseDirect(id);
-    }
-    return false;
-  }
-
-  Future<bool> payPurchase(String id, double amount, String method, String token, {String? reference, String? date}) async {
-    if (await _ensureSupabaseReady()) {
-      final authCtx = await _getAuthContext();
-      final isAdmin = authCtx['isAdmin'] as bool;
-      final username = authCtx['username']?.toString();
-      if (!isAdmin) {
-        final allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
-        final purchase = await _supabaseService.client!
-            .from('achats')
-            .select('depot_nom')
-            .eq('id', id)
-            .maybeSingle();
-        final depotName = purchase?['depot_nom']?.toString() ?? '';
-        _assertDepotsAccess(allowedDepots, [depotName]);
-      }
-      return await _supabaseService.payPurchaseDirect(
-        id,
-        amount,
-        method,
-        reference: reference,
-        date: date,
-        utilisateur: username,
-      );
-    }
-    return false;
-  }
-
-  Future<bool> updatePurchase(String id, Map<String, dynamic> data, String token) async {
-    if (await _ensureSupabaseReady()) {
-      final authCtx = await _getAuthContext();
-      final isAdmin = authCtx['isAdmin'] as bool;
-      if (!isAdmin) {
-        final allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
-        String depotName = data['depot_nom']?.toString() ?? '';
-        if (depotName.isEmpty) {
-          final purchase = await _supabaseService.client!
-              .from('achats')
-              .select('depot_nom')
-              .eq('id', id)
-              .maybeSingle();
-          depotName = purchase?['depot_nom']?.toString() ?? '';
-        }
-        _assertDepotsAccess(allowedDepots, [depotName]);
-      }
-      return await _supabaseService.updatePurchaseDirect(id, data);
-    }
-    return false;
   }
 
   Future<void> updateInvoice(String id, Map<String, dynamic> data, String token) async {
@@ -1726,12 +1752,7 @@ class ApiService {
     try {
       debugPrint('ApiService: START getDashboardStats directly');
       
-      const storage = FlutterSecureStorage();
-      String? secureToken = await storage.read(key: 'auth_token');
-      if (secureToken == null || secureToken.isEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        secureToken = prefs.getString('auth_token');
-      }
+      final effectiveToken = await _getEffectiveToken(token);
       
       final authCtx = await _getAuthContext();
       final orgId = authCtx['organizationId'] as String?;
@@ -1784,7 +1805,7 @@ class ApiService {
                 var sq = client.from('factures')
                     .select('total_ttc')
                     .gte('date_facture', today)
-                    .lte('date_facture', today)
+                    .lte('date_facture', '${today}T23:59:59.999Z')
                     .neq('statut', 'Annulée')
                     .or('is_deleted.eq.false,is_deleted.is.null');
                 if (orgId != null && orgId.isNotEmpty) sq = sq.eq('organization_id', orgId);
@@ -1826,7 +1847,7 @@ class ApiService {
           var q = client.from('factures')
               .select('total_ttc')
               .gte('date_facture', today)
-              .lte('date_facture', today)
+              .lte('date_facture', '${today}T23:59:59.999Z')
               .neq('statut', 'Annulée')
               .or('is_deleted.eq.false,is_deleted.is.null');
           
@@ -2119,20 +2140,25 @@ class ApiService {
           final username = authCtx['username'] as String?;
           final effectiveVendeur = isAdmin ? vendeur : username;
 
+          final orgId = authCtx['organizationId'] as String?;
+
           // Fetch paiements, depenses, and unpaid factures for the range in parallel
           var pq = client.from('paiements').select('montant_regle, facture_id, avance_client_id, moyen_reglement, utilisateur, date_operation, '
               'factures(bl_number, clients(nom)), '
               'avances_clients(reference_paiement, clients(nom))')
               .gte('date_operation', startDate).lte('date_operation', endDate);
+          if (orgId != null && orgId.isNotEmpty) pq = pq.eq('organization_id', orgId);
           if (effectiveVendeur != null) pq = pq.eq('utilisateur', effectiveVendeur);
 
           var dq = client.from('depenses').select('montant, libelle, operateur, date_depense')
               .gte('date_depense', startDate).lte('date_depense', endDate);
+          if (orgId != null && orgId.isNotEmpty) dq = dq.eq('organization_id', orgId);
           if (effectiveVendeur != null) dq = dq.eq('operateur', effectiveVendeur);
 
           var fq = client.from('factures').select('total_ttc, client_id, statut, bl_number, vendeur, date_facture, clients(nom)')
-              .gte('date_facture', startDate).lte('date_facture', endDate)
+              .gte('date_facture', startDate).lte('date_facture', '${endDate}T23:59:59.999Z')
               .inFilter('statut', ['Non Payée', 'Non payée', 'Non payee', 'Non Payee']);
+          if (orgId != null && orgId.isNotEmpty) fq = fq.eq('organization_id', orgId);
           if (effectiveVendeur != null) fq = fq.eq('vendeur', effectiveVendeur);
 
           final results = await Future.wait([pq, dq, fq]);
@@ -2304,8 +2330,12 @@ class ApiService {
 
   Future<List<dynamic>> getActivityLogs(String token, {String? startDate, String? endDate, String? username, String? module}) async {
     if (await _ensureSupabaseReady()) {
+      final orgId = await _supabaseService.getOrganizationId();
       try {
         var q = _supabaseService.client!.from('activity_logs').select();
+        if (orgId != null && orgId.isNotEmpty) {
+          q = q.eq('organization_id', orgId);
+        }
         
         // Use 'timestamp' as primary, but will catch if it fails
         String timeCol = 'timestamp';
@@ -2326,6 +2356,9 @@ class ApiService {
         debugPrint('getActivityLogs with timestamp failed, trying created_at: $e');
         try {
           var q = _supabaseService.client!.from('activity_logs').select();
+          if (orgId != null && orgId.isNotEmpty) {
+            q = q.eq('organization_id', orgId);
+          }
           if (startDate != null) q = q.gte('created_at', startDate);
           if (endDate != null) q = q.lte('created_at', endDate);
           if (username != null && username != "Tous") q = q.eq('username', username);
@@ -2646,8 +2679,16 @@ class ApiService {
 
         final Map<String, double> grouped = {};
         for (var f in (res as List)) {
-          final dateStr = (f['date_facture'] as String).substring(0, 10);
-          final date = DateFormat('yyyy-MM-dd').parse(dateStr);
+          final rawDate = f['date_facture']?.toString() ?? '';
+          if (rawDate.isEmpty) continue;
+          final dateStr = rawDate.split('T')[0].split(' ')[0];
+          DateTime? date;
+          try {
+            date = DateFormat('yyyy-MM-dd').parse(dateStr);
+          } catch (_) {
+            date = DateTime.tryParse(rawDate);
+          }
+          if (date == null) continue;
           final dayName = DateFormat('dd/MM').format(date); // Use dd/MM to match screenshot
           
           final amt = (f['total_ttc'] as num?)?.toDouble() ?? 0.0;
@@ -2975,14 +3016,22 @@ class ApiService {
   }
 
   Future<List<dynamic>> getContracts(String token, {bool forceRefresh = false}) async {
+    final effectiveToken = await _getEffectiveToken(token);
+    final authCtx = await _getAuthContext();
+    final orgId = authCtx['organizationId'] as String?;
+
     try {
       final uri = Uri.parse('$_baseUrl/api/loyers');
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $effectiveToken',
+      };
+      if (orgId != null && orgId.isNotEmpty) {
+        headers['x-organization-id'] = orgId;
+      }
       final response = await http.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+        headers: headers,
       ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
@@ -2994,11 +3043,14 @@ class ApiService {
       debugPrint('ApiService: getContracts fallback to Supabase: $e');
       if (await _ensureSupabaseReady()) {
         try {
-          final contracts = await _supabaseService.client!
+          var cq = _supabaseService.client!
               .from('contrats')
               .select('*')
-              .eq('is_deleted', false)
-              .order('id', ascending: false);
+              .or('is_deleted.eq.false,is_deleted.is.null');
+          if (orgId != null && orgId.isNotEmpty) {
+            cq = cq.eq('organization_id', orgId);
+          }
+          final contracts = await cq.order('id', ascending: false);
 
           final payments = await _supabaseService.client!
               .from('contrat_paiements')
@@ -3082,8 +3134,12 @@ class ApiService {
         if (payload['caution'] != null) {
           payload['caution'] = double.tryParse(payload['caution'].toString()) ?? 0.0;
         }
+        final authCtx = await _getAuthContext();
         payload['created_at'] = DateTime.now().toIso8601String();
         payload['is_deleted'] = false;
+        if (authCtx['organizationId'] != null) {
+          payload['organization_id'] = authCtx['organizationId'];
+        }
         
         await _supabaseService.client!.from('contrats').insert(payload);
       } else {
@@ -3154,6 +3210,10 @@ class ApiService {
   }
 
   Future<List<dynamic>> getRentPayments(String token, {Map<String, String>? filters}) async {
+    final effectiveToken = await _getEffectiveToken(token);
+    final authCtx = await _getAuthContext();
+    final orgId = authCtx['organizationId'] as String?;
+
     try {
       final Map<String, String> queryParams = {};
       if (filters != null) {
@@ -3161,12 +3221,16 @@ class ApiService {
       }
       final queryString = queryParams.isNotEmpty ? '?' + queryParams.entries.map((e) => '${e.key}=${e.value}').join('&') : '';
       final uri = Uri.parse('$_baseUrl/api/loyers/payments$queryString');
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $effectiveToken',
+      };
+      if (orgId != null && orgId.isNotEmpty) {
+        headers['x-organization-id'] = orgId;
+      }
       final response = await http.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+        headers: headers,
       ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
@@ -3184,12 +3248,17 @@ class ApiService {
                 id, date_paiement, montant, mode_paiement, nom_de_mois,
                 qte_mois, periode_debut, periode_fin, description,
                 contrat_id,
-                contrats (
+                contrats!inner (
                   locataire_nom_complet,
                   bien_loue_details,
-                  ref_locataire
+                  ref_locataire,
+                  organization_id
                 )
               ''');
+
+          if (orgId != null && orgId.isNotEmpty) {
+            query = query.eq('contrats.organization_id', orgId);
+          }
 
           if (filters != null) {
             final locataire = filters['locataire'];
@@ -3330,17 +3399,25 @@ class ApiService {
   // ─── Cement Management (Gestion de Ciment) ───
 
   Future<List<dynamic>> getCimentShipments(String token, {Map<String, String>? filters}) async {
+    final effectiveToken = await _getEffectiveToken(token);
+    final authCtx = await _getAuthContext();
+    final orgId = authCtx['organizationId'] as String?;
+
     try {
       final Map<String, String> queryParams = {};
       if (filters != null) queryParams.addAll(filters);
       final queryString = queryParams.isNotEmpty ? '?' + queryParams.entries.map((e) => '${e.key}=${e.value}').join('&') : '';
       final uri = Uri.parse('$_baseUrl/api/ciment/shipments$queryString');
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $effectiveToken',
+      };
+      if (orgId != null && orgId.isNotEmpty) {
+        headers['x-organization-id'] = orgId;
+      }
       final response = await http.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+        headers: headers,
       ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
@@ -3355,6 +3432,10 @@ class ApiService {
           var query = _supabaseService.client!
               .from('gestion_ciment')
               .select('*');
+
+          if (orgId != null && orgId.isNotEmpty) {
+            query = query.eq('organization_id', orgId);
+          }
 
           if (filters != null) {
             final clientTel = filters['client_tel'];
@@ -3389,14 +3470,22 @@ class ApiService {
   }
 
   Future<void> addCimentShipment(Map<String, dynamic> data, String token) async {
+    final effectiveToken = await _getEffectiveToken(token);
+    final authCtx = await _getAuthContext();
+    final orgId = authCtx['organizationId'] as String?;
+
     try {
       final uri = Uri.parse('$_baseUrl/api/ciment/shipments');
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $effectiveToken',
+      };
+      if (orgId != null && orgId.isNotEmpty) {
+        headers['x-organization-id'] = orgId;
+      }
       final response = await http.post(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+        headers: headers,
         body: json.encode(data),
       ).timeout(const Duration(seconds: 5));
 
@@ -3419,7 +3508,6 @@ class ApiService {
         final bic = base * bicP / 100.0;
         final total = base + tva + bic;
 
-        final authCtx = await _getAuthContext();
         payload['tonnage'] = ton;
         payload['pu'] = price;
         payload['frais_ciment'] = fCiment;
@@ -3429,6 +3517,9 @@ class ApiService {
         payload['total'] = total;
         payload['utilisateur'] = authCtx['username'] ?? 'MobileApp';
         payload['user_id'] = authCtx['userId'];
+        if (orgId != null && orgId.isNotEmpty) {
+          payload['organization_id'] = orgId;
+        }
         payload['created_at'] = DateTime.now().toIso8601String();
         payload['updated_at'] = DateTime.now().toIso8601String();
         payload['montant_paye'] = 0.0;

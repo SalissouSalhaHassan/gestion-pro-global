@@ -17,7 +17,7 @@ export async function GET() {
       .from('clients')
       .select('*')
       .eq('organization_id', orgId)
-      .eq('is_deleted', false)
+      .or('is_deleted.eq.false,is_deleted.is.null')
       .order('nom', { ascending: true });
 
     // ── CLIENT ISOLATION: Dépôt users only see their own clients + default client ──
@@ -27,7 +27,7 @@ export async function GET() {
           .from('clients')
           .select('*')
           .eq('organization_id', orgId)
-          .eq('is_deleted', false);
+          .or('is_deleted.eq.false,is_deleted.is.null');
         const { data, error } = await isolatedQuery.or(`created_by.eq.${user.id},id.eq.${DEFAULT_CLIENT_ID}`);
         if (!error) return NextResponse.json(data);
       } catch (e) {

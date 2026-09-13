@@ -27,6 +27,20 @@ class _AnalysesScreenState extends State<AnalysesScreen> {
   final Color _primaryColor = const Color(0xFF4A00E0);
   final _numberFormat = NumberFormat("#,##0", "fr_FR");
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      if (auth.token != null) {
+        Provider.of<DashboardProvider>(context, listen: false).fetchDashboardData(
+          auth.token!,
+          vendeur: auth.isAdmin ? null : auth.username,
+        );
+      }
+    });
+  }
+
   void _openScreen(Widget screen) {
     Navigator.push(
       context,
@@ -44,10 +58,10 @@ class _AnalysesScreenState extends State<AnalysesScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("Analyse de Sant?", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            const Text("Analyse de Santé", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
             Text(
-              "Ce score est calcul? en fonction de la croissance de vos ventes hebdomadaires et de l'?tat de votre stock.",
+              "Ce score est calculé en fonction de la croissance de vos ventes hebdomadaires et de l'état de votre stock.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white.withOpacity(0.8)),
             ),
@@ -62,7 +76,6 @@ class _AnalysesScreenState extends State<AnalysesScreen> {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -245,7 +258,6 @@ class _AnalysesScreenState extends State<AnalysesScreen> {
     );
   }
 
-
   Widget _buildQuickStats(DashboardProvider dashboard) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -354,7 +366,7 @@ class _AnalysesScreenState extends State<AnalysesScreen> {
       icon = Icons.error_outline;
     } else if (score < 70) {
       healthColor = Colors.orangeAccent;
-      status = "Am?lioration requise";
+      status = "Amélioration requise";
       icon = Icons.warning_amber_rounded;
     }
 
@@ -386,7 +398,7 @@ class _AnalysesScreenState extends State<AnalysesScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  "Sant? de l'entreprise",
+                  "Santé de l'entreprise",
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 const SizedBox(height: 4),

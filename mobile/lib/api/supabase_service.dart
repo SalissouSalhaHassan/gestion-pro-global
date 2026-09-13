@@ -316,14 +316,23 @@ class SupabaseService {
           'depenses',
           'loyers',
           'contrats',
-          'parametres_numerotation'
+          'contrat_paiements',
+          'parametres_numerotation',
+          'avances_clients',
+          'users',
+          'paiements',
+          'ciment_operations',
+          'gestion_ciment',
+          'ciment_paiements',
+          'activity_logs',
+          'notifications'
         ];
         if (orgTables.contains(table)) {
           query = query.eq('organization_id', orgId);
         }
       }
-      if (table == 'clients' || table == 'fournisseurs' || table == 'articles') {
-        query = query.eq('is_deleted', false);
+      if (table == 'clients' || table == 'fournisseurs' || table == 'articles' || table == 'contrats') {
+        query = query.or('is_deleted.eq.false,is_deleted.is.null');
       }
       if (table == 'clients') {
         query = query.order('nom', ascending: true);
@@ -349,7 +358,7 @@ class SupabaseService {
       final orgId = await getOrganizationId();
 
       // 1. Fetch Articles (with security & multi-tenant filter)
-      dynamic query = _client!.from('articles').select('*').eq('is_deleted', false);
+      dynamic query = _client!.from('articles').select('*').or('is_deleted.eq.false,is_deleted.is.null');
       if (orgId != null && orgId.isNotEmpty) {
         query = query.eq('organization_id', orgId);
       }
