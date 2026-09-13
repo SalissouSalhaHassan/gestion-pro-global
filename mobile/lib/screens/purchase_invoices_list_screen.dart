@@ -26,6 +26,8 @@ class _PurchaseInvoicesListScreenState extends State<PurchaseInvoicesListScreen>
   final Color _indigoTheme = const Color(0xFF4F46E5);
   final Color _purpleTheme = const Color(0xFF7C3AED);
   final Color _backgroundColor = const Color(0xFFF8FAFC);
+  final Color _emerald = const Color(0xFF10B981);
+  final Color _emeraldLight = const Color(0xFFECFDF5);
 
   final TextEditingController _searchController = TextEditingController();
   final NumberFormat _numberFormat = NumberFormat("#,##0", "fr_FR");
@@ -128,10 +130,10 @@ class _PurchaseInvoicesListScreenState extends State<PurchaseInvoicesListScreen>
                   leading: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.emerald.shade50,
+                      color: _emeraldLight,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.account_balance_wallet_outlined, color: Colors.emerald, size: 20),
+                    child: Icon(Icons.account_balance_wallet_outlined, color: _emerald, size: 20),
                   ),
                   title: const Text("Règlement Fournisseur", style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                   subtitle: const Text("Enregistrer un décaissement ou acompte", style: TextStyle(fontSize: 12)),
@@ -343,10 +345,10 @@ class _PurchaseInvoicesListScreenState extends State<PurchaseInvoicesListScreen>
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.emerald.withOpacity(0.12),
+                        color: _emerald.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: const Icon(Icons.payment, color: Colors.emerald, size: 22),
+                      child: Icon(Icons.payment, color: _emerald, size: 22),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -415,7 +417,7 @@ class _PurchaseInvoicesListScreenState extends State<PurchaseInvoicesListScreen>
                   height: 52,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.emerald,
+                      backgroundColor: _emerald,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       elevation: 0,
@@ -445,9 +447,9 @@ class _PurchaseInvoicesListScreenState extends State<PurchaseInvoicesListScreen>
       await prov.payPurchase(auth, inv.id!, amount, method);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Colors.emerald,
-            content: Text("✅ Règlement enregistré avec succès"),
+          SnackBar(
+            backgroundColor: _emerald,
+            content: const Text("✅ Règlement enregistré avec succès"),
           ),
         );
       }
@@ -529,7 +531,7 @@ class _PurchaseInvoicesListScreenState extends State<PurchaseInvoicesListScreen>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.slate.withOpacity(0.12)),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.12)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
@@ -742,7 +744,7 @@ class _PurchaseInvoicesListScreenState extends State<PurchaseInvoicesListScreen>
                         Text(
                           "Pilotage des approvisionnements, factures d'achat, règlements et réceptions",
                           style: TextStyle(
-                            color: Colors.slate.shade300,
+                            color: Colors.blueGrey.shade300,
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                           ),
@@ -885,7 +887,7 @@ class _PurchaseInvoicesListScreenState extends State<PurchaseInvoicesListScreen>
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.slate.withOpacity(0.15)),
+                      border: Border.all(color: Colors.blueGrey.withOpacity(0.15)),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.02),
@@ -1063,7 +1065,7 @@ class _PurchaseInvoicesListScreenState extends State<PurchaseInvoicesListScreen>
           color: isSelected ? activeColor : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? activeColor : Colors.slate.withOpacity(0.18),
+            color: isSelected ? activeColor : Colors.blueGrey.withOpacity(0.18),
           ),
           boxShadow: isSelected
               ? [
@@ -1114,7 +1116,7 @@ class _PurchaseInvoicesListScreenState extends State<PurchaseInvoicesListScreen>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.slate.withOpacity(0.12)),
+        border: Border.all(color: Colors.blueGrey.withOpacity(0.12)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
@@ -1161,17 +1163,17 @@ class _PurchaseInvoicesListScreenState extends State<PurchaseInvoicesListScreen>
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                             decoration: BoxDecoration(
-                              color: Colors.slate.shade100,
+                              color: Colors.blueGrey.shade100,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.storefront, size: 11, color: Colors.slate.shade600),
+                                Icon(Icons.storefront, size: 11, color: Colors.blueGrey.shade600),
                                 const SizedBox(width: 3),
                                 Text(
                                   invoice.depotNom!,
-                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.slate.shade700),
+                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.blueGrey.shade700),
                                 ),
                               ],
                             ),
@@ -1336,7 +1338,7 @@ class _PurchaseInvoicesListScreenState extends State<PurchaseInvoicesListScreen>
                     const SizedBox(width: 4),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: restAmount > 0 ? Colors.emerald : Colors.grey.shade100,
+                        backgroundColor: restAmount > 0 ? _emerald : Colors.grey.shade100,
                         foregroundColor: restAmount > 0 ? Colors.white : Colors.grey.shade700,
                         elevation: 0,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

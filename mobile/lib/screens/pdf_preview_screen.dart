@@ -196,7 +196,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
                             Icon(
                               Icons.receipt_long,
                               size: 18,
-                              color: _currentMode == 'Invoice' ? Colors.white : Colors.slateGrey,
+                              color: _currentMode == 'Invoice' ? Colors.white : Colors.blueGrey,
                             ),
                             const SizedBox(width: 8),
                             Text(
@@ -245,7 +245,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
                             Icon(
                               Icons.local_shipping_outlined,
                               size: 18,
-                              color: _currentMode == 'BL' ? Colors.white : Colors.slateGrey,
+                              color: _currentMode == 'BL' ? Colors.white : Colors.blueGrey,
                             ),
                             const SizedBox(width: 8),
                             Text(
