@@ -14,6 +14,8 @@ import 'services/client_service.dart';
 import 'services/stock_service.dart';
 import 'services/sales_service.dart';
 import 'services/expenses_service.dart';
+import 'services/article_service.dart';
+import 'services/auth_service.dart';
 
 class ApiService {
   final SupabaseService _supabaseService = SupabaseService();
@@ -21,6 +23,8 @@ class ApiService {
   final StockService _stockService = StockService();
   final SalesService _salesService = SalesService();
   final ExpensesService _expensesService = ExpensesService();
+  final ArticleService _articleService = ArticleService();
+  final AuthService _authService = AuthService();
   late final GestionProApiClient _nextApiClient;
 
   String get _baseUrl => AppConfig.apiUrl;
@@ -211,10 +215,7 @@ class ApiService {
   }
 
   Future<void> _requireAdmin() async {
-    final authCtx = await _getAuthContext();
-    if (!(authCtx['isAdmin'] as bool)) {
-      throw Exception("Accès refusé: action réservée aux administrateurs.");
-    }
+    await _authService.requireAdmin();
   }
 
   Future<void> _syncUserDepotsByNames(String userId, List<String> depots) async {
@@ -241,134 +242,37 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> login(String username, String password) async {
-    // 1. Try Unified API (Next.js) first
-    try {
-      debugPrint('🔑 Attempting login via Unified API (Next.js)...');
-      final res = await _nextApiClient.login(username, password);
-      debugPrint('✅ Login successful via Unified API');
-      return res;
-    } catch (e) {
-      debugPrint('⚠️ Unified API login failed: $e');
-      
-      // 2. Fallback to direct Supabase login
-      if (!await _ensureSupabaseReady()) {
-         // If Next.js failed AND Supabase is not configured, we can't login
-         throw Exception("Connexion impossible: Sèrveur Next.js indisponible ($e) et Cloud non configuré.");
-      }
-      
-      try {
-        final res = await _supabaseService.loginDirect(username, password);
-        if (res != null) return res;
-      } catch (err) {
-        final errStr = err.toString();
-        if (errStr.contains('42501') || errStr.contains('permission denied')) {
-          throw Exception("Identifiant ou mot de passe incorrect.");
-        }
-        rethrow;
-      }
-    }
-    throw Exception("Échec de l'authentification");
+    return await _authService.login(username, password);
   }
 
   Future<Map<String, dynamic>> _getAuthContext({bool refresh = false}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final role = prefs.getString('auth_role') ?? 'vendeur';
-    final isAdmin = (role.toLowerCase() == 'admin' || role.toLowerCase() == 'administrateur');
-    final userId = prefs.getString('auth_userId');
-    final username = prefs.getString('auth_username');
-    List<String> depots = prefs.getStringList('auth_depots') ?? [];
-    if (!isAdmin) {
-      final last = prefs.getInt('auth_depots_ts') ?? 0;
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final isStale = (now - last) > 5 * 60 * 1000;
-      if (refresh || depots.isEmpty || isStale) {
-        depots = await refreshUserDepots(force: refresh);
-      }
-    }
-    final orgId = prefs.getString('auth_organizationId') ?? await _supabaseService.getOrganizationId();
-    return { 'isAdmin': isAdmin, 'userId': userId, 'username': username, 'allowedDepots': depots, 'organizationId': orgId };
+    return await _authService.getAuthContext(refresh: refresh);
+  }
+
+  Future<List<String>> refreshUserDepots({bool force = false}) async {
+    return await _authService.refreshUserDepots(force: force);
   }
 
   // --- Core Data Fetching ---
-  Future<List<dynamic>> getArticles(String token, {bool forceRefresh = false, int? page, int? pageSize, String? search, String? userId, List<String>? allowedDepots, bool isAdmin = false}) async {
-    try {
-      debugPrint('ApiService: START getArticles directly');
-      
-      // Get token manually to be 100% sure
-      const storage = FlutterSecureStorage();
-      String? secureToken = await storage.read(key: 'auth_token');
-      if (secureToken == null || secureToken.isEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        secureToken = prefs.getString('auth_token');
-      }
-      
-      final effectiveToken = secureToken ?? token;
-      debugPrint('ApiService: Using token (len: ${effectiveToken.length})');
-
-      final uri = Uri.parse('$_baseUrl/api/articles');
-      final response = await http.get(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $effectiveToken',
-        },
-      ).timeout(const Duration(seconds: 5));
-
-      debugPrint('ApiService: Response status: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List items = data['items'] ?? [];
-        if (items.isNotEmpty) {
-          OfflineQueueService().cacheArticles(items);
-        }
-        return items;
-      } else {
-        debugPrint('ApiService: Error Body: ${response.body}');
-        throw Exception('HTTP ${response.statusCode}');
-      }
-    } catch (e) {
-      debugPrint('ApiService: ERROR in getArticles: $e');
-      // Fallback to Supabase
-      if (await _ensureSupabaseReady()) {
-        try {
-          int? from, to;
-          if (page != null && pageSize != null) {
-            from = page * pageSize;
-            to = from + pageSize - 1;
-          }
-          
-          final authCtx = await _getAuthContext(refresh: forceRefresh);
-          final effectiveUserId = userId ?? authCtx['userId'];
-          final effectiveAdmin = isAdmin || (authCtx['isAdmin'] as bool);
-          final authDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
-          final effectiveDepots = effectiveAdmin ? _normalizeDepotNames(allowedDepots ?? authDepots) : authDepots;
-
-          final supaItems = await _supabaseService.getArticlesWithStocks(
-            from: from, 
-            to: to, 
-            search: search,
-            userId: effectiveUserId,
-            allowedDepots: effectiveDepots,
-            isAdmin: effectiveAdmin,
-          );
-          if (supaItems.isNotEmpty) {
-            OfflineQueueService().cacheArticles(supaItems);
-          }
-          return supaItems;
-        } catch (supaErr) {
-          debugPrint('ApiService: Supabase getArticles failed: $supaErr');
-        }
-      }
-
-      // Offline SQLite cache fallback
-      final cachedArticles = await OfflineQueueService().getCachedArticles(search: search);
-      if (cachedArticles.isNotEmpty) {
-        debugPrint('📦 ApiService: Loaded ${cachedArticles.length} articles from local SQLite cache');
-        return cachedArticles;
-      }
-      return [];
-    }
+  Future<List<dynamic>> getArticles(
+    String token, {
+    bool forceRefresh = false,
+    int? page,
+    int? pageSize,
+    String? search,
+    String? userId,
+    List<String>? allowedDepots,
+    bool isAdmin = false,
+  }) async {
+    return await _articleService.getArticles(
+      token,
+      forceRefresh: forceRefresh,
+      page: page,
+      pageSize: pageSize,
+      search: search,
+      userId: userId,
+      allowedDepots: allowedDepots,
+      isAdmin: isAdmin,
   }
 
   Future<List<dynamic>> getClients(String token, {bool forceRefresh = false}) async {
@@ -1500,95 +1404,15 @@ class ApiService {
   }
 
   Future<void> addArticleWithImage(Map<String, String> fields, String? image, String token) async {
-    if (await _ensureSupabaseReady()) {
-      await _requireAdmin();
-      final authCtx = await _getAuthContext();
-      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
-      final Map<String, dynamic> data = {};
-      final String id = const Uuid().v4();
-      data['id'] = id;
-      if (orgId != null && orgId.isNotEmpty && !data.containsKey('organization_id')) {
-        data['organization_id'] = orgId;
-      }
-      
-      final Map<String, double> stocks = {};
-      
-      fields.forEach((k, v) {
-        if (k.startsWith('qte_')) {
-          final depotName = k.substring(4);
-          stocks[depotName] = double.tryParse(v) ?? 0.0;
-        } else if (['p_achat_ht', 'p_achat_ttc', 'p_vente_ht', 'p_vente_ttc', 'taxe', 'quantite', 'stock_min', 'stock_alerte', 'qte_min'].contains(k)) {
-          // Map stock_min to qte_min to match schema
-          final key = k == 'stock_min' ? 'qte_min' : k;
-          data[key] = double.tryParse(v) ?? 0.0;
-        } else {
-          data[k] = v;
-        }
-      });
-      
-      // 1. Insert Article
-      await _supabaseService.client!.from('articles').insert(data);
-      
-      // 1.5. Record initial price in history
-      double pAchatHt = double.tryParse(fields['p_achat_ht'] ?? '0') ?? 0.0;
-      double pVenteHt = double.tryParse(fields['p_vente_ht'] ?? '0') ?? 0.0;
-      await _supabaseService.client!.from('prix_histoire').insert({
-        'id': const Uuid().v4(),
-        'article_id': id,
-        if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
-        'p_achat_ht': pAchatHt,
-        'p_vente_ht': pVenteHt,
-        'utilisateur': fields['utilisateur'] ?? 'MobileApp',
-        'date_changement': DateTime.now().toIso8601String(),
-      });
-      
-      // 2. Insert Initial Stocks
-      if (stocks.isNotEmpty) {
-        final List<Map<String, dynamic>> stockInserts = [];
-        stocks.forEach((depot, qte) {
-          if (qte != 0) {
-            stockInserts.add({
-              'id': const Uuid().v4(),
-              'article_id': id,
-              if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
-              'depot_nom': depot,
-              'quantite': qte,
-              'updated_at': DateTime.now().toIso8601String(),
-            });
-          }
-        });
-        
-        if (stockInserts.isNotEmpty) {
-          await _supabaseService.client!.from('stocks').insert(stockInserts);
-          
-          // 3. Create initial movements
-          final List<Map<String, dynamic>> moveInserts = [];
-          for (var s in stockInserts) {
-            moveInserts.add({
-              'id': const Uuid().v4(),
-              'article_id': id,
-              if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
-              'date_mouvement': DateTime.now().toIso8601String().split('T')[0],
-              'type': 'ENTREE',
-              'quantite': s['quantite'],
-              'utilisateur': data['utilisateur'] ?? 'MobileApp',
-            });
-          }
-          if (moveInserts.isNotEmpty) {
-            await _supabaseService.client!.from('mouvements').insert(moveInserts);
-          }
-        }
-      }
-      
-      // Log Activity
-      await _supabaseService.logActivity(
-        actionType: 'CREATE',
-        entityType: 'article',
-        entityId: id,
-        details: 'Nouvel article: ${fields['designation']} - Ref: ${fields['reference']}',
-        username: fields['utilisateur'] ?? 'Admin',
-      );
-    }
+    await _articleService.addArticleWithImage(fields, image, token);
+  }
+
+  Future<bool> updateArticle(String id, Map<String, dynamic> data, String token) async {
+    return await _articleService.updateArticle(id, data, token);
+  }
+
+  Future<bool> deleteArticle(String id, String token) async {
+    return await _articleService.deleteArticle(id, token);
   }
 
   Future<void> payInvoice(String id, double amount, String method, String token, {String? reference, String? date, String? advanceClientId}) async {
