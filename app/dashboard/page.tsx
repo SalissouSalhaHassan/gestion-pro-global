@@ -26,7 +26,8 @@ import {
   CreditCard,
   Building2,
   Layers,
-  CheckCircle2
+  CheckCircle2,
+  Radio
 } from "lucide-react";
 import {
   BarChart, 
@@ -47,6 +48,7 @@ import { useRouter } from "next/navigation";
 import GlobalMarketClock from "@/components/GlobalMarketClock";
 import { useLanguage } from "@/lib/i18n/context";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
+import { createClient } from "@/lib/supabase/client";
 
 const COLORS = ['#6366f1','#10b981','#f59e0b','#ec4899','#8b5cf6','#06b6d4','#f43f5e','#3b82f6'];
 
@@ -57,6 +59,7 @@ export default function DashboardPage() {
   const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
+  const [liveSyncToast, setLiveSyncToast] = useState<string | null>(null);
 
   const loadAll = () => {
     setLoading(true);
@@ -76,6 +79,47 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadAll();
+
+    // 1. Supabase Realtime subscription for instantaneous dashboard sync
+    const supabase = createClient();
+    const channel = supabase
+      .channel("dashboard_realtime_stream")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "factures" },
+        (payload) => {
+          setLiveSyncToast(
+            locale === "ar" 
+              ? "⚡ تم تحديث مبيعات جديدة في الوقت الفعلي!" 
+              : "⚡ Nouvelle vente synchronisée en direct !"
+          );
+          setTimeout(() => setLiveSyncToast(null), 5000);
+          loadAll();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "paiements" },
+        () => {
+          loadAll();
+        }
+      )
+      .subscribe();
+
+    // 2. Offline sync event listeners (cross-tab via BroadcastChannel and window events)
+    const handleOfflineEvent = () => {
+      loadAll();
+    };
+    window.addEventListener("gp:offline-invoices-changed", handleOfflineEvent);
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      bc = new BroadcastChannel("gp_offline_channel");
+      bc.onmessage = () => {
+        loadAll();
+      };
+    }
+
     const interval = setInterval(() => {
       if (!document.hidden) {
         loadAll();
@@ -90,10 +134,13 @@ export default function DashboardPage() {
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener("gp:offline-invoices-changed", handleOfflineEvent);
+      if (bc) bc.close();
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [locale]);
 
   const stats = [
     { 
@@ -131,6 +178,27 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
       
+      {/* Realtime Live Sync Banner */}
+      {liveSyncToast && (
+        <div className="bg-emerald-500/15 border border-emerald-500/40 backdrop-blur-md rounded-2xl px-5 py-3 text-emerald-300 flex items-center justify-between gap-3 shadow-lg animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <span className="text-xs lg:text-sm font-black text-emerald-200">
+              {liveSyncToast}
+            </span>
+          </div>
+          <button 
+            onClick={() => setLiveSyncToast(null)}
+            className="text-emerald-400 hover:text-emerald-200 text-xs font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* ── 4K EXECUTIVE HERO CONTROL ROOM ── */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-950 text-white rounded-[32px] p-6 lg:p-8 shadow-2xl border border-white/10 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />

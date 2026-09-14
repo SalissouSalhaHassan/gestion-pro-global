@@ -10,9 +10,17 @@ import 'package:api_flutter/api_flutter.dart';
 import 'supabase_service.dart';
 import '../config/app_config.dart';
 import '../services/offline_queue_service.dart';
+import 'services/client_service.dart';
+import 'services/stock_service.dart';
+import 'services/sales_service.dart';
+import 'services/expenses_service.dart';
 
 class ApiService {
   final SupabaseService _supabaseService = SupabaseService();
+  final ClientService _clientService = ClientService();
+  final StockService _stockService = StockService();
+  final SalesService _salesService = SalesService();
+  final ExpensesService _expensesService = ExpensesService();
   late final GestionProApiClient _nextApiClient;
 
   String get _baseUrl => AppConfig.apiUrl;
@@ -364,80 +372,7 @@ class ApiService {
   }
 
   Future<List<dynamic>> getClients(String token, {bool forceRefresh = false}) async {
-    try {
-      debugPrint('ApiService: START getClients directly');
-      
-      const storage = FlutterSecureStorage();
-      String? secureToken = await storage.read(key: 'auth_token');
-      if (secureToken == null || secureToken.isEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        secureToken = prefs.getString('auth_token');
-      }
-      
-      final effectiveToken = secureToken ?? token;
-      final authCtx = await _getAuthContext();
-      final orgId = authCtx['organizationId'] as String?;
-
-      final uri = Uri.parse('$_baseUrl/api/clients');
-      
-      final headers = <String, String>{
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $effectiveToken',
-      };
-      if (orgId != null && orgId.isNotEmpty) {
-        headers['x-organization-id'] = orgId;
-      }
-
-      final response = await http.get(
-        uri,
-        headers: headers,
-      ).timeout(const Duration(seconds: 5));
-
-      debugPrint('ApiService: getClients response: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final clients = json.decode(response.body) as List<dynamic>;
-        if (clients.isNotEmpty) {
-          OfflineQueueService().cacheClients(clients);
-        }
-        return clients;
-      } else {
-        debugPrint('ApiService: getClients ERROR Body: ${response.body}');
-        throw Exception('HTTP ${response.statusCode}');
-      }
-    } catch (e) {
-      debugPrint('ApiService: ERROR in getClients: $e — falling back to Supabase');
-      if (await _ensureSupabaseReady()) {
-        try {
-          debugPrint('ApiService: Supabase Fallback getClients');
-          final authCtx = await _getAuthContext();
-          final orgId = authCtx['organizationId'] as String?;
-          var q = _supabaseService.client!
-              .from('clients')
-              .select()
-              .or('is_deleted.eq.false,is_deleted.is.null');
-          if (orgId != null && orgId.isNotEmpty) {
-            q = q.eq('organization_id', orgId);
-          }
-          final data = await q.order('nom');
-          debugPrint('ApiService: Supabase Fallback getClients SUCCESS, found ${data.length} items');
-          if (data.isNotEmpty) {
-            OfflineQueueService().cacheClients(data);
-          }
-          return data;
-        } catch (sbErr) {
-          debugPrint('ApiService: Supabase Fallback getClients CRITICAL ERROR: $sbErr');
-        }
-      }
-
-      // Offline SQLite cache fallback
-      final cachedClients = await OfflineQueueService().getCachedClients();
-      if (cachedClients.isNotEmpty) {
-        debugPrint('📦 ApiService: Loaded ${cachedClients.length} clients from local SQLite cache');
-        return cachedClients;
-      }
-      return [];
-    }
+    return await _clientService.getClients(token, forceRefresh: forceRefresh);
   }
 
   Future<List<dynamic>> getInvoices(String token, {bool forceRefresh = false, String? vendeur, int? page, int? pageSize, String? search}) async {
@@ -1341,49 +1276,15 @@ class ApiService {
   }
 
   Future<bool> createClientFull(Map<String, dynamic> data, String token) async {
-    try {
-      final authCtx = await _getAuthContext();
-      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
-      
-      const storage = FlutterSecureStorage();
-      String? secureToken = await storage.read(key: 'auth_token');
-      if (secureToken == null || secureToken.isEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        secureToken = prefs.getString('auth_token');
-      }
-      final effectiveToken = secureToken ?? token;
-      
-      final body = Map<String, dynamic>.from(data);
-      if (orgId != null && orgId.isNotEmpty && !body.containsKey('organization_id')) {
-        body['organization_id'] = orgId;
-      }
+    return await _clientService.createClientFull(data, token);
+  }
 
-      final uri = Uri.parse('$_baseUrl/api/clients');
-      final response = await http.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $effectiveToken',
-          if (orgId != null && orgId.isNotEmpty) 'x-organization-id': orgId,
-        },
-        body: json.encode(body),
-      ).timeout(const Duration(seconds: 8));
+  Future<bool> updateClient(String id, Map<String, dynamic> data, String token) async {
+    return await _clientService.updateClient(id, data, token);
+  }
 
-      debugPrint('ApiService: createClientFull response: ${response.statusCode}');
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        debugPrint('✅ ApiService: Client created successfully via API');
-        return true;
-      }
-      debugPrint('⚠️ ApiService: /api/clients returned ${response.statusCode}: ${response.body}, falling back to Supabase direct...');
-    } catch (e) {
-      debugPrint('⚠️ ApiService: createClientFull API error: $e, falling back to Supabase direct');
-    }
-
-    if (await _ensureSupabaseReady()) {
-      return await _supabaseService.syncClientDirect(data);
-    }
-    return false;
+  Future<bool> deleteClient(String id, String token) async {
+    return await _clientService.deleteClient(id, token);
   }
 
   Future<void> addSupplier(Map<String, dynamic> data, String token) async {
@@ -2029,16 +1930,7 @@ class ApiService {
   }
 
   Future<void> payClientBulk(String clientId, double amount, String method, String token) async {
-    if (await _ensureSupabaseReady()) {
-      await _supabaseService.client!.from('paiements').insert({
-        'id': const Uuid().v4(),
-        'client_id': clientId, 
-        'montant_regle': amount, 
-        'moyen_reglement': method, 
-        'date_operation': DateFormat('yyyy-MM-dd').format(DateTime.now()),
-        'utilisateur': 'MobileApp'
-      });
-    }
+    await _clientService.payClientBulk(clientId, amount, method, token);
   }
 
   // --- Stats & Reports ---
@@ -2880,47 +2772,11 @@ class ApiService {
 
   // --- Client History ---
   Future<List<Map<String, dynamic>>> getClientInvoices(String clientId, String token) async {
-    if (await _ensureSupabaseReady()) {
-      try {
-        final data = await _supabaseService.client!
-            .from('factures')
-            .select()
-            .eq('client_id', clientId)
-            .eq('is_deleted', false)
-            .order('date_facture', ascending: false);
-        return List<Map<String, dynamic>>.from(data);
-      } catch (e) {
-        debugPrint('getClientInvoices error: $e');
-        return [];
-      }
-    }
-    return [];
+    return await _clientService.getClientInvoices(clientId, token);
   }
 
   Future<List<Map<String, dynamic>>> getClientPayments(String clientId, String token) async {
-    if (await _ensureSupabaseReady()) {
-      try {
-        final payments = await _supabaseService.client!
-            .from('paiements')
-            .select('*, factures(bl_number)')
-            .eq('client_id', clientId)
-            .order('date_operation', ascending: false);
-        return (payments as List).map((p) {
-          final m = Map<String, dynamic>.from(p);
-          // Normalize keys for client_details_screen display
-          m['amount'] = (m['montant_regle'] as num?)?.toDouble() ?? 0.0;
-          m['date'] = m['date_operation'] ?? '';
-          m['method'] = m['mode_paiement'] ?? '';
-          m['bl_number'] = m['factures']?['bl_number'] ?? '';
-          m['type'] = 'Paiement';
-          return m;
-        }).toList();
-      } catch (e) {
-        debugPrint('getClientPayments error: $e');
-        return [];
-      }
-    }
-    return [];
+    return await _clientService.getClientPayments(clientId, token);
   }
 
   // --- Stocks ---

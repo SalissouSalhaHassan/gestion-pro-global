@@ -42,7 +42,7 @@ import InvoiceModal from "../invoices/InvoiceModal";
 import PaymentModal from "../invoices/PaymentModal";
 import OfflinePOSBar from "@/components/OfflinePOSBar";
 import BarcodeCameraScanner from "@/components/BarcodeCameraScanner";
-import { cacheArticlesOffline, getOfflineArticles, recordOfflineInvoice } from "@/lib/utils/offline-sync";
+import { cacheArticlesOffline, getOfflineArticles, recordOfflineInvoice, cacheClientsOffline, getOfflineClients } from "@/lib/utils/offline-sync";
 import CashClosureModal from "../reports/cash-balance/CashClosureModal";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1608,7 +1608,13 @@ function PosPage() {
             setSelectedDepot(fallbackDepot);
           }
         } else {
-          setArticles([]);
+          const offlineArts = getOfflineArticles();
+          if (offlineArts && offlineArts.length > 0) {
+            console.log(`📦 Loaded ${offlineArts.length} articles from offline cache`);
+            setArticles(offlineArts);
+          } else {
+            setArticles([]);
+          }
           if (artErr) console.warn("Articles load error:", artErr.message);
         }
 
@@ -1616,9 +1622,20 @@ function PosPage() {
         if (!cliErr && clientsRaw && clientsRaw.length > 0) {
           const mappedClients = clientsRaw.map((r) => buildClient(r as Row));
           setClients(mappedClients);
+          cacheClientsOffline(mappedClients);
           if (!selectedClientId && mappedClients.length > 0) {
             const defaultCli = mappedClients.find(c => c.id === DEFAULT_CLIENT_ID || c.id === 1 || (c.ref_client && c.ref_client.toUpperCase().includes("COMPTOIR"))) || mappedClients[0];
             setSelectedClientId(defaultCli.id);
+          }
+        } else {
+          const offlineClis = getOfflineClients();
+          if (offlineClis && offlineClis.length > 0) {
+            console.log(`📦 Loaded ${offlineClis.length} clients from offline cache`);
+            setClients(offlineClis);
+            if (!selectedClientId && offlineClis.length > 0) {
+              const defaultCli = offlineClis.find((c: any) => c.id === DEFAULT_CLIENT_ID || c.id === 1 || (c.ref_client && c.ref_client.toUpperCase().includes("COMPTOIR"))) || offlineClis[0];
+              setSelectedClientId(defaultCli.id);
+            }
           }
         }
 

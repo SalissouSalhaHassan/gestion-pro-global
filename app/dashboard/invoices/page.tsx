@@ -44,6 +44,7 @@ import WhatsAppShareModal from "@/components/WhatsAppShareModal";
 import { useLanguage } from "@/lib/i18n/context";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
 import { getPendingOfflineInvoices, syncOfflineInvoicesToServer } from "@/lib/utils/offline-sync";
+import { createClient } from "@/lib/supabase/client";
 
 type Invoice = {
   id: string | number;
@@ -149,12 +150,45 @@ export default function InvoicesPage() {
     if (currentUsername !== null && typeof currentUsername !== 'undefined') {
       loadInvoices(false);
 
-      // Auto-refresh interval
+      // 1. Supabase Realtime channel for instant invoice feed
+      const supabase = createClient();
+      const channel = supabase
+        .channel("invoices_realtime_feed")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "factures" },
+          () => {
+            loadInvoices(true);
+          }
+        )
+        .subscribe();
+
+      // 2. Offline queue reactive sync across tabs
+      const updateOfflineState = () => {
+        setOfflineCount(getPendingOfflineInvoices().length);
+      };
+      window.addEventListener("gp:offline-invoices-changed", updateOfflineState);
+
+      let bc: BroadcastChannel | null = null;
+      if (typeof BroadcastChannel !== "undefined") {
+        bc = new BroadcastChannel("gp_offline_channel");
+        bc.onmessage = () => {
+          updateOfflineState();
+          loadInvoices(true);
+        };
+      }
+
+      // Auto-refresh interval fallback
       const intervalId = setInterval(() => {
         loadInvoices(true);
       }, 30000); 
 
-      return () => clearInterval(intervalId);
+      return () => {
+        supabase.removeChannel(channel);
+        window.removeEventListener("gp:offline-invoices-changed", updateOfflineState);
+        if (bc) bc.close();
+        clearInterval(intervalId);
+      };
     }
   }, [refreshKey, currentUsername, currentUserId, isAdmin]);
 

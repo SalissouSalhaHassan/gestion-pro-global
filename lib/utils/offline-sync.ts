@@ -60,6 +60,48 @@ export function getOfflineArticles(): any[] {
 }
 
 /**
+ * Cache clients for offline searching and assignment in POS
+ */
+export function cacheClientsOffline(clients: any[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.CLIENTS_CACHE, JSON.stringify(clients));
+  } catch (e) {
+    console.warn("Failed to cache clients offline:", e);
+  }
+}
+
+/**
+ * Retrieve cached clients from local storage
+ */
+export function getOfflineClients(): any[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.CLIENTS_CACHE);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * Notify other components and tabs about offline changes
+ */
+export function notifyOfflineStateChange() {
+  if (typeof window === "undefined") return;
+  try {
+    window.dispatchEvent(new CustomEvent("gp:offline-invoices-changed"));
+    if (typeof BroadcastChannel !== "undefined") {
+      const bc = new BroadcastChannel("gp_offline_channel");
+      bc.postMessage({ type: "SYNC_STATE_CHANGED", timestamp: Date.now() });
+      bc.close();
+    }
+  } catch (e) {
+    // Non-fatal
+  }
+}
+
+/**
  * Save an invoice locally when network is offline
  */
 export function recordOfflineInvoice(invoice: Omit<OfflineInvoice, "offlineId" | "timestamp" | "synced">): OfflineInvoice {
@@ -76,6 +118,7 @@ export function recordOfflineInvoice(invoice: Omit<OfflineInvoice, "offlineId" |
     const pending = getPendingOfflineInvoices();
     pending.unshift(newOfflineInvoice);
     localStorage.setItem(STORAGE_KEYS.PENDING_INVOICES, JSON.stringify(pending));
+    notifyOfflineStateChange();
   } catch (e) {
     console.error("Failed to store offline invoice:", e);
   }
@@ -104,6 +147,7 @@ export function removeSyncedOfflineInvoice(offlineId: string) {
   try {
     const pending = getPendingOfflineInvoices().filter((inv) => inv.offlineId !== offlineId);
     localStorage.setItem(STORAGE_KEYS.PENDING_INVOICES, JSON.stringify(pending));
+    notifyOfflineStateChange();
   } catch (e) {
     console.error("Failed to update pending invoices:", e);
   }
@@ -132,5 +176,6 @@ export async function syncOfflineInvoicesToServer(
     }
   }
 
+  notifyOfflineStateChange();
   return { successCount, failedCount };
 }

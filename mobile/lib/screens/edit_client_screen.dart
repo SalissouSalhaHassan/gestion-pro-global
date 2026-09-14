@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/client_model.dart';
+import '../api/services/client_service.dart';
+import '../providers/auth_provider.dart';
 
 class EditClientScreen extends StatefulWidget {
   final Client client;
@@ -16,6 +19,7 @@ class _EditClientScreenState extends State<EditClientScreen> {
   late TextEditingController _emailController;
   late TextEditingController _telephoneController;
   late TextEditingController _adresseController;
+  bool _isLoading = false;
 
   final Color _primaryColor = const Color(0xFF4A00E0);
 
@@ -37,28 +41,50 @@ class _EditClientScreenState extends State<EditClientScreen> {
     super.dispose();
   }
 
-  void _saveClient() {
+  Future<void> _saveClient() async {
     if (_formKey.currentState!.validate()) {
-      // Logique de sauvegarde à implémenter
-      // Par exemple, appeler une API ou mettre à jour la base de données locale
-      final updatedClient = Client(
-        id: widget.client.id,
-        nom: _nomController.text,
-        email: _emailController.text,
-        telephone: _telephoneController.text,
-        adresse: _adresseController.text,
-        solde: widget.client.solde, // Le solde n'est pas modifiable ici
-      );
+      setState(() => _isLoading = true);
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final token = auth.token ?? '';
 
-      debugPrint('Client mis à jour : ${updatedClient.nom}');
-      
-      // Affiche un message de succès et revient à l'écran précédent
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Client mis à jour avec succès!')),
-      );
-      
-      // On passe le client mis à jour à l'écran de détails
-      Navigator.of(context).pop(updatedClient); 
+      final updatedData = {
+        'nom': _nomController.text.trim(),
+        'email': _emailController.text.trim(),
+        'telephone': _telephoneController.text.trim(),
+        'adresse': _adresseController.text.trim(),
+      };
+
+      try {
+        final clientService = ClientService();
+        await clientService.updateClient(widget.client.id, updatedData, token);
+
+        final updatedClient = Client(
+          id: widget.client.id,
+          nom: _nomController.text.trim(),
+          email: _emailController.text.trim(),
+          telephone: _telephoneController.text.trim(),
+          adresse: _adresseController.text.trim(),
+          solde: widget.client.solde,
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Client mis à jour avec succès!')),
+          );
+          Navigator.of(context).pop(updatedClient);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur lors de la mise à jour: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -70,10 +96,24 @@ class _EditClientScreenState extends State<EditClientScreen> {
         backgroundColor: _primaryColor,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _saveClient,
-          ),
+          _isLoading
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.save),
+                  onPressed: _saveClient,
+                ),
         ],
       ),
       body: SingleChildScrollView(
