@@ -82,6 +82,7 @@ class _StockJournalScreenState extends State<StockJournalScreen> {
           _isLoading = false;
         });
       }
+
     } catch (e) {
       debugPrint("Error fetching stock movements: $e");
       if (mounted) setState(() => _isLoading = false);
@@ -136,7 +137,19 @@ class _StockJournalScreenState extends State<StockJournalScreen> {
             style: const TextStyle(color: Colors.black),
             decoration: InputDecoration(
               hintText: "Réf, Article, Doc ou Tiers...",
-              prefixIcon: const Icon(Icons.search, color: Colors.grey),
+              prefixIcon: IconButton(
+                icon: const Icon(Icons.search, color: Colors.grey),
+                onPressed: _fetchMovements,
+              ),
+              suffixIcon: _searchCtrl.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, color: Colors.grey),
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        _fetchMovements();
+                      },
+                    )
+                  : null,
               filled: true,
               fillColor: Colors.white,
               isDense: true,
@@ -147,6 +160,9 @@ class _StockJournalScreenState extends State<StockJournalScreen> {
               ),
             ),
             onSubmitted: (_) => _fetchMovements(),
+            onChanged: (_) {
+              setState(() {});
+            },
           ),
           const SizedBox(height: 10),
           Row(
@@ -216,8 +232,8 @@ class _StockJournalScreenState extends State<StockJournalScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
       initialDateRange: (_startDate != null && _endDate != null)
-        ? DateTimeRange(start: _startDate!, end: _endDate!)
-        : null,
+          ? DateTimeRange(start: _startDate!, end: _endDate!)
+          : null,
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
@@ -269,13 +285,22 @@ class _StockJournalScreenState extends State<StockJournalScreen> {
     );
   }
 
+  String _formatDate(String raw) {
+    if (raw.trim().isEmpty) return "-";
+    final dt = DateTime.tryParse(raw);
+    if (dt != null) {
+      return DateFormat('dd/MM/yyyy').format(dt);
+    }
+    return raw;
+  }
+
   DataRow _buildRow(StockMovement m) {
     Color mvColor = Colors.grey;
     if (m.mouvement > 0) mvColor = Colors.green;
     if (m.mouvement < 0) mvColor = Colors.red;
 
     return DataRow(cells: [
-      DataCell(Text(DateFormat('dd/MM/yyyy').format(DateTime.parse(m.date)))),
+      DataCell(Text(_formatDate(m.date))),
       DataCell(Text(m.codeArticle, style: const TextStyle(fontSize: 12))),
       DataCell(SizedBox(width: 150, child: Text(m.designation, maxLines: 1, overflow: TextOverflow.ellipsis))),
       DataCell(Container(

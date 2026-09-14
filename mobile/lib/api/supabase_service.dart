@@ -837,8 +837,10 @@ class SupabaseService {
           final double newQty = oldQty + qte;
           await _client!.from('stocks').update({'quantite': newQty}).eq('id', stockData['id']);
           
+          final orgId = await getOrganizationId();
           // Record Movement (ENTREE - Cancellation)
           await _client!.from('mouvements').insert({
+            if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
             'article_id': int.tryParse(artId.toString()) ?? 0,
             'type': 'ENTREE',
             'quantite': qte,
@@ -993,7 +995,9 @@ class SupabaseService {
         }).eq('id', artId);
         
         // 5. Record Movement
+        final orgId = await getOrganizationId();
         await _client!.from('mouvements').insert({
+          if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
           'article_id': int.tryParse(artId.toString()) ?? 0,
           'date_mouvement': DateTime.now().toIso8601String().split('T')[0],
           'type': 'ENTREE',
@@ -1040,7 +1044,9 @@ class SupabaseService {
           await _client!.from('stocks').update({'quantite': oldQty - qte}).eq('id', stockData['id']);
           
           // Record Movement
+          final orgId = await getOrganizationId();
           await _client!.from('mouvements').insert({
+            if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
             'article_id': int.tryParse(artId.toString()) ?? 0,
             'date_mouvement': DateTime.now().toIso8601String().split('T')[0],
             'type': 'SORTIE', // Reversal is a sortie or negative entry
@@ -1088,7 +1094,9 @@ class SupabaseService {
           await _client!.from('stocks').update({'quantite': oldQty - qte}).eq('id', stockData['id']);
           
           // Reversal movement
+          final orgId = await getOrganizationId();
           await _client!.from('mouvements').insert({
+            if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
             'article_id': int.tryParse(artId.toString()) ?? 0,
             'date_mouvement': DateTime.now().toIso8601String().split('T')[0],
             'type': 'SORTIE',
@@ -1125,7 +1133,9 @@ class SupabaseService {
           stockAvant = ((stockData['quantite'] ?? 0) as num).toDouble();
           await _client!.from('stocks').update({'quantite': stockAvant + qte}).eq('id', stockData['id']);
         } else {
+          final orgId = await getOrganizationId();
           await _client!.from('stocks').insert({
+            if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
             'article_id': int.tryParse(artId.toString()) ?? 0,
             'depot_nom': depot,
             'quantite': qte,
@@ -1134,7 +1144,9 @@ class SupabaseService {
         }
 
         // Record movement
+        final orgId = await getOrganizationId();
         await _client!.from('mouvements').insert({
+          if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
           'article_id': int.tryParse(artId.toString()) ?? 0,
           'date_mouvement': DateTime.now().toIso8601String().split('T')[0],
           'type': 'ENTREE',
