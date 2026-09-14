@@ -311,6 +311,9 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List items = data['items'] ?? [];
+        if (items.isNotEmpty) {
+          OfflineQueueService().cacheArticles(items);
+        }
         return items;
       } else {
         debugPrint('ApiService: Error Body: ${response.body}');
@@ -318,28 +321,43 @@ class ApiService {
       }
     } catch (e) {
       debugPrint('ApiService: ERROR in getArticles: $e');
-      // Fallback to old behavior
+      // Fallback to Supabase
       if (await _ensureSupabaseReady()) {
-        int? from, to;
-        if (page != null && pageSize != null) {
-          from = page * pageSize;
-          to = from + pageSize - 1;
-        }
-        
-        final authCtx = await _getAuthContext(refresh: forceRefresh);
-        final effectiveUserId = userId ?? authCtx['userId'];
-        final effectiveAdmin = isAdmin || (authCtx['isAdmin'] as bool);
-        final authDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
-        final effectiveDepots = effectiveAdmin ? _normalizeDepotNames(allowedDepots ?? authDepots) : authDepots;
+        try {
+          int? from, to;
+          if (page != null && pageSize != null) {
+            from = page * pageSize;
+            to = from + pageSize - 1;
+          }
+          
+          final authCtx = await _getAuthContext(refresh: forceRefresh);
+          final effectiveUserId = userId ?? authCtx['userId'];
+          final effectiveAdmin = isAdmin || (authCtx['isAdmin'] as bool);
+          final authDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
+          final effectiveDepots = effectiveAdmin ? _normalizeDepotNames(allowedDepots ?? authDepots) : authDepots;
 
-        return await _supabaseService.getArticlesWithStocks(
-          from: from, 
-          to: to, 
-          search: search,
-          userId: effectiveUserId,
-          allowedDepots: effectiveDepots,
-          isAdmin: effectiveAdmin,
-        );
+          final supaItems = await _supabaseService.getArticlesWithStocks(
+            from: from, 
+            to: to, 
+            search: search,
+            userId: effectiveUserId,
+            allowedDepots: effectiveDepots,
+            isAdmin: effectiveAdmin,
+          );
+          if (supaItems.isNotEmpty) {
+            OfflineQueueService().cacheArticles(supaItems);
+          }
+          return supaItems;
+        } catch (supaErr) {
+          debugPrint('ApiService: Supabase getArticles failed: $supaErr');
+        }
+      }
+
+      // Offline SQLite cache fallback
+      final cachedArticles = await OfflineQueueService().getCachedArticles(search: search);
+      if (cachedArticles.isNotEmpty) {
+        debugPrint('📦 ApiService: Loaded ${cachedArticles.length} articles from local SQLite cache');
+        return cachedArticles;
       }
       return [];
     }
@@ -378,7 +396,11 @@ class ApiService {
       debugPrint('ApiService: getClients response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        return json.decode(response.body) as List<dynamic>;
+        final clients = json.decode(response.body) as List<dynamic>;
+        if (clients.isNotEmpty) {
+          OfflineQueueService().cacheClients(clients);
+        }
+        return clients;
       } else {
         debugPrint('ApiService: getClients ERROR Body: ${response.body}');
         throw Exception('HTTP ${response.statusCode}');
@@ -399,11 +421,20 @@ class ApiService {
           }
           final data = await q.order('nom');
           debugPrint('ApiService: Supabase Fallback getClients SUCCESS, found ${data.length} items');
+          if (data.isNotEmpty) {
+            OfflineQueueService().cacheClients(data);
+          }
           return data;
         } catch (sbErr) {
           debugPrint('ApiService: Supabase Fallback getClients CRITICAL ERROR: $sbErr');
-          return [];
         }
+      }
+
+      // Offline SQLite cache fallback
+      final cachedClients = await OfflineQueueService().getCachedClients();
+      if (cachedClients.isNotEmpty) {
+        debugPrint('📦 ApiService: Loaded ${cachedClients.length} clients from local SQLite cache');
+        return cachedClients;
       }
       return [];
     }

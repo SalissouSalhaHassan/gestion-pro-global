@@ -98,10 +98,10 @@ class OfflineQueueService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
-          CREATE TABLE pending_invoices (
+          CREATE TABLE IF NOT EXISTS pending_invoices (
             local_id TEXT PRIMARY KEY,
             organization_id TEXT,
             payload TEXT,
@@ -114,6 +114,48 @@ class OfflineQueueService {
             error_message TEXT
           )
         ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS cached_articles (
+            id TEXT PRIMARY KEY,
+            reference TEXT,
+            designation TEXT,
+            code_barre TEXT,
+            payload TEXT,
+            updated_at TEXT
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS cached_clients (
+            id TEXT PRIMARY KEY,
+            nom TEXT,
+            telephone TEXT,
+            payload TEXT,
+            updated_at TEXT
+          )
+        ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS cached_articles (
+              id TEXT PRIMARY KEY,
+              reference TEXT,
+              designation TEXT,
+              code_barre TEXT,
+              payload TEXT,
+              updated_at TEXT
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS cached_clients (
+              id TEXT PRIMARY KEY,
+              nom TEXT,
+              telephone TEXT,
+              payload TEXT,
+              updated_at TEXT
+            )
+          ''');
+        }
       },
     );
   }
@@ -273,5 +315,121 @@ class OfflineQueueService {
     final db = await database;
     await db.delete('pending_invoices');
     await _notifyCount();
+  }
+
+  /// Cache articles into SQLite
+  Future<void> cacheArticles(List<dynamic> items) async {
+    if (items.isEmpty) return;
+    try {
+      final db = await database;
+      final batch = db.batch();
+      final now = DateTime.now().toIso8601String();
+      for (final item in items) {
+        if (item is Map) {
+          final id = item['id']?.toString() ?? '';
+          if (id.isEmpty) continue;
+          final ref = item['reference']?.toString() ?? '';
+          final desig = item['designation']?.toString() ?? '';
+          final barcode = item['code_barre']?.toString() ?? item['codeBarre']?.toString() ?? '';
+          batch.insert(
+            'cached_articles',
+            {
+              'id': id,
+              'reference': ref,
+              'designation': desig,
+              'code_barre': barcode,
+              'payload': jsonEncode(item),
+              'updated_at': now,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+      await batch.commit(noResult: true);
+      debugPrint('[LOCAL_CACHE] Cached ${items.length} articles locally');
+    } catch (e) {
+      debugPrint('[LOCAL_CACHE] Error caching articles: $e');
+    }
+  }
+
+  /// Get cached articles from SQLite
+  Future<List<dynamic>> getCachedArticles({String? search}) async {
+    try {
+      final db = await database;
+      String? whereClause;
+      List<dynamic>? whereArgs;
+      if (search != null && search.trim().isNotEmpty) {
+        final query = '%${search.trim()}%';
+        whereClause = 'designation LIKE ? OR reference LIKE ? OR code_barre LIKE ?';
+        whereArgs = [query, query, query];
+      }
+      final rows = await db.query(
+        'cached_articles',
+        where: whereClause,
+        whereArgs: whereArgs,
+        orderBy: 'designation ASC',
+      );
+      return rows.map((r) => jsonDecode(r['payload'] as String)).toList();
+    } catch (e) {
+      debugPrint('[LOCAL_CACHE] Error retrieving cached articles: $e');
+      return [];
+    }
+  }
+
+  /// Cache clients into SQLite
+  Future<void> cacheClients(List<dynamic> items) async {
+    if (items.isEmpty) return;
+    try {
+      final db = await database;
+      final batch = db.batch();
+      final now = DateTime.now().toIso8601String();
+      for (final item in items) {
+        if (item is Map) {
+          final id = item['id']?.toString() ?? '';
+          if (id.isEmpty) continue;
+          final nom = item['nom']?.toString() ?? '';
+          final tel = item['telephone']?.toString() ?? '';
+          batch.insert(
+            'cached_clients',
+            {
+              'id': id,
+              'nom': nom,
+              'telephone': tel,
+              'payload': jsonEncode(item),
+              'updated_at': now,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+      await batch.commit(noResult: true);
+      debugPrint('[LOCAL_CACHE] Cached ${items.length} clients locally');
+    } catch (e) {
+      debugPrint('[LOCAL_CACHE] Error caching clients: $e');
+    }
+  }
+
+  /// Get cached clients from SQLite
+  Future<List<dynamic>> getCachedClients({String? search}) async {
+    try {
+      final db = await database;
+      String? whereClause;
+      List<dynamic>? whereArgs;
+      if (search != null && search.trim().isNotEmpty) {
+        final query = '%${search.trim()}%';
+        whereClause = 'nom LIKE ? OR telephone LIKE ?';
+        whereArgs = [query, query];
+      }
+      final rows = await db.query(
+        'cached_clients',
+        where: whereClause,
+        whereArgs: whereArgs,
+        orderBy: 'nom ASC',
+      );
+      return rows.map((r) => jsonDecode(r['payload'] as String)).toList();
+    } catch (e) {
+      debugPrint('[LOCAL_CACHE] Error retrieving cached clients: $e');
+      return [];
+    }
   }
 }
