@@ -109,8 +109,8 @@ class ExpensesService {
   }
 
   /// Add a new expense
-  Future<void> addExpense(Map<String, dynamic> data) async {
-    final token = await _getToken();
+  Future<void> addExpense(Map<String, dynamic> data, [String? tokenParam]) async {
+    final token = (tokenParam != null && tokenParam.isNotEmpty) ? tokenParam : await _getToken();
     final authCtx = await _getAuthContext();
     final orgId = authCtx['organizationId'] as String?;
 

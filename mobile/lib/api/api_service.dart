@@ -76,39 +76,144 @@ class ApiService {
     return _supabaseService.isInitialized && _supabaseService.client != null;
   }
 
+  // --- Auth & Session ---
   Future<String> _getEffectiveToken(String token) async {
-    if (token.isNotEmpty) return token;
-    const storage = FlutterSecureStorage();
-    String? secureToken = await storage.read(key: 'auth_token');
-    if (secureToken == null || secureToken.isEmpty) {
+    return await _authService.getEffectiveToken(token);
+  }
 
+  Future<Map<String, dynamic>> _getAuthContext({bool refresh = false}) async {
+    return await _authService.getAuthContext(refresh: refresh);
+  }
+
+  Future<List<String>> refreshUserDepots({bool force = false}) async {
+    return await _authService.refreshUserDepots(force: force);
+  }
+
+  Future<Map<String, dynamic>> login(String username, String password) async {
+    return await _authService.login(username, password);
+  }
+
+  Future<void> _requireAdmin() async {
+    await _authService.requireAdmin();
+  }
+
+  String? _effectiveVendeur(Map<String, dynamic> authCtx, String? requested) {
+    final isAdmin = authCtx['isAdmin'] as bool;
+    if (isAdmin) return requested;
+    return (authCtx['username'] as String?) ?? requested;
+  }
+
+  List<String> _normalizeDepotNames(List<String> depots) {
+    return depots.map((d) => d.trim()).where((d) => d.isNotEmpty).toSet().toList();
+  }
+
+  List<String> _parseDepotString(String? depots) {
+    if (depots == null || depots.trim().isEmpty) return [];
+    return depots.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList();
+  }
+
+  Future<List<String>> _fetchAllActiveDepots() async {
+    return await _stockService.fetchAllActiveDepots();
+  }
+
+  Future<void> _syncUserDepotsByNames(String userId, List<String> depots) async {
+    if (!await _ensureSupabaseReady()) return;
+    final client = _supabaseService.client!;
+    try {
+      await client.from('user_depots').delete().eq('user_id', userId);
+      if (depots.isEmpty) return;
+
+      final res = await client.from('depots').select('id, nom').inFilter('nom', depots);
+      final inserts = <Map<String, dynamic>>[];
+      for (final d in (res as List)) {
+        final depotId = d['id']?.toString();
+        if (depotId != null && depotId.isNotEmpty) {
+          inserts.add({'user_id': userId, 'depot_id': depotId});
+        }
+      }
+      if (inserts.isNotEmpty) {
+        await client.from('user_depots').insert(inserts);
+      }
+    } catch (e) {
+      debugPrint('user_depots sync warning: $e');
+    }
+  }
+
+  // --- Articles ---
+  Future<List<dynamic>> getArticles(
+    String token, {
+    bool forceRefresh = false,
+    int? page,
+    int? pageSize,
+    String? search,
+    String? userId,
+    List<String>? allowedDepots,
+    bool isAdmin = false,
+  }) async {
+    return await _articleService.getArticles(
+      token,
+      forceRefresh: forceRefresh,
+      page: page,
+      pageSize: pageSize,
+      search: search,
+      userId: userId,
+      allowedDepots: allowedDepots,
+      isAdmin: isAdmin,
+    );
+  }
+
+  Future<void> addArticleWithImage(Map<String, String> fields, dynamic imageFile, String token) async {
+    await _articleService.addArticleWithImage(fields, imageFile, token);
+  }
+
+  Future<bool> updateArticle(String id, Map<String, dynamic> data, String token) async {
+    return await _articleService.updateArticle(id, data, token);
+  }
+
+  Future<bool> deleteArticle(String id, String token) async {
+    return await _articleService.deleteArticle(id, token);
+  }
+
+  // --- Clients ---
+  Future<List<dynamic>> getClients(String token, {bool forceRefresh = false}) async {
+    return await _clientService.getClients(token, forceRefresh: forceRefresh);
+  }
+
+  Future<bool> createClientFull(Map<String, dynamic> clientData, String token) async {
+    return await _clientService.createClientFull(clientData, token);
+  }
+
+  Future<List<Map<String, dynamic>>> getClientInvoices(String clientId, String token) async {
+    return await _clientService.getClientInvoices(clientId, token);
+  }
+
+  Future<List<Map<String, dynamic>>> getClientPayments(String clientId, String token) async {
+    return await _clientService.getClientPayments(clientId, token);
+  }
+
+  // --- Invoices & Sales ---
   Future<List<dynamic>> getInvoices(String token, {bool forceRefresh = false, String? vendeur, int? page, int? pageSize, String? search}) async {
     return await _salesService.getInvoices(token, forceRefresh: forceRefresh, vendeur: vendeur, page: page, pageSize: pageSize, search: search);
   }
 
+  // --- Depots & Stock ---
   Future<List<String>> getDepots(String token) async {
-    if (await _ensureSupabaseReady()) {
-      final authCtx = await _getAuthContext();
-      final bool isAdmin = authCtx['isAdmin'];
-      final List<String> allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
-      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
-
-      if (isAdmin) {
-        return await _fetchAllActiveDepots();
-      } else if (allowedDepots.isNotEmpty) {
-        var q = _supabaseService.client!.from('depots').select('nom');
-        if (orgId != null && orgId.isNotEmpty) {
-          q = q.eq('organization_id', orgId);
-        }
-        final data = await q.inFilter('nom', allowedDepots).order('nom');
-        return (data as List).map((e) => e['nom'].toString()).toList();
-      } else {
-        return []; // Deny-by-default: return empty list
-      }
-    }
-    return ["Principal"];
+    return await _stockService.getDepots(token);
   }
 
+  Future<List<dynamic>> getDepotsDetailed(String token) async {
+    return await _stockService.getDepotsDetailed(token);
+  }
+
+  Future<List<dynamic>> getActiveDepots(String token) async {
+    return await _stockService.getActiveDepots(token);
+  }
+
+  Future<List<dynamic>> getStocks({String? token}) async {
+    return await _stockService.getStocks(token: token);
+  }
+
+  // --- Purchases & Suppliers ---
   Future<List<dynamic>> getSuppliers(String token, {bool forceRefresh = false}) async {
     return await _purchaseService.getSuppliers(token, forceRefresh: forceRefresh);
   }
@@ -156,6 +261,10 @@ class ApiService {
     return await _expensesService.getExpenses(startDate: startDate, endDate: endDate, forceRefresh: forceRefresh);
   }
 
+  Future<void> addExpense(Map<String, dynamic> data, String token) async {
+    await _expensesService.addExpense(data, token);
+  }
+
   Future<void> markNotificationAsRead(String id, String token) async {
     if (await _ensureSupabaseReady()) {
       try {
@@ -192,20 +301,12 @@ class ApiService {
   }
 
   // --- Create/Update/Delete ---
-  Future<List<dynamic>> getActiveDepots(String token) async {
-    return await _stockService.getActiveDepots(token);
-  }
-
   Future<String?> createInvoice(Map<String, dynamic> data, String token, {double? paymentAmount, String? paymentMethod, String? advanceClientId}) async {
     return await _salesService.createInvoice(data, token, paymentAmount: paymentAmount, paymentMethod: paymentMethod, advanceClientId: advanceClientId);
   }
 
   Future<String?> createInvoiceDirectOnline(Map<String, dynamic> data, {double? paymentAmount, String? paymentMethod, String? advanceClientId}) async {
     return await _salesService.createInvoiceDirectOnline(data, paymentAmount: paymentAmount, paymentMethod: paymentMethod, advanceClientId: advanceClientId);
-  }
-
-  Future<bool> createClientFull(Map<String, dynamic> data, String token) async {
-    return await _clientService.createClientFull(data, token);
   }
 
   Future<bool> updateClient(String id, Map<String, dynamic> data, String token) async {
@@ -236,18 +337,6 @@ class ApiService {
     return await _purchaseService.updatePurchase(purchaseId, data, token);
   }
 
-  Future<void> addArticleWithImage(Map<String, String> fields, String? image, String token) async {
-    await _articleService.addArticleWithImage(fields, image, token);
-  }
-
-  Future<bool> updateArticle(String id, Map<String, dynamic> data, String token) async {
-    return await _articleService.updateArticle(id, data, token);
-  }
-
-  Future<bool> deleteArticle(String id, String token) async {
-    return await _articleService.deleteArticle(id, token);
-  }
-
   Future<void> payInvoice(String id, double amount, String method, String token, {String? reference, String? date, String? advanceClientId}) async {
     await _salesService.payInvoice(id, amount, method, token, reference: reference, date: date, advanceClientId: advanceClientId);
   }
@@ -258,6 +347,50 @@ class ApiService {
 
   Future<void> updateInvoice(String id, Map<String, dynamic> data, String token) async {
     await _salesService.updateInvoice(id, data, token);
+  }
+
+  Future<List<dynamic>> getDeposits(String token, {bool forceRefresh = false, String? vendeur}) async {
+    try {
+      debugPrint('ApiService: START getDeposits directly');
+      final effectiveToken = await _getEffectiveToken(token);
+      final uri = Uri.parse('$_baseUrl/api/advances');
+      
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $effectiveToken',
+        },
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      } else {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('ApiService: ERROR in getDeposits: $e â€” falling back to Supabase');
+      if (await _ensureSupabaseReady()) {
+        try {
+          final authCtx = await _getAuthContext();
+          final effectiveVendeur = _effectiveVendeur(authCtx, vendeur);
+          var query = _supabaseService.client!.from('avances_clients').select('*, clients(nom)');
+          if (effectiveVendeur != null) {
+            query = query.eq('utilisateur', effectiveVendeur);
+          }
+          final data = await query.order('date_avance', ascending: false);
+          return data;
+        } catch (sbErr) {
+          try {
+             final simpleData = await _supabaseService.client!.from('avances_clients').select().order('date_avance', ascending: false).limit(50);
+             return simpleData;
+          } catch (_) {
+             return [];
+          }
+        }
+      }
+      return [];
+    }
   }
 
   Future<Map<String, dynamic>?> createDeposit(Map<String, dynamic> data, String token) async {
@@ -955,10 +1088,11 @@ class ApiService {
     return await q;
   }
 
-  Future<dynamic> _fetchDepensesForReport(SupabaseClient client, String target, String? vendeur) {
+  Future<List<dynamic>> _fetchDepensesForReport(SupabaseClient client, String target, String? vendeur) async {
     var q = client.from('depenses').select('montant, date_depense, libelle, operateur').eq('date_depense', target);
     if (vendeur != null) q = q.eq('operateur', vendeur);
-    return q;
+    final res = await q;
+    return res as List<dynamic>;
   }
 
   Future<List<dynamic>> getActivityLogs(String token, {String? startDate, String? endDate, String? username, String? module}) async {
