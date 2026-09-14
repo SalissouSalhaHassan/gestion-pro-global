@@ -1,8 +1,11 @@
 // GestionPro Global - Enterprise PWA Service Worker
-const CACHE_NAME = 'gestionpro-v1';
+const CACHE_NAME = 'gestionpro-v2';
 const STATIC_ASSETS = [
   '/',
   '/dashboard',
+  '/dashboard/pos',
+  '/dashboard/invoices',
+  '/dashboard/articles',
   '/catalog',
   '/manifest.json',
   '/icon.svg',
