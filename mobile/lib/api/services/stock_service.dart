@@ -249,4 +249,142 @@ class StockService {
     }
     return [];
   }
+
+  /// Fetch all active depot names
+  Future<List<String>> fetchAllActiveDepots() async {
+    final client = _supabaseService.client;
+    if (client == null) return [];
+    try {
+      final orgId = await _supabaseService.getOrganizationId();
+      var q = client.from('depots').select('nom, is_active, is_deleted');
+      if (orgId != null && orgId.isNotEmpty) {
+        q = q.eq('organization_id', orgId);
+      }
+      final res = await q;
+      final names = <String>[];
+      for (final d in (res as List)) {
+        final name = d['nom']?.toString().trim();
+        final isActive = d['is_active'];
+        final isDeleted = d['is_deleted'];
+        if (name != null && name.isNotEmpty) {
+          if (isDeleted == true) continue;
+          if (isActive == false) continue;
+          names.add(name);
+        }
+      }
+      return names.toSet().toList();
+    } catch (_) {
+      try {
+        final orgId = await _supabaseService.getOrganizationId();
+        var q = client.from('depots').select('nom');
+        if (orgId != null && orgId.isNotEmpty) {
+          q = q.eq('organization_id', orgId);
+        }
+        final res = await q;
+        return (res as List).map((e) => e['nom'].toString()).toSet().toList();
+      } catch (_) {
+        return [];
+      }
+    }
+  }
+
+  /// Get active depot names for user
+  Future<List<String>> getDepots(String token) async {
+    final client = _supabaseService.client;
+    if (client != null) {
+      final authCtx = await _getAuthContext();
+      final bool isAdmin = authCtx['isAdmin'];
+      final List<String> allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
+      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+
+      if (isAdmin) {
+        return await fetchAllActiveDepots();
+      } else if (allowedDepots.isNotEmpty) {
+        var q = client.from('depots').select('nom');
+        if (orgId != null && orgId.isNotEmpty) {
+          q = q.eq('organization_id', orgId);
+        }
+        final data = await q.inFilter('nom', allowedDepots).order('nom');
+        return (data as List).map((e) => e['nom'].toString()).toList();
+      } else {
+        return [];
+      }
+    }
+    return ["Principal"];
+  }
+
+  /// Get active depots rows
+  Future<List<dynamic>> getActiveDepots(String token) async {
+    final client = _supabaseService.client;
+    if (client != null) {
+      final authCtx = await _getAuthContext();
+      final bool isAdmin = authCtx['isAdmin'];
+      final List<String> allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
+      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+
+      if (!isAdmin && allowedDepots.isEmpty) return [];
+
+      try {
+        var q = client.from('depots').select().eq('is_deleted', false).eq('is_active', true);
+        if (orgId != null && orgId.isNotEmpty) q = q.eq('organization_id', orgId);
+        if (!isAdmin) q = q.inFilter('nom', allowedDepots);
+        return await q.order('nom');
+      } catch (_) {
+        var q = client.from('depots').select();
+        if (orgId != null && orgId.isNotEmpty) q = q.eq('organization_id', orgId);
+        if (!isAdmin) q = q.inFilter('nom', allowedDepots);
+        return await q.order('nom');
+      }
+    }
+    return [];
+  }
+
+  /// Get full stock inventory
+  Future<List<dynamic>> getStocks({String? token}) async {
+    final client = _supabaseService.client;
+    if (client != null) {
+      try {
+        final authCtx = await _getAuthContext();
+        final bool isAdmin = authCtx['isAdmin'];
+        final List<String> allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
+        if (!isAdmin && allowedDepots.isEmpty) return [];
+
+        var q = client.from('stocks').select('*, articles(reference, designation)');
+        if (!isAdmin) q = q.inFilter('depot_nom', allowedDepots);
+        return await q.order('depot_nom');
+      } catch (e) {
+        debugPrint('[StockService] getStocks error: $e');
+        return [];
+      }
+    }
+    return [];
+  }
+
+  /// Save or create a depot
+  Future<void> saveDepot(Map<String, dynamic> data, String token) async {
+    final client = _supabaseService.client;
+    if (client != null) {
+      final authCtx = await _getAuthContext();
+      final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
+      if (data['id'] != null) {
+        final id = data.remove('id');
+        await client.from('depots').update(data).eq('id', id);
+      } else {
+        final payload = Map<String, dynamic>.from(data);
+        payload['id'] = const Uuid().v4();
+        if (orgId != null && orgId.isNotEmpty && !payload.containsKey('organization_id')) {
+          payload['organization_id'] = orgId;
+        }
+        await client.from('depots').insert(payload);
+      }
+    }
+  }
+
+  /// Delete a depot
+  Future<void> deleteDepot(String id, String token) async {
+    final client = _supabaseService.client;
+    if (client != null) {
+      await client.from('depots').delete().eq('id', id);
+    }
+  }
 }

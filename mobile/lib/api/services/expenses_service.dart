@@ -13,7 +13,7 @@ class ExpensesService {
   ExpensesService._internal();
 
   final SupabaseService _supabase = SupabaseService();
-  String get _baseUrl => AppConfig.apiBaseUrl;
+  String get _baseUrl => AppConfig.apiUrl;
 
   Future<String?> _getToken() async {
     const storage = FlutterSecureStorage();
@@ -228,4 +228,13 @@ class ExpensesService {
       'depenses_list': [],
     };
   }
+
+  /// Delete an expense by id
+  Future<void> deleteExpense(String id, String token) async {
+    final client = _supabase.client;
+    if (client != null) {
+      await client.from('depenses').delete().eq('id', id);
+    }
+  }
 }
+
