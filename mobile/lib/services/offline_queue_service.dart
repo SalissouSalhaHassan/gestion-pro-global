@@ -62,13 +62,23 @@ class PendingInvoice {
   }
 }
 
+typedef InvoiceSyncCallback = Future<dynamic> Function(
+  Map<String, dynamic> data, {
+  double? paymentAmount,
+  String? paymentMethod,
+  String? advanceClientId,
+});
+
 class OfflineQueueService {
   static final OfflineQueueService _instance = OfflineQueueService._internal();
   factory OfflineQueueService() => _instance;
   OfflineQueueService._internal();
 
+  static InvoiceSyncCallback? defaultSyncHandler;
+
   Database? _db;
   bool _isSyncing = false;
+  bool get isSyncing => _isSyncing;
   StreamSubscription? _netSub;
 
   final StreamController<int> _pendingCountController = StreamController<int>.broadcast();
@@ -78,6 +88,7 @@ class OfflineQueueService {
     if (_db != null) return _db!;
     _db = await _initDb();
     _startNetworkListener();
+    _notifyCount();
     return _db!;
   }
 
@@ -177,7 +188,7 @@ class OfflineQueueService {
   }
 
   /// Process the queue and sync with the backend
-  Future<Map<String, dynamic>> syncPendingInvoices({dynamic Function(Map<String, dynamic>, {double? paymentAmount, String? paymentMethod, String? advanceClientId})? customSyncHandler}) async {
+  Future<Map<String, dynamic>> syncPendingInvoices({InvoiceSyncCallback? customSyncHandler}) async {
     if (_isSyncing) {
       debugPrint('[OFFLINE_QUEUE] Sync already in progress, skipping...');
       return {'success': false, 'message': 'Sync already in progress'};
@@ -186,6 +197,12 @@ class OfflineQueueService {
     final netStatus = await NetworkManager().checkNetworkStatus();
     if (netStatus == NetworkStatus.OFFLINE) {
       return {'success': false, 'message': 'Device is currently offline'};
+    }
+
+    final handler = customSyncHandler ?? defaultSyncHandler;
+    if (handler == null) {
+      debugPrint('[OFFLINE_QUEUE] No sync handler registered, skipping sync');
+      return {'success': false, 'message': 'No sync handler available'};
     }
 
     _isSyncing = true;
@@ -206,14 +223,12 @@ class OfflineQueueService {
         );
 
         try {
-          if (customSyncHandler != null) {
-            await customSyncHandler(
-              invoice.payload,
-              paymentAmount: invoice.paymentAmount,
-              paymentMethod: invoice.paymentMethod,
-              advanceClientId: invoice.advanceClientId,
-            );
-          }
+          await handler(
+            invoice.payload,
+            paymentAmount: invoice.paymentAmount,
+            paymentMethod: invoice.paymentMethod,
+            advanceClientId: invoice.advanceClientId,
+          );
 
           // Mark as synced and delete from pending queue
           await db.delete('pending_invoices', where: 'local_id = ?', whereArgs: [invoice.localId]);
@@ -244,6 +259,13 @@ class OfflineQueueService {
       'synced': syncedCount,
       'failed': failedCount,
     };
+  }
+
+  /// Delete a specific pending invoice
+  Future<void> deleteInvoice(String localId) async {
+    final db = await database;
+    await db.delete('pending_invoices', where: 'local_id = ?', whereArgs: [localId]);
+    await _notifyCount();
   }
 
   /// Clear all synced or failed records manually if needed

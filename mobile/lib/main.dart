@@ -25,12 +25,16 @@ void main() async {
   await SupabaseService().init();
   
   // Initialize offline queue and auto-sync when online
+  OfflineQueueService.defaultSyncHandler = (payload, {double? paymentAmount, String? paymentMethod, String? advanceClientId}) async {
+    return await ApiService().createInvoiceDirectOnline(
+      payload,
+      paymentAmount: paymentAmount,
+      paymentMethod: paymentMethod,
+      advanceClientId: advanceClientId,
+    );
+  };
   final queue = OfflineQueueService();
-  queue.syncPendingInvoices(
-    customSyncHandler: (payload, {double? paymentAmount, String? paymentMethod, String? advanceClientId}) async {
-      await ApiService().createInvoice(payload, '', paymentAmount: paymentAmount, paymentMethod: paymentMethod, advanceClientId: advanceClientId);
-    },
-  );
+  queue.syncPendingInvoices();
   
   runApp(const MyApp());
 }

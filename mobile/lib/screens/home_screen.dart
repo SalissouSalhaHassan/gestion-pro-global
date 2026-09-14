@@ -31,6 +31,7 @@ import 'settings_screen.dart';
 import 'loyers_list_screen.dart';
 import 'rent_payments_list_screen.dart';
 import 'ciment_list_screen.dart';
+import '../widgets/offline_sync_modal.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -317,6 +318,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
       iconTheme: const IconThemeData(color: Colors.white),
       actions: [
+        const OfflineSyncBadgeButton(),
         IconButton(
           icon: const Icon(Icons.power_settings_new_rounded, color: Colors.redAccent, size: 26),
           onPressed: () => _showLogoutConfirmation(context, auth),

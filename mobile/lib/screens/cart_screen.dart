@@ -273,8 +273,14 @@ class _CartScreenState extends State<CartScreen> {
         advanceClientId: _paymentMethod == 'Acompte' ? _selectedAcompte?.id : null,
       );
 
+      final bool isOfflineSaved = resultId != null && resultId.toString().startsWith('OFF-');
+
       if (mounted && resultId != null) {
-        _showSnackBar("Facture créée avec succès !", Colors.green);
+        if (isOfflineSaved) {
+          _showSnackBar("📦 Vente enregistrée hors-ligne ! Elle sera synchronisée dès le retour d'Internet.", Colors.orange.shade800);
+        } else {
+          _showSnackBar("Facture créée avec succès !", Colors.green);
+        }
       }
 
       final invoiceForPrint = {
@@ -310,7 +316,7 @@ class _CartScreenState extends State<CartScreen> {
           _selectedAcompte = null;
           _availableAcomptes = [];
         });
-        _showPrintOptionsDialog(invoiceForPrint, auth);
+        _showPrintOptionsDialog(invoiceForPrint, auth, isOffline: isOfflineSaved);
       }
     } catch (e) {
       if (mounted) {
@@ -322,22 +328,52 @@ class _CartScreenState extends State<CartScreen> {
 
   void _showPrintOptionsDialog(
     Map<String, dynamic> invoiceData,
-    AuthProvider auth,
-  ) {
+    AuthProvider auth, {
+    bool isOffline = false,
+  }) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.green),
-            SizedBox(width: 8),
-            Text("Vente Enregistrée"),
+            Icon(isOffline ? Icons.cloud_off_rounded : Icons.check_circle, color: isOffline ? Colors.orange : Colors.green),
+            const SizedBox(width: 8),
+            Text(isOffline ? "Vente Hors-Ligne" : "Vente Enregistrée"),
           ],
         ),
-        content: const Text(
-          "Facture créée avec succès ! Choisissez le document à imprimer :",
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isOffline) ...[
+              Container(
+                padding: const EdgeInsets.all(8),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.orange.shade900),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        "Enregistrée localement. Synchronisation automatique à venir.",
+                        style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const Text(
+              "Facture créée avec succès ! Choisissez le document à imprimer :",
+            ),
+          ],
         ),
         actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         actions: [

@@ -1222,6 +1222,93 @@ class ApiService {
     }
   }
 
+  /// Direct online sync method used by OfflineQueueService
+  /// Throws an exception on failure so the offline queue can handle retries and error tracking.
+  Future<String?> createInvoiceDirectOnline(
+    Map<String, dynamic> data, {
+    double? paymentAmount,
+    String? paymentMethod,
+    String? advanceClientId,
+  }) async {
+    const storage = FlutterSecureStorage();
+    String? token = await storage.read(key: 'auth_token');
+    if (token == null || token.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      token = prefs.getString('auth_token');
+    }
+
+    // 1. Try Atomic Checkout
+    final List rawItems = data['items'] ?? [];
+    if (rawItems.isNotEmpty) {
+      try {
+        final List<Map<String, dynamic>> checkoutItems = rawItems.map((item) {
+          return {
+            'id': item['article_id'],
+            'quantite': item['qte'],
+            'prix': item['pu_ttc'],
+            'depot_origine': item['depot_origine'] ?? data['emplacement'],
+          };
+        }).toList();
+
+        final checkoutPayload = {
+          'clientId': data['client_id'] ?? 1,
+          'depotName': data['emplacement'] ?? '',
+          'moyenReglement': paymentMethod ?? 'Espece',
+          'versement': paymentAmount ?? 0,
+          'items': checkoutItems,
+        };
+
+        final checkoutRes = await _nextApiClient.checkout(checkoutPayload);
+        if (checkoutRes['ok'] == true) {
+          final String? id = checkoutRes['invoice_id']?.toString() ??
+              checkoutRes['sale']?['id']?.toString() ??
+              checkoutRes['invoice']?['id']?.toString();
+          return id;
+        }
+      } catch (e) {
+        debugPrint('createInvoiceDirectOnline: Atomic checkout failed: $e');
+      }
+    }
+
+    // 2. Try standard /api/factures
+    try {
+      final url = Uri.parse('$_baseUrl/api/factures');
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(data),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final res = jsonDecode(response.body);
+        final id = res['id']?.toString() ?? res['data']?['id']?.toString();
+        if (id != null && (paymentAmount ?? 0) > 0 && token != null) {
+          await payInvoice(id, paymentAmount!, paymentMethod ?? 'Espèce', token, advanceClientId: advanceClientId);
+        }
+        return id;
+      }
+    } catch (e) {
+      debugPrint('createInvoiceDirectOnline: /api/factures failed: $e');
+    }
+
+    // 3. Try Supabase fallback
+    if (await _ensureSupabaseReady()) {
+      final authCtx = await _getAuthContext();
+      final isAdmin = authCtx['isAdmin'] as bool;
+      final allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
+      final id = await _supabaseService.syncInvoiceDirect(data, allowedDepots: allowedDepots, isAdmin: isAdmin);
+      if (id != null && (paymentAmount ?? 0) > 0 && token != null) {
+        await payInvoice(id, paymentAmount!, paymentMethod ?? 'Espèce', token, advanceClientId: advanceClientId);
+      }
+      return id;
+    }
+
+    throw Exception('All remote sync targets unreachable');
+  }
+
   Future<bool> createClientFull(Map<String, dynamic> data, String token) async {
     try {
       final authCtx = await _getAuthContext();
