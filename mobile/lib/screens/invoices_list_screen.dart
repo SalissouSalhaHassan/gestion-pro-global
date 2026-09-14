@@ -13,6 +13,7 @@ import 'pdf_preview_screen.dart';
 import 'edit_invoice_screen.dart';
 import '../models/deposit_model.dart';
 import '../services/excel_export_service.dart';
+import '../services/offline_queue_service.dart';
 
 class InvoicesListScreen extends StatefulWidget {
   const InvoicesListScreen({super.key});
@@ -120,6 +121,41 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
         search: searchQuery.isNotEmpty ? searchQuery : null,
       );
       
+      final List<Invoice> offlineInvoices = [];
+      if (!loadMore) {
+        try {
+          final pending = await OfflineQueueService().getPendingInvoices();
+          for (final p in pending) {
+            final payload = p.payload;
+            final bl = (payload['bl_number'] ?? p.localId).toString();
+            final client = (payload['client'] ?? 'Client Divers').toString();
+            final totalTtc = (payload['total_ttc'] as num?)?.toDouble() ?? 0.0;
+            final paid = p.paymentAmount ?? totalTtc;
+            offlineInvoices.add(
+              Invoice(
+                id: p.localId,
+                blNumber: bl,
+                date: DateFormat('yyyy-MM-dd HH:mm').format(p.createdAt),
+                clientId: (payload['client_id'] ?? '').toString(),
+                clientName: client,
+                totalTTC: totalTtc,
+                totalHT: (payload['total_ht'] as num?)?.toDouble() ?? totalTtc,
+                totalTVA: (payload['total_tva'] as num?)?.toDouble() ?? 0.0,
+                tauxTVA: (payload['taux_tva_facture'] as num?)?.toDouble() ?? 0.0,
+                montantPaye: paid,
+                statut: p.status == 'failed' ? 'Échec Sync' : 'En attente Sync',
+                isPending: true,
+                montantRestantInitial: totalTtc - paid,
+                vendeur: (payload['vendeur'] ?? '').toString(),
+                emplacement: (payload['emplacement'] ?? '').toString(),
+              ),
+            );
+          }
+        } catch (e) {
+          debugPrint('Error loading pending offline invoices: $e');
+        }
+      }
+
       if (mounted) {
         setState(() {
           final List<Invoice> mapped = [];
@@ -134,7 +170,7 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
           if (loadMore) {
             _allFetchedInvoices.addAll(mapped);
           } else {
-            _allFetchedInvoices = mapped;
+            _allFetchedInvoices = [...offlineInvoices, ...mapped];
           }
 
           // Apply local filter to new data
@@ -251,20 +287,45 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
 
       final companyInfoMap = await api.getCompanyInfo(auth.token!);
       final companyInfo = CompanyInfo.fromJson(companyInfoMap);
-      final itemsData = await api.getInvoiceItems(inv.id.toString(), auth.token!);
 
-      final List<Map<String, dynamic>> pdfItems = itemsData.map((item) {
-        final price = (item['pu_ttc'] ?? item['price'] ?? 0) as num;
-        final qty = (item['qte'] ?? item['quantity'] ?? 1) as num;
-        return {
-          "code_art": (item['code_art'] ?? item['reference'] ?? item['code'] ?? "-").toString(),
-          "name": (item['designation'] ?? item['description'] ?? "Article").toString(),
-          "depot": (item['depot_origine'] ?? item['depots']?['nom'] ?? (inv.emplacement.isNotEmpty ? inv.emplacement : "Boutique")).toString(),
-          "quantity": qty.toDouble(),
-          "price": price.toDouble(),
-          "total": (item['total_item_ttc'] ?? item['total'] as num?)?.toDouble() ?? (price.toDouble() * qty.toDouble()),
-        };
-      }).toList();
+      final List<Map<String, dynamic>> pdfItems = [];
+      if (inv.id.startsWith('OFF-')) {
+        final pendingList = await OfflineQueueService().getPendingInvoices();
+        PendingInvoice? target;
+        for (final p in pendingList) {
+          if (p.localId == inv.id) {
+            target = p;
+            break;
+          }
+        }
+        final rawItems = target?.payload['items'] as List? ?? [];
+        for (final item in rawItems) {
+          final price = (item['pu_ttc'] ?? item['price'] ?? 0) as num;
+          final qty = (item['qte'] ?? item['quantity'] ?? 1) as num;
+          pdfItems.add({
+            "code_art": (item['code_art'] ?? item['reference'] ?? item['code'] ?? "-").toString(),
+            "name": (item['designation'] ?? item['name'] ?? item['description'] ?? "Article").toString(),
+            "depot": (item['depot_origine'] ?? (inv.emplacement.isNotEmpty ? inv.emplacement : "Boutique")).toString(),
+            "quantity": qty.toDouble(),
+            "price": price.toDouble(),
+            "total": (item['total_item_ttc'] ?? item['total'] as num?)?.toDouble() ?? (price.toDouble() * qty.toDouble()),
+          });
+        }
+      } else {
+        final itemsData = await api.getInvoiceItems(inv.id.toString(), auth.token!);
+        for (final item in itemsData) {
+          final price = (item['pu_ttc'] ?? item['price'] ?? 0) as num;
+          final qty = (item['qte'] ?? item['quantity'] ?? 1) as num;
+          pdfItems.add({
+            "code_art": (item['code_art'] ?? item['reference'] ?? item['code'] ?? "-").toString(),
+            "name": (item['designation'] ?? item['description'] ?? "Article").toString(),
+            "depot": (item['depot_origine'] ?? item['depots']?['nom'] ?? (inv.emplacement.isNotEmpty ? inv.emplacement : "Boutique")).toString(),
+            "quantity": qty.toDouble(),
+            "price": price.toDouble(),
+            "total": (item['total_item_ttc'] ?? item['total'] as num?)?.toDouble() ?? (price.toDouble() * qty.toDouble()),
+          });
+        }
+      }
 
       if (pdfItems.isEmpty) {
         pdfItems.add({
@@ -480,11 +541,26 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
     double restant = inv.totalTTC - inv.montantPaye;
     if (restant < 0) restant = 0;
 
+    final bool isOffline = inv.id.startsWith('OFF-') || inv.statut.contains('Sync');
     bool isCancelled = inv.statut.toLowerCase().contains("annul");
-    bool isPaid = !isCancelled && (restant <= 1.0);
+    bool isPaid = !isCancelled && !isOffline && (restant <= 1.0);
 
-    Color statusColor = isCancelled ? Colors.grey : (isPaid ? Colors.green : (inv.montantPaye > 0 ? Colors.orange : Colors.red));
-    String statusText = isCancelled ? "ANNULÉE" : (isPaid ? "PAYÉE" : (inv.montantPaye > 0 ? "PARTIEL" : "NON PAYÉE"));
+    Color statusColor;
+    String statusText;
+
+    if (isOffline) {
+      statusColor = Colors.orange.shade800;
+      statusText = inv.statut.contains('Échec') ? "ÉCHEC SYNC" : "HORS-LIGNE";
+    } else if (isCancelled) {
+      statusColor = Colors.grey;
+      statusText = "ANNULÉE";
+    } else if (isPaid) {
+      statusColor = Colors.green;
+      statusText = "PAYÉE";
+    } else {
+      statusColor = inv.montantPaye > 0 ? Colors.orange : Colors.red;
+      statusText = inv.montantPaye > 0 ? "PARTIEL" : "NON PAYÉE";
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -510,7 +586,23 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(inv.blNumber, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade600, fontSize: 13)),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isOffline) ...[
+                                  Icon(Icons.cloud_off_rounded, size: 16, color: Colors.orange.shade800),
+                                  const SizedBox(width: 4),
+                                ],
+                                Text(
+                                  inv.blNumber,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: isOffline ? Colors.orange.shade900 : Colors.grey.shade600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                               decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
@@ -618,7 +710,28 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(padding: const EdgeInsets.all(15), child: Text(inv.blNumber, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
-            if (!isCancelled && !isPaid)
+            if (inv.id.startsWith('OFF-') || inv.statut.contains('Sync')) ...[
+              ListTile(
+                leading: const CircleAvatar(backgroundColor: Colors.amber, child: Icon(Icons.cloud_upload_rounded, color: Colors.white)),
+                title: const Text("Synchroniser maintenant", style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text("Tenter l'envoi immédiat au serveur"),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await OfflineQueueService().syncPendingInvoices();
+                  _fetchInvoices(forceRefresh: true);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(backgroundColor: Colors.redAccent, child: Icon(Icons.delete_outline, color: Colors.white)),
+                title: const Text("Supprimer de la file locale", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await OfflineQueueService().deleteInvoice(inv.id);
+                  _fetchInvoices(forceRefresh: true);
+                },
+              ),
+            ],
+            if (!isCancelled && !isPaid && !inv.id.startsWith('OFF-'))
               ListTile(
                 leading: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.attach_money, color: Colors.white)),
                 title: const Text("Effectuer un règlement", style: TextStyle(fontWeight: FontWeight.bold)),

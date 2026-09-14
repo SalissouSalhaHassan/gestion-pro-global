@@ -33,7 +33,8 @@ import {
   SlidersHorizontal,
   ChevronDown,
   ChevronUp,
-  Store
+  Store,
+  CloudOff
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import InvoiceModal from "./InvoiceModal";
@@ -42,6 +43,7 @@ import PaymentModal from "./PaymentModal";
 import WhatsAppShareModal from "@/components/WhatsAppShareModal";
 import { useLanguage } from "@/lib/i18n/context";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
+import { getPendingOfflineInvoices, syncOfflineInvoicesToServer } from "@/lib/utils/offline-sync";
 
 type Invoice = {
   id: string | number;
@@ -78,6 +80,40 @@ export default function InvoicesPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const [showReports, setShowReports] = useState(false);
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [isSyncingOffline, setIsSyncingOffline] = useState(false);
+
+  const handleSyncOffline = async () => {
+    setIsSyncingOffline(true);
+    try {
+      const res = await syncOfflineInvoicesToServer(async (inv) => {
+        const payload = {
+          clientId: inv.clientId || 1,
+          depotName: "BOUTIQUE",
+          moyenReglement: inv.modePaiement || "Espece",
+          versement: inv.montantRecu || 0,
+          items: inv.items.map((it: any) => ({
+            id: it.articleId,
+            quantite: it.quantite,
+            prix: it.p_vente_ttc,
+            depot_origine: it.depot_origine || "BOUTIQUE",
+          })),
+        };
+        const r = await fetch("/api/pos/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!r.ok) throw new Error("Sync failed");
+      });
+      alert(`Synchronisation terminée : ${res.successCount} réussie(s), ${res.failedCount} échouée(s).`);
+      loadInvoices(false);
+    } catch (e) {
+      console.error("Sync offline failed", e);
+    } finally {
+      setIsSyncingOffline(false);
+    }
+  };
 
   // Advanced Filters
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -147,7 +183,26 @@ export default function InvoicesPage() {
           emplacement: r.emplacement || "BOUTIQUE",
           statut: r.statut || (Number(r.montant_paye) >= Number(r.total_ttc) ? "Payée" : Number(r.montant_paye) > 0 ? "Partielle" : "Non Payée")
         }));
-        setInvoices(mapped);
+
+        const offlinePending = getPendingOfflineInvoices();
+        setOfflineCount(offlinePending.length);
+        const mappedOffline: Invoice[] = offlinePending.map((inv) => ({
+          id: inv.offlineId,
+          bl_number: inv.offlineId,
+          date_facture: new Date(inv.timestamp).toISOString(),
+          client_nom: inv.clientName || "Client Divers",
+          client_tel: "",
+          total_ttc: Number(inv.totalTTC) || 0,
+          montant_paye: Number(inv.montantRecu) || 0,
+          moyen_reglement: inv.modePaiement || "Espèces",
+          montant_restant: Math.max(0, (Number(inv.totalTTC) || 0) - (Number(inv.montantRecu) || 0)),
+          client_id: inv.clientId,
+          vendeur: currentUsername || "Vendeur",
+          emplacement: "POS Web",
+          statut: "En attente Sync",
+        }));
+
+        setInvoices([...mappedOffline, ...mapped]);
         
         const vendors = [...new Set(mapped.map(inv => inv.vendeur).filter(Boolean))] as string[];
         const depots = [...new Set(mapped.map(inv => inv.emplacement).filter(Boolean))] as string[];
@@ -328,6 +383,36 @@ export default function InvoicesPage() {
           </div>
         </div>
       </div>
+
+      {/* ── OFFLINE QUEUE ALERT BANNER ── */}
+      {offlineCount > 0 && (
+        <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/5 border border-amber-500/30 flex flex-wrap items-center justify-between gap-4 shadow-sm animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-amber-500 text-white shadow-md shadow-amber-500/30">
+              <CloudOff size={20} />
+            </div>
+            <div>
+              <div className="text-sm font-black text-amber-950 flex items-center gap-2">
+                <span>{offlineCount} {locale === "ar" ? "فاتورة مسجلة دون اتصال في المتصفح" : "facture(s) hors-ligne en attente"}</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black">Local Cache</span>
+              </div>
+              <div className="text-xs text-amber-800 font-medium mt-0.5">
+                {locale === "ar"
+                  ? "تم حفظ هذه المبيعات محلياً عند انقطاع الشبكة، ويمكنك مزامنتها مع الخادم الآن."
+                  : "Ces ventes sont stockées dans votre navigateur et peuvent être envoyées au serveur dès maintenant."}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={handleSyncOffline}
+            disabled={isSyncingOffline}
+            className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white rounded-2xl text-xs font-black shadow-lg shadow-amber-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            {isSyncingOffline ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            <span>{locale === "ar" ? "مزامنة الفواتير الآن" : "Synchroniser Maintenant"}</span>
+          </button>
+        </div>
+      )}
 
       {/* ── 4 EXECUTIVE FINANCIAL KPIS ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -755,7 +840,12 @@ export default function InvoicesPage() {
                     return (
                       <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3.5 px-4">
-                          <div className="font-mono font-black text-indigo-600 text-xs">{inv.bl_number}</div>
+                          <div className="flex items-center gap-1.5">
+                            {inv.statut === "En attente Sync" && (
+                              <CloudOff size={13} className="text-amber-600 shrink-0" />
+                            )}
+                            <div className="font-mono font-black text-indigo-600 text-xs">{inv.bl_number}</div>
+                          </div>
                           <div className="text-[10px] text-slate-400 font-bold">Vendeur: {inv.vendeur}</div>
                         </td>
 
@@ -793,13 +883,15 @@ export default function InvoicesPage() {
 
                         <td className="py-3.5 px-4 text-center">
                           <span className={`px-2.5 py-1 rounded-full text-xs font-black inline-block ${
-                            isFullyPaid 
+                            inv.statut === "En attente Sync"
+                              ? "bg-amber-100 text-amber-900 border border-amber-300"
+                              : isFullyPaid 
                               ? "bg-emerald-100 text-emerald-700" 
                               : isPartiallyPaid 
                               ? "bg-amber-100 text-amber-700" 
                               : "bg-rose-100 text-rose-700"
                           }`}>
-                            {isFullyPaid ? "Payée" : isPartiallyPaid ? "Partielle" : "Non Payée"}
+                            {inv.statut === "En attente Sync" ? (locale === "ar" ? "📦 في الانتظار" : "📦 Hors-Ligne") : isFullyPaid ? "Payée" : isPartiallyPaid ? "Partielle" : "Non Payée"}
                           </span>
                         </td>
 
