@@ -81,11 +81,12 @@ class StockService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data is List) {
-          return data.map((m) {
+          final mapped = data.map((m) {
             final double qte = (m['quantite'] as num?)?.toDouble() ??
                 (((m['entree'] as num?)?.toDouble() ?? 0.0) - ((m['sortie'] as num?)?.toDouble() ?? 0.0));
-            return {
+            return <String, dynamic>{
               'id': m['id'],
+              'article_id': m['article_id'],
               'date': m['date_mouvement'] ?? m['date'] ?? '',
               'code_article': m['articles']?['reference'] ?? m['code_article'] ?? '-',
               'designation': m['articles']?['designation'] ?? m['designation'] ?? '-',
@@ -99,6 +100,7 @@ class StockService {
               'stock_apres': (m['stock_apres'] as num?)?.toDouble() ?? 0.0,
             };
           }).toList();
+          return await _reconcileStockMovements(mapped, orgId);
         }
       }
     } catch (e) {
@@ -139,8 +141,9 @@ class StockService {
       }
 
       final data = await q.order('date_mouvement', ascending: false).limit(2000);
-      return (data as List).map((m) => {
+      final mapped = (data as List).map((m) => <String, dynamic>{
         'id': m['id'],
+        'article_id': m['article_id'],
         'date': m['date_mouvement'],
         'code_article': m['articles']?['reference'] ?? '-',
         'designation': m['articles']?['designation'] ?? '-',
@@ -153,8 +156,143 @@ class StockService {
         'mouvement': (m['quantite'] as num?)?.toDouble() ?? 0.0,
         'stock_apres': (m['stock_apres'] as num?)?.toDouble() ?? 0.0,
       }).toList();
+      return await _reconcileStockMovements(mapped, orgId);
     }
     return [];
+  }
+
+  /// Mathematically robust backward/forward running stock reconciliation.
+  /// Ensures Stock Après = Stock Avant + Mouvement across every row,
+  /// even if historical DB records stored null or zero stock_avant/stock_apres.
+  Future<List<Map<String, dynamic>>> _reconcileStockMovements(
+    List<Map<String, dynamic>> rawList,
+    String? orgId,
+  ) async {
+    if (rawList.isEmpty) return rawList;
+
+    // Check if reconciliation is needed (any row has 0 stock_avant and 0 stock_apres with non-zero movement)
+    final bool needsReconciliation = rawList.any((m) {
+      final sa = (m['stock_avant'] as num?)?.toDouble() ?? 0.0;
+      final sp = (m['stock_apres'] as num?)?.toDouble() ?? 0.0;
+      final mv = (m['mouvement'] as num?)?.toDouble() ?? 0.0;
+      return (sa == 0.0 && sp == 0.0 && mv != 0.0);
+    });
+
+    if (!needsReconciliation) {
+      return rawList;
+    }
+
+    final client = _supabaseService.client;
+    final Map<String, double> currentStocks = {};
+
+    // Collect article IDs to fetch physical stock levels
+    final articleIds = rawList
+        .map((m) => m['article_id']?.toString())
+        .where((id) => id != null && id.isNotEmpty)
+        .toSet()
+        .toList();
+
+    if (client != null && articleIds.isNotEmpty) {
+      try {
+        var stQuery = client.from('stocks').select('article_id, depot_nom, quantite');
+        if (orgId != null && orgId.isNotEmpty) {
+          stQuery = stQuery.eq('organization_id', orgId);
+        }
+        final dynamic stData = await stQuery.inFilter('article_id', articleIds);
+        if (stData is List) {
+          for (final st in stData) {
+            final artId = st['article_id']?.toString() ?? '';
+            final depot = (st['depot_nom'] ?? 'default').toString().trim().toLowerCase();
+            final qty = ((st['quantite'] ?? 0) as num).toDouble();
+            currentStocks['$artId-$depot'] = qty;
+            currentStocks[artId] = (currentStocks[artId] ?? 0.0) + qty;
+          }
+        }
+      } catch (e) {
+        debugPrint('[StockService] Error fetching current stocks for reconciliation: $e');
+      }
+    }
+
+    // Group movements by (article_id, depot)
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+    for (final m in rawList) {
+      final artId = m['article_id']?.toString() ?? m['code_article']?.toString() ?? 'unknown';
+      final dep = (m['depot'] ?? 'default').toString().trim().toLowerCase();
+      final key = '$artId-$dep';
+      grouped.putIfAbsent(key, () => []).add(m);
+    }
+
+    final List<Map<String, dynamic>> reconciledList = [];
+
+    for (final entry in grouped.entries) {
+      final groupList = entry.value;
+      final key = entry.key;
+      final artId = key.split('-').first;
+
+      // Sort chronologically ASCENDING (oldest first)
+      groupList.sort((a, b) {
+        final dateA = DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(1970);
+        final dateB = DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(1970);
+        final cmp = dateA.compareTo(dateB);
+        if (cmp != 0) return cmp;
+        final idA = int.tryParse(a['id']?.toString() ?? '') ?? 0;
+        final idB = int.tryParse(b['id']?.toString() ?? '') ?? 0;
+        return idA.compareTo(idB);
+      });
+
+      // Normalize movement direction for each row
+      for (final m in groupList) {
+        double v = (m['mouvement'] as num?)?.toDouble() ?? 0.0;
+        final op = (m['operation'] ?? '').toString().toLowerCase();
+        if ((op.contains('vente') || op.contains('sortie')) && v > 0) {
+          v = -v;
+        } else if ((op.contains('achat') || op.contains('initial') || op.contains('entree')) && v < 0) {
+          v = v.abs();
+        }
+        m['mouvement'] = v;
+      }
+
+      // Check if all items in this group already have non-zero valid stock_avant & stock_apres
+      final hasValidStock = groupList.every((m) {
+        final sa = (m['stock_avant'] as num?)?.toDouble() ?? 0.0;
+        final sp = (m['stock_apres'] as num?)?.toDouble() ?? 0.0;
+        return (sa != 0.0 || sp != 0.0);
+      });
+
+      if (hasValidStock) {
+        reconciledList.addAll(groupList);
+      } else {
+        // Run backwards from physical current stock
+        final curStock = currentStocks[key] ?? currentStocks[artId] ?? 0.0;
+        double runningStock = curStock;
+
+        for (int i = groupList.length - 1; i >= 0; i--) {
+          final m = groupList[i];
+          final double mv = (m['mouvement'] as num?)?.toDouble() ?? 0.0;
+          final double apres = runningStock;
+          final double avant = runningStock - mv;
+          runningStock = avant;
+
+          m['stock_apres'] = apres;
+          m['stock_avant'] = avant;
+        }
+
+        reconciledList.addAll(groupList);
+      }
+    }
+
+    // Re-sort latest first (DESCENDING) for UI presentation
+    reconciledList.sort((a, b) {
+      final dateA = DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(1970);
+      final dateB = DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(1970);
+      final cmp = dateB.compareTo(dateA);
+      if (cmp != 0) return cmp;
+      final idA = int.tryParse(a['id']?.toString() ?? '') ?? 0;
+      final idB = int.tryParse(b['id']?.toString() ?? '') ?? 0;
+      return idB.compareTo(idA);
+    });
+
+    return reconciledList;
   }
 
   /// Adjust stock with atomic balance updates and movement logging

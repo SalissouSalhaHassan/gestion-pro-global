@@ -707,6 +707,9 @@ export async function POST(request: Request) {
       const mouvementsPayload = items.map((item: any) => {
         const qte = Number(item.quantite || 1);
         const itemDepot = (item as any).depot_origine || canonicalDepotName;
+        const key = `${item.id}_${normalizeDepotName(itemDepot)}`;
+        const stockAvant = Number(stockMapByDepot[key] ?? 0);
+        const stockApres = stockAvant - qte;
         return {
           article_id: Number(item.id),
           nr_doc: blNumber,
@@ -716,6 +719,8 @@ export async function POST(request: Request) {
           sortie: qte,
           quantite: -qte,
           pv: item.prix || 0,
+          stock_avant: stockAvant,
+          stock_apres: stockApres,
           type: "VENTE_POS",
           depot: itemDepot,
           utilisateur: user.username ?? "Caisse",

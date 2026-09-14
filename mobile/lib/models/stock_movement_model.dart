@@ -58,6 +58,12 @@ class StockMovement {
       }
     }
 
+    double stockAvantVal = toDouble(json['stock_avant'] ?? json['stock_before']);
+    double stockApresVal = toDouble(json['stock_apres'] ?? json['stock_after']);
+    if (stockAvantVal == 0.0 && stockApresVal == 0.0 && mouvementVal != 0.0) {
+      stockApresVal = stockAvantVal + mouvementVal;
+    }
+
     return StockMovement(
       id: json['id']?.toString() ?? "",
       date: date,
@@ -68,9 +74,9 @@ class StockMovement {
       tiers: (json['tiers'] ?? json['fournisseur_client'] ?? "-").toString(),
       depot: depot,
       responsable: (json['responsable'] ?? json['responsable_name'] ?? json['utilisateur'] ?? "Systeme").toString(),
-      stockAvant: toDouble(json['stock_avant'] ?? json['stock_before']),
+      stockAvant: stockAvantVal,
       mouvement: mouvementVal,
-      stockApres: toDouble(json['stock_apres'] ?? json['stock_after']),
+      stockApres: stockApresVal,
     );
   }
 

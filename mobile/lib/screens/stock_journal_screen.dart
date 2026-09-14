@@ -108,6 +108,7 @@ class _StockJournalScreenState extends State<StockJournalScreen> {
       body: Column(
         children: [
           _buildFilterBar(),
+          if (!_isLoading && _movements.isNotEmpty) _buildSummaryBar(),
           Expanded(
             child: _isLoading 
               ? Center(child: CircularProgressIndicator(color: primaryColor))
@@ -117,6 +118,60 @@ class _StockJournalScreenState extends State<StockJournalScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSummaryBar() {
+    double totalEntrees = 0.0;
+    double totalSorties = 0.0;
+    for (final m in _movements) {
+      if (m.mouvement > 0) {
+        totalEntrees += m.mouvement;
+      } else {
+        totalSorties += m.mouvement.abs();
+      }
+    }
+    final double solde = totalEntrees - totalSorties;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildSummaryChip("Total Entrées", "+${totalEntrees.toStringAsFixed(2)}", Colors.green),
+          Container(width: 1, height: 24, color: Colors.grey[200]),
+          _buildSummaryChip("Total Sorties", "-${totalSorties.toStringAsFixed(2)}", Colors.red),
+          Container(width: 1, height: 24, color: Colors.grey[200]),
+          _buildSummaryChip(
+            "Solde Net",
+            (solde >= 0 ? "+" : "") + solde.toStringAsFixed(2),
+            solde >= 0 ? Colors.teal : Colors.deepOrange,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryChip(String label, String value, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+        const SizedBox(height: 2),
+        Text(value, style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.bold)),
+      ],
     );
   }
 

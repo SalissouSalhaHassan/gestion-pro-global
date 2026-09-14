@@ -114,8 +114,140 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Process large data chunks efficiently on the Edge
-    return NextResponse.json(data || []);
+    const rawList = (data || []) as any[];
+    if (rawList.length === 0) {
+      return NextResponse.json([]);
+    }
+
+    // Check if any movements are missing valid stock_avant / stock_apres
+    const needsReconstruction = rawList.some(
+      (m: any) =>
+        m.stock_avant === null ||
+        m.stock_apres === null ||
+        (Number(m.stock_avant || 0) === 0 &&
+          Number(m.stock_apres || 0) === 0 &&
+          (Number(m.entree || 0) !== 0 || Number(m.sortie || 0) !== 0 || Number(m.quantite || 0) !== 0))
+    );
+
+    if (!needsReconstruction) {
+      return NextResponse.json(rawList);
+    }
+
+    // Fetch physical current stock from stocks table for reconciliation
+    const articleIds = Array.from(new Set(rawList.map((m: any) => m.article_id).filter(Boolean)));
+    const sMap: Record<string, number> = {};
+
+    if (articleIds.length > 0) {
+      let stQuery = supabase
+        .from("stocks")
+        .select("article_id, depot_nom, quantite")
+        .in("article_id", articleIds);
+      if (orgId) {
+        stQuery = stQuery.eq("organization_id", orgId);
+      }
+      const { data: stData } = await stQuery;
+      if (stData) {
+        stData.forEach((st: any) => {
+          const key = `${st.article_id}-${(st.depot_nom || "default").trim().toLowerCase()}`;
+          sMap[key] = Number(st.quantite || 0);
+          sMap[`${st.article_id}`] = (sMap[`${st.article_id}`] || 0) + Number(st.quantite || 0);
+        });
+      }
+    }
+
+    // Group by article_id and depot
+    const byArticleDepot: Record<string, any[]> = {};
+    rawList.forEach((m: any) => {
+      const artId = m.article_id || (m.articles as any)?.id || "1";
+      const dep = (m.depot || "default").trim().toLowerCase();
+      const key = `${artId}-${dep}`;
+      if (!byArticleDepot[key]) byArticleDepot[key] = [];
+      byArticleDepot[key].push(m);
+    });
+
+    const reconciled: any[] = [];
+
+    Object.entries(byArticleDepot).forEach(([key, list]) => {
+      // Sort chronologically ascending (Earliest first)
+      list.sort((a, b) => {
+        const dateA = new Date(a.date_mouvement).getTime();
+        const dateB = new Date(b.date_mouvement).getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        return Number(a.id || 0) - Number(b.id || 0);
+      });
+
+      const artId = key.split("-")[0];
+      const curStock = sMap[key] ?? sMap[artId] ?? 0;
+
+      // Extract variations
+      const variations = list.map((m) => {
+        const inQty = Number(m.entree || 0);
+        const outQty = Number(m.sortie || 0);
+        let v = inQty > 0 ? inQty : (outQty > 0 ? -outQty : Number(m.quantite || 0));
+        const tLower = (m.type || "").toLowerCase();
+        if ((tLower.includes("vente") || tLower.includes("sortie")) && v > 0) {
+          v = -v;
+        } else if ((tLower.includes("achat") || tLower.includes("initiale") || tLower.includes("entree")) && v < 0) {
+          v = Math.abs(v);
+        }
+        return v;
+      });
+
+      // Check if DB already has non-zero valid stock_avant & stock_apres
+      const hasValidDbStock = list.every(
+        (m) =>
+          m.stock_apres !== null &&
+          m.stock_avant !== null &&
+          (Number(m.stock_apres) !== 0 || Number(m.stock_avant) !== 0)
+      );
+
+      if (hasValidDbStock) {
+        list.forEach((m, idx) => {
+          const v = variations[idx] !== 0 ? variations[idx] : Number(m.stock_apres) - Number(m.stock_avant);
+          m.quantite = v;
+          if (v > 0) {
+            m.entree = v;
+            m.sortie = 0;
+          } else {
+            m.entree = 0;
+            m.sortie = Math.abs(v);
+          }
+          reconciled.push(m);
+        });
+      } else {
+        // Calculate backward from current physical stock
+        let runningStock = curStock;
+        for (let i = list.length - 1; i >= 0; i--) {
+          const m = list[i];
+          const v = variations[i];
+          const apres = runningStock;
+          const avant = runningStock - v;
+          runningStock = avant;
+
+          m.stock_avant = avant;
+          m.stock_apres = apres;
+          m.quantite = v;
+          if (v > 0) {
+            m.entree = v;
+            m.sortie = 0;
+          } else {
+            m.entree = 0;
+            m.sortie = Math.abs(v);
+          }
+        }
+        list.forEach((m) => reconciled.push(m));
+      }
+    });
+
+    // Re-sort latest first for visual display
+    reconciled.sort((a, b) => {
+      const dateA = new Date(a.date_mouvement).getTime();
+      const dateB = new Date(b.date_mouvement).getTime();
+      if (dateA !== dateB) return dateB - dateA;
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
+
+    return NextResponse.json(reconciled);
   } catch (err: any) {
     console.error("Edge Movements API Error:", err);
     return NextResponse.json({ error: "Erreur serveur Edge" }, { status: 500 });

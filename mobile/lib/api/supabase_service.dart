@@ -613,8 +613,10 @@ class SupabaseService {
       });
       try {
         final stockData = await _client!.from('stocks').select().eq('article_id', artId).eq('depot_nom', depot).maybeSingle();
+        final double oldQty = stockData != null ? ((stockData['quantite'] as num?)?.toDouble() ?? 0.0) : 0.0;
+        final double newQty = oldQty - qte;
         if (stockData != null) {
-          await _client!.from('stocks').update({'quantite': (stockData['quantite'] as num).toDouble() - qte}).eq('id', stockData['id']);
+          await _client!.from('stocks').update({'quantite': newQty}).eq('id', stockData['id']);
         } else {
           await _client!.from('stocks').insert({
             if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
@@ -632,8 +634,10 @@ class SupabaseService {
           'nr_doc': payload['bl_number'],
           'depot': depot,
           'utilisateur': payload['vendeur'] ?? 'MobileApp',
+          'stock_avant': oldQty,
           'sortie': qte,
-          'entree': 0
+          'entree': 0,
+          'stock_apres': newQty,
         });
       } catch (stockErr) {
         debugPrint('⚠️ Stock update error (non-fatal): $stockErr');
@@ -1100,7 +1104,9 @@ class SupabaseService {
             'article_id': int.tryParse(artId.toString()) ?? 0,
             'date_mouvement': DateTime.now().toIso8601String().split('T')[0],
             'type': 'SORTIE',
+            'stock_avant': oldQty,
             'quantite': -qte,
+            'stock_apres': oldQty - qte,
             'depot': depot,
             'nr_doc': 'REV-PUR-$id',
             'utilisateur': 'MobileApp',

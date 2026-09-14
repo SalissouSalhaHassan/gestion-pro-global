@@ -204,13 +204,20 @@ class ArticleService {
           // 3. Create initial movements
           final List<Map<String, dynamic>> moveInserts = [];
           for (var s in stockInserts) {
+            final double q = ((s['quantite'] ?? 0) as num).toDouble();
             moveInserts.add({
               'id': const Uuid().v4(),
               'article_id': id,
               if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
               'date_mouvement': DateTime.now().toIso8601String().split('T')[0],
               'type': 'ENTREE',
-              'quantite': s['quantite'],
+              'quantite': q,
+              'stock_avant': 0.0,
+              'stock_apres': q,
+              'entree': q,
+              'sortie': 0.0,
+              'depot': s['depot_nom'] ?? '',
+              'nr_doc': 'STOCK-INIT',
               'utilisateur': data['utilisateur'] ?? authCtx['username'] ?? 'MobileApp',
             });
           }
