@@ -9,6 +9,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:api_flutter/api_flutter.dart';
 import 'supabase_service.dart';
 import '../config/app_config.dart';
+import '../services/offline_queue_service.dart';
 
 class ApiService {
   final SupabaseService _supabaseService = SupabaseService();
@@ -1187,16 +1188,37 @@ class ApiService {
       debugPrint('ApiService: ERROR in createInvoice: $e');
       // Fallback to Supabase
       if (await _ensureSupabaseReady()) {
-        final authCtx = await _getAuthContext();
-        final isAdmin = authCtx['isAdmin'] as bool;
-        final allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
-        final id = await _supabaseService.syncInvoiceDirect(data, allowedDepots: allowedDepots, isAdmin: isAdmin);
-        if (id != null && (paymentAmount ?? 0) > 0) {
-          await payInvoice(id, paymentAmount!, paymentMethod ?? 'Espèce', token, advanceClientId: advanceClientId);
+        try {
+          final authCtx = await _getAuthContext();
+          final isAdmin = authCtx['isAdmin'] as bool;
+          final allowedDepots = _normalizeDepotNames(authCtx['allowedDepots'] as List<String>);
+          final id = await _supabaseService.syncInvoiceDirect(data, allowedDepots: allowedDepots, isAdmin: isAdmin);
+          if (id != null && (paymentAmount ?? 0) > 0) {
+            await payInvoice(id, paymentAmount!, paymentMethod ?? 'Espèce', token, advanceClientId: advanceClientId);
+          }
+          return id;
+        } catch (supaErr) {
+          debugPrint('ApiService: Supabase direct syncInvoice failed: $supaErr');
         }
-        return id;
       }
-      return null;
+
+      // True Offline Queue Fallback
+      try {
+        final authCtx = await _getAuthContext();
+        final orgId = authCtx['organizationId']?.toString() ?? '00000000-0000-0000-0000-000000000001';
+        final localId = await OfflineQueueService().enqueueInvoice(
+          data: data,
+          organizationId: orgId,
+          paymentAmount: paymentAmount,
+          paymentMethod: paymentMethod,
+          advanceClientId: advanceClientId,
+        );
+        debugPrint('📦 ApiService: Invoice saved locally in Offline Queue with ID: $localId');
+        return localId;
+      } catch (queueErr) {
+        debugPrint('❌ ApiService: Failed to save to offline queue: $queueErr');
+        return null;
+      }
     }
   }
 

@@ -15,12 +15,22 @@ import 'screens/home_screen.dart';
 import 'utils/session_timer.dart';
 
 import 'api/supabase_service.dart';
+import 'api/api_service.dart';
 import 'config/app_config.dart';
+import 'services/offline_queue_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppConfig.init();
   await SupabaseService().init();
+  
+  // Initialize offline queue and auto-sync when online
+  final queue = OfflineQueueService();
+  queue.syncPendingInvoices(
+    customSyncHandler: (payload, {double? paymentAmount, String? paymentMethod, String? advanceClientId}) async {
+      await ApiService().createInvoice(payload, '', paymentAmount: paymentAmount, paymentMethod: paymentMethod, advanceClientId: advanceClientId);
+    },
+  );
   
   runApp(const MyApp());
 }
