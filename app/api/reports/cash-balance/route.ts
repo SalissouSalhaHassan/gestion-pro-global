@@ -33,15 +33,29 @@ export async function GET(request: Request) {
       .from("paiements")
       .select(`
         id, date_operation, montant_regle, moyen_reglement, reference_paiement,
-        factures ( id, date_facture, bl_number, total_ttc, montant_paye, montant_restant, statut, vendeur )
+        factures!inner ( id, date_facture, bl_number, total_ttc, montant_paye, montant_restant, statut, vendeur, organization_id )
       `)
       .neq("moyen_reglement", "Crédit");
 
-    if (orgId) pQuery = pQuery.eq("organization_id", orgId);
+    if (orgId) pQuery = pQuery.eq("factures.organization_id", orgId);
     if (start) pQuery = pQuery.gte("date_operation", start);
     if (end) pQuery = pQuery.lte("date_operation", `${end}T23:59:59.999Z`);
     
-    const { data: pData } = await pQuery;
+    let { data: pData, error: pError } = await pQuery;
+    if (pError) {
+      console.error("Cash balance pQuery error:", pError);
+      // Fallback: query paiements without inner join if relation issue occurs
+      const fallbackQuery = await supabase
+        .from("paiements")
+        .select(`
+          id, date_operation, montant_regle, moyen_reglement, reference_paiement,
+          factures ( id, date_facture, bl_number, total_ttc, montant_paye, montant_restant, statut, vendeur )
+        `)
+        .neq("moyen_reglement", "Crédit")
+        .gte("date_operation", start || "1970-01-01")
+        .lte("date_operation", end ? `${end}T23:59:59.999Z` : "2099-12-31T23:59:59.999Z");
+      pData = fallbackQuery.data;
+    }
 
     // 2. Client Advances (Avances Clients)
     let aQuery = supabase
