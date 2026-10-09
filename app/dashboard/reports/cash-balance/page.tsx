@@ -382,7 +382,7 @@ export default function CashBalancePage() {
           </div>
 
           <span className="px-3 py-1 rounded-full text-xs font-black bg-indigo-50 text-indigo-700">
-            {data?.entries.length || 0} {locale === "ar" ? "حركة مسجلة" : "transactions"}
+            {(data?.entries || []).filter((e: any) => !filters.type || filters.type === "Tous" || (e.type || "").toLowerCase().includes(filters.type.toLowerCase())).length} {locale === "ar" ? "حركة مسجلة" : "transactions"}
           </span>
         </div>
 
@@ -414,8 +414,24 @@ export default function CashBalancePage() {
                     <span>{locale === "ar" ? "لا توجد حركات مالية مسجلة لهذه الفترة." : "Aucun mouvement financier trouvé."}</span>
                   </td>
                 </tr>
-              ) : (
-                (data?.entries || []).map((entry: any, i: number) => {
+              ) : (() => {
+                const filteredEntries = (data?.entries || []).filter((entry: any) => {
+                  if (!filters.type || filters.type === "Tous") return true;
+                  return (entry.type || "").toLowerCase().includes(filters.type.toLowerCase());
+                });
+
+                if (filteredEntries.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={7} className="py-16 text-center text-slate-400">
+                        <Receipt size={36} className="mx-auto text-slate-300 mb-2" />
+                        <span>{locale === "ar" ? "لا توجد حركات مالية مطابقة للفلتر المحدد." : "Aucun mouvement financier correspondant à ce filtre."}</span>
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return filteredEntries.map((entry: any, i: number) => {
                   const isPositive = entry.entree > 0;
                   const isExpense = entry.sortie > 0;
 
@@ -475,8 +491,8 @@ export default function CashBalancePage() {
                       </td>
                     </tr>
                   );
-                })
-              )}
+                });
+              })()}
             </tbody>
           </table>
         </div>

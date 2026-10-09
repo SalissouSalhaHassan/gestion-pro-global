@@ -738,7 +738,6 @@ export async function POST(request: Request) {
           utilisateur: user.username || "Système",
           user_id: user.id,
           regle: true,
-          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
         });
       } else if (cashVersement > 0 && isDebt) {
         paymentsToInsert.push({
@@ -749,7 +748,6 @@ export async function POST(request: Request) {
           utilisateur: user.username || "Système",
           user_id: user.id,
           regle: true,
-          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
         });
       }
 
@@ -763,7 +761,6 @@ export async function POST(request: Request) {
           utilisateur: user.username || "Système",
           user_id: user.id,
           regle: true,
-          organization_id: user.organization_id || "00000000-0000-0000-0000-000000000001",
         });
       }
 
