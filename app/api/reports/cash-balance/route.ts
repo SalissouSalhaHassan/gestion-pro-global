@@ -41,7 +41,9 @@ export async function GET(request: Request) {
     if (start) pQuery = pQuery.gte("date_operation", start);
     if (end) pQuery = pQuery.lte("date_operation", `${end}T23:59:59.999Z`);
     
-    let { data: pData, error: pError } = await pQuery;
+    let pData: any[] | null = null;
+    const { data: mainPData, error: pError } = await pQuery;
+    pData = mainPData;
     if (pError) {
       console.error("Cash balance pQuery error:", pError);
       // Fallback: query paiements without inner join if relation issue occurs
