@@ -136,8 +136,6 @@ class ArticleService {
 
       final orgId = authCtx['organizationId']?.toString() ?? await _supabaseService.getOrganizationId();
       final Map<String, dynamic> data = {};
-      final String id = const Uuid().v4();
-      data['id'] = id;
       if (orgId != null && orgId.isNotEmpty && !data.containsKey('organization_id')) {
         data['organization_id'] = orgId;
       }
@@ -166,30 +164,22 @@ class ArticleService {
         }
       });
 
-      // 1. Insert Article
-      await _supabaseService.client!.from('articles').insert(data);
+      // 1. Insert Article and retrieve auto-generated integer ID
+      final insertedArticle = await _supabaseService.client!
+          .from('articles')
+          .insert(data)
+          .select('id')
+          .single();
 
-      // 1.5. Record initial price in history
-      double pAchatHt = double.tryParse(fields['p_achat_ht'] ?? '0') ?? 0.0;
-      double pVenteHt = double.tryParse(fields['p_vente_ht'] ?? '0') ?? 0.0;
-      await _supabaseService.client!.from('prix_histoire').insert({
-        'id': const Uuid().v4(),
-        'article_id': id,
-        if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
-        'p_achat_ht': pAchatHt,
-        'p_vente_ht': pVenteHt,
-        'utilisateur': fields['utilisateur'] ?? authCtx['username'] ?? 'MobileApp',
-        'date_changement': DateTime.now().toIso8601String(),
-      });
+      final dynamic articleId = insertedArticle['id'];
 
       // 2. Insert Initial Stocks
-      if (stocks.isNotEmpty) {
+      if (stocks.isNotEmpty && articleId != null) {
         final List<Map<String, dynamic>> stockInserts = [];
         stocks.forEach((depot, qte) {
           if (qte != 0) {
             stockInserts.add({
-              'id': const Uuid().v4(),
-              'article_id': id,
+              'article_id': articleId,
               if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
               'depot_nom': depot,
               'quantite': qte,
@@ -206,8 +196,7 @@ class ArticleService {
           for (var s in stockInserts) {
             final double q = ((s['quantite'] ?? 0) as num).toDouble();
             moveInserts.add({
-              'id': const Uuid().v4(),
-              'article_id': id,
+              'article_id': articleId,
               if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
               'date_mouvement': DateTime.now().toIso8601String().split('T')[0],
               'type': 'ENTREE',
@@ -231,7 +220,7 @@ class ArticleService {
       await _supabaseService.logActivity(
         actionType: 'CREATE',
         entityType: 'article',
-        entityId: id,
+        entityId: articleId?.toString(),
         details: 'Nouvel article: ${fields['designation']} - Ref: ${fields['reference']}',
         username: fields['utilisateur'] ?? authCtx['username'] ?? 'Admin',
       );
