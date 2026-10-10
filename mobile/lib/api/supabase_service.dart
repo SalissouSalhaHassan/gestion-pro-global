@@ -972,13 +972,12 @@ class SupabaseService {
         double stockAvant = 0;
         if (stockData != null) {
           stockAvant = ((stockData['quantite'] ?? 0) as num).toDouble();
-          await _client!.from('stocks').update({'quantite': stockAvant + qte, 'updated_at': DateTime.now().toIso8601String()}).eq('id', stockData['id']);
+          await _client!.from('stocks').update({'quantite': stockAvant + qte}).eq('id', stockData['id']);
         } else {
           await _client!.from('stocks').insert({
             'article_id': int.tryParse(artId.toString()) ?? 0,
             'depot_nom': depot,
             'quantite': qte,
-            'updated_at': DateTime.now().toIso8601String()
           });
         }
         
@@ -1145,7 +1144,6 @@ class SupabaseService {
             'article_id': int.tryParse(artId.toString()) ?? 0,
             'depot_nom': depot,
             'quantite': qte,
-            'updated_at': DateTime.now().toIso8601String()
           });
         }
 

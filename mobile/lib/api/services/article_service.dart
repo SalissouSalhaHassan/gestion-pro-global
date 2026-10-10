@@ -183,7 +183,6 @@ class ArticleService {
               if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
               'depot_nom': depot,
               'quantite': qte,
-              'updated_at': DateTime.now().toIso8601String(),
             });
           }
         });
