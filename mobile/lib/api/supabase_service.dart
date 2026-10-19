@@ -830,34 +830,58 @@ class SupabaseService {
 
       // 2. Restore Stock for each item
       final items = await _client!.from('facture_items').select('article_id, qte, depot_origine').eq('facture_id', id);
+      final orgId = await getOrganizationId();
+      
       for (var item in items) {
-        final String artId = item['article_id'];
-        final double qte = ((item['qte'] ?? 0) as num).toDouble();
-        final String depot = item['depot_origine'] ?? 'Boutique';
+        final dynamic rawArtId = item['article_id'];
+        final int? artId = rawArtId is num ? rawArtId.toInt() : int.tryParse(rawArtId.toString());
+        if (artId == null) continue;
 
-        final stockData = await _client!.from('stocks').select().eq('article_id', artId).eq('depot_nom', depot).maybeSingle();
-        if (stockData != null) {
-          final double oldQty = ((stockData['quantite'] ?? 0) as num).toDouble();
-          final double newQty = oldQty + qte;
-          await _client!.from('stocks').update({'quantite': newQty}).eq('id', stockData['id']);
-          
-          final orgId = await getOrganizationId();
-          // Record Movement (ENTREE - Cancellation)
-          await _client!.from('mouvements').insert({
+        final double qte = ((item['qte'] ?? 0) as num).toDouble();
+        final String depot = (item['depot_origine'] ?? 'Boutique').toString().trim();
+
+        // Query stocks for this article
+        var stockQuery = _client!.from('stocks').select().eq('article_id', artId);
+        if (orgId != null && orgId.isNotEmpty) {
+          stockQuery = stockQuery.eq('organization_id', orgId);
+        }
+        final stockRows = await stockQuery;
+        final matchingStock = (stockRows as List<dynamic>?)?.firstWhere(
+          (s) => (s['depot_nom'] ?? '').toString().trim().toLowerCase() == depot.toLowerCase(),
+          orElse: () => null,
+        );
+
+        double oldQty = 0.0;
+        double newQty = qte;
+
+        if (matchingStock != null) {
+          oldQty = ((matchingStock['quantite'] ?? 0) as num).toDouble();
+          newQty = oldQty + qte;
+          await _client!.from('stocks').update({'quantite': newQty}).eq('id', matchingStock['id']);
+        } else {
+          await _client!.from('stocks').insert({
+            'article_id': artId,
+            'depot_nom': depot,
+            'quantite': newQty,
             if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
-            'article_id': int.tryParse(artId.toString()) ?? 0,
-            'type': 'ENTREE',
-            'quantite': qte,
-            'date_mouvement': DateTime.now().toIso8601String().split('T')[0],
-            'nr_doc': 'ANN-$blNumber',
-            'depot': depot,
-            'utilisateur': 'MobileApp',
-            'entree': qte,
-            'sortie': 0,
-            'stock_avant': oldQty,
-            'stock_apres': newQty
           });
         }
+
+        // Record Movement (ENTREE - Cancellation)
+        await _client!.from('mouvements').insert({
+          if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
+          'article_id': artId,
+          'type': 'ENTREE',
+          'quantite': qte,
+          'date_mouvement': DateTime.now().toIso8601String().split('T')[0],
+          'nr_doc': 'ANN-$blNumber',
+          'depot': depot,
+          'utilisateur': 'MobileApp',
+          'entree': qte,
+          'sortie': 0,
+          'stock_avant': oldQty,
+          'stock_apres': newQty
+        });
       }
 
       // 3. Update Client Credit
