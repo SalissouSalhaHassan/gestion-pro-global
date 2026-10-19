@@ -166,130 +166,126 @@ export async function DELETE(
       }
     }
 
-    // Use the safe delete RPC to handle stock adjustment
-    let rpcSuccess = false;
-    try {
-      const { data: result, error: rpcError } = await supabase.rpc('delete_invoice_safe', { 
-        p_invoice_id: Number(id),
-        p_user_id: Number(session.id),
-        p_username: session.username || 'System'
-      });
+    // Use Admin Client directly to guarantee 100% reliable execution and bypass any RLS or missing RPC issues
+    const adminClient = getAdminClient();
 
-      if (!rpcError && result && result.ok !== false) {
-        rpcSuccess = true;
-      }
-    } catch (e) {
-      console.warn("delete_invoice_safe RPC call failed, falling back to direct server logic:", e);
+    // 1. Fetch invoice and invoice_items before marking as deleted
+    const { data: invoiceData, error: invFetchErr } = await adminClient
+      .from("factures")
+      .select("id, bl_number, emplacement, organization_id, client_id, montant_restant, is_deleted")
+      .eq("id", id)
+      .single();
+
+    if (invFetchErr || !invoiceData) {
+      return NextResponse.json({ error: "Facture introuvable" }, { status: 404 });
     }
 
-    // Direct robust fallback: restore stock & record compensation movements in DB
-    if (!rpcSuccess) {
-      // Use Admin Client to bypass RLS and guarantee stock updates succeed regardless of session permissions
-      const adminClient = getAdminClient();
+    if (invoiceData.is_deleted) {
+      return NextResponse.json({ ok: true, message: "Facture déjà supprimée" });
+    }
 
-      // 1. Fetch invoice and invoice_items
-      const { data: invoiceData } = await adminClient
-        .from("factures")
-        .select("id, bl_number, emplacement, organization_id, client_id, montant_restant, is_deleted")
-        .eq("id", id)
-        .single();
+    const orgId = invoiceData.organization_id || session.organization_id || "00000000-0000-0000-0000-000000000001";
+    const fallbackDepot = invoiceData.emplacement || session.emplacement || "Boutique";
 
-      if (invoiceData && !invoiceData.is_deleted) {
-        const orgId = invoiceData.organization_id || session.organization_id || "00000000-0000-0000-0000-000000000001";
-        const fallbackDepot = invoiceData.emplacement || session.emplacement || "Boutique";
+    // 2. Fetch all items of this invoice
+    const { data: items, error: itemsErr } = await adminClient
+      .from("facture_items")
+      .select("article_id, qte, pu_ht, depot_origine, depot_id")
+      .eq("facture_id", id);
 
-        const { data: items } = await adminClient
-          .from("facture_items")
-          .select("article_id, qte, pu_ht, depot_origine, depot_id")
-          .eq("facture_id", id);
+    if (items && items.length > 0) {
+      for (const item of items) {
+        const artId = Number(item.article_id);
+        const qte = Number(item.qte || 0);
+        if (!artId || qte <= 0) continue;
 
-        if (items && items.length > 0) {
-          for (const item of items) {
-            const artId = Number(item.article_id);
-            const qte = Number(item.qte || 0);
-            const rawDepotNom = String(item.depot_origine || fallbackDepot).trim();
+        const rawDepotNom = String(item.depot_origine || fallbackDepot).trim();
 
-            // Fetch all current stock rows for this article in the organization
-            const { data: stockRows } = await adminClient
-              .from("stocks")
-              .select("id, quantite, depot_nom")
-              .eq("article_id", artId)
-              .eq("organization_id", orgId);
+        // Query stocks for this article
+        const { data: stockRows } = await adminClient
+          .from("stocks")
+          .select("id, quantite, depot_nom, organization_id")
+          .eq("article_id", artId);
 
-            // Match depot case-insensitively
-            const matchedStock = (stockRows || []).find(
-              (s: any) => String(s.depot_nom || "").trim().toLowerCase() === rawDepotNom.toLowerCase()
-            );
+        // Find matching stock row by normalized depot name
+        const matchedStock = (stockRows || []).find((s: any) => {
+          const sDepot = String(s.depot_nom || "").trim().toLowerCase();
+          const targetDepot = rawDepotNom.toLowerCase();
+          const matchesDepot = sDepot === targetDepot;
+          // Match same org or default org or null org
+          const matchesOrg = !s.organization_id || !orgId || s.organization_id === orgId;
+          return matchesDepot && matchesOrg;
+        }) || (stockRows || []).find((s: any) => {
+          return String(s.depot_nom || "").trim().toLowerCase() === rawDepotNom.toLowerCase();
+        });
 
-            const oldQty = matchedStock ? Number(matchedStock.quantite || 0) : 0;
-            const newQty = oldQty + qte;
+        const oldQty = matchedStock ? Number(matchedStock.quantite || 0) : 0;
+        const newQty = oldQty + qte;
 
-            if (matchedStock?.id) {
-              await adminClient
-                .from("stocks")
-                .update({ quantite: newQty })
-                .eq("id", matchedStock.id);
-            } else {
-              await adminClient
-                .from("stocks")
-                .insert({
-                  article_id: artId,
-                  depot_nom: rawDepotNom,
-                  quantite: newQty,
-                  organization_id: orgId
-                });
-            }
-
-            // Record compensating inventory movement (ENTREE)
-            await adminClient.from("mouvements").insert({
+        if (matchedStock?.id) {
+          await adminClient
+            .from("stocks")
+            .update({ quantite: newQty })
+            .eq("id", matchedStock.id);
+        } else {
+          await adminClient
+            .from("stocks")
+            .insert({
               article_id: artId,
-              nr_doc: `ANN-${invoiceData.bl_number || id}`,
-              date_mouvement: new Date().toISOString(),
-              fournisseur_client: `Annulation Facture #${invoiceData.bl_number || id}`,
-              entree: qte,
-              sortie: 0,
-              quantite: qte,
-              pv: Number(item.pu_ht || 0),
-              stock_avant: oldQty,
-              stock_apres: newQty,
-              type: "ENTREE_ANNULATION",
-              depot: rawDepotNom,
-              utilisateur: session.username || "System",
+              depot_nom: rawDepotNom,
+              quantite: newQty,
               organization_id: orgId
             });
-          }
         }
 
-        // Adjust client credit if debt remaining
-        if (invoiceData.client_id && Number(invoiceData.montant_restant || 0) > 0) {
-          const { data: clientRow } = await adminClient
-            .from("clients")
-            .select("credit_facture")
-            .eq("id", invoiceData.client_id)
-            .maybeSingle();
-
-          if (clientRow) {
-            const currentCredit = Number(clientRow.credit_facture || 0);
-            const newCredit = Math.max(0, currentCredit - Number(invoiceData.montant_restant));
-            await adminClient
-              .from("clients")
-              .update({ credit_facture: newCredit })
-              .eq("id", invoiceData.client_id);
-          }
-        }
-
-        // Soft delete & mark as cancelled
-        await adminClient
-          .from("factures")
-          .update({ 
-            is_deleted: true, 
-            statut: "Annulée",
-            deleted_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .eq("id", id);
+        // Record compensating inventory movement (ENTREE - Cancellation)
+        await adminClient.from("mouvements").insert({
+          article_id: artId,
+          nr_doc: `ANN-${invoiceData.bl_number || id}`,
+          date_mouvement: new Date().toISOString(),
+          fournisseur_client: `Annulation Facture #${invoiceData.bl_number || id}`,
+          entree: qte,
+          sortie: 0,
+          quantite: qte,
+          pv: Number(item.pu_ht || 0),
+          stock_avant: oldQty,
+          stock_apres: newQty,
+          type: "ENTREE_ANNULATION",
+          depot: rawDepotNom,
+          utilisateur: session.username || "System",
+          organization_id: orgId
+        });
       }
     }
+
+    // 3. Adjust client credit if debt was remaining on this invoice
+    if (invoiceData.client_id && Number(invoiceData.montant_restant || 0) > 0) {
+      const { data: clientRow } = await adminClient
+        .from("clients")
+        .select("credit_facture")
+        .eq("id", invoiceData.client_id)
+        .maybeSingle();
+
+      if (clientRow) {
+        const currentCredit = Number(clientRow.credit_facture || 0);
+        const newCredit = Math.max(0, currentCredit - Number(invoiceData.montant_restant));
+        await adminClient
+          .from("clients")
+          .update({ credit_facture: newCredit })
+          .eq("id", invoiceData.client_id);
+      }
+    }
+
+    // 4. Soft delete & mark as cancelled
+    await adminClient
+      .from("factures")
+      .update({ 
+        is_deleted: true, 
+        statut: "Annulée",
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
 
     await logAuditEvent({
       action_type: "DELETE_INVOICE",
