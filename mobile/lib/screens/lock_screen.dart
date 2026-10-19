@@ -105,8 +105,8 @@ class _LockScreenState extends State<LockScreen> {
     final username = auth.username ?? "Utilisateur";
     final orgName = auth.organizationName;
 
-    return WillPopScope(
-      onWillPop: () async => false, // Prevent dismissing with back button
+    return PopScope(
+      canPop: false, // Prevent dismissing with back button
       child: Scaffold(
         body: Container(
           width: double.infinity,

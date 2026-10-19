@@ -166,25 +166,122 @@ export async function DELETE(
     }
 
     // Use the safe delete RPC to handle stock adjustment
-    const { data: result, error: rpcError } = await supabase.rpc('delete_invoice_safe', { 
-      p_invoice_id: Number(id),
-      p_user_id: Number(session.id),
-      p_username: session.username || 'System'
-    });
+    let rpcSuccess = false;
+    try {
+      const { data: result, error: rpcError } = await supabase.rpc('delete_invoice_safe', { 
+        p_invoice_id: Number(id),
+        p_user_id: Number(session.id),
+        p_username: session.username || 'System'
+      });
 
-    if (rpcError) {
-        // Fallback to simple soft delete if RPC fails
-        const { error: softErr } = await supabase
-          .from("factures")
-          .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-          .eq("id", id);
-        
-        if (softErr) throw softErr;
-        return NextResponse.json({ ok: true, message: "Facture supprimée (soft delete fallback)" });
+      if (!rpcError && result && result.ok !== false) {
+        rpcSuccess = true;
+      }
+    } catch (e) {
+      console.warn("delete_invoice_safe RPC call failed, falling back to direct server logic:", e);
     }
 
-    if (result && result.ok === false) {
-        return NextResponse.json({ error: result.error || "Échec de la suppression" }, { status: 400 });
+    // Direct robust fallback: restore stock & record compensation movements in DB
+    if (!rpcSuccess) {
+      // 1. Fetch invoice and invoice_items
+      const { data: invoiceData } = await supabase
+        .from("factures")
+        .select("id, bl_number, emplacement, organization_id, client_id, montant_restant, is_deleted")
+        .eq("id", id)
+        .single();
+
+      if (invoiceData && !invoiceData.is_deleted) {
+        const orgId = invoiceData.organization_id || session.organization_id || "00000000-0000-0000-0000-000000000001";
+        const fallbackDepot = invoiceData.emplacement || session.emplacement || "Boutique";
+
+        const { data: items } = await supabase
+          .from("facture_items")
+          .select("article_id, qte, pu_ht, depot_origine, depot_id")
+          .eq("facture_id", id);
+
+        if (items && items.length > 0) {
+          for (const item of items) {
+            const artId = Number(item.article_id);
+            const qte = Number(item.qte || 0);
+            const depotNom = item.depot_origine || fallbackDepot;
+
+            // Fetch current stock row
+            const { data: stockRow } = await supabase
+              .from("stocks")
+              .select("id, quantite")
+              .eq("article_id", artId)
+              .eq("depot_nom", depotNom)
+              .eq("organization_id", orgId)
+              .maybeSingle();
+
+            const oldQty = stockRow ? Number(stockRow.quantite || 0) : 0;
+            const newQty = oldQty + qte;
+
+            if (stockRow?.id) {
+              await supabase
+                .from("stocks")
+                .update({ quantite: newQty })
+                .eq("id", stockRow.id);
+            } else {
+              await supabase
+                .from("stocks")
+                .insert({
+                  article_id: artId,
+                  depot_nom: depotNom,
+                  quantite: newQty,
+                  organization_id: orgId
+                });
+            }
+
+            // Record compensating inventory movement (ENTREE)
+            await supabase.from("mouvements").insert({
+              article_id: artId,
+              nr_doc: `ANN-${invoiceData.bl_number || id}`,
+              date_mouvement: new Date().toISOString(),
+              fournisseur_client: `Annulation Facture #${invoiceData.bl_number || id}`,
+              entree: qte,
+              sortie: 0,
+              quantite: qte,
+              pv: Number(item.pu_ht || 0),
+              stock_avant: oldQty,
+              stock_apres: newQty,
+              type: "ENTREE_ANNULATION",
+              depot: depotNom,
+              utilisateur: session.username || "System",
+              organization_id: orgId
+            });
+          }
+        }
+
+        // Adjust client credit if debt remaining
+        if (invoiceData.client_id && Number(invoiceData.montant_restant || 0) > 0) {
+          const { data: clientRow } = await supabase
+            .from("clients")
+            .select("credit_facture")
+            .eq("id", invoiceData.client_id)
+            .maybeSingle();
+
+          if (clientRow) {
+            const currentCredit = Number(clientRow.credit_facture || 0);
+            const newCredit = Math.max(0, currentCredit - Number(invoiceData.montant_restant));
+            await supabase
+              .from("clients")
+              .update({ credit_facture: newCredit })
+              .eq("id", invoiceData.client_id);
+          }
+        }
+
+        // Soft delete & mark as cancelled
+        await supabase
+          .from("factures")
+          .update({ 
+            is_deleted: true, 
+            statut: "Annulée",
+            deleted_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", id);
+      }
     }
 
     await logAuditEvent({
