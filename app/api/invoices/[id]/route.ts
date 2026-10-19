@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getAdminClient } from '@/lib/supabase/admin';
 import { InvoiceService } from '@/lib/services/invoice.service';
 import { getServerSession, isAdminOrManager } from '@/lib/auth_helper';
 import { applyUserScope } from '@/lib/utils/scoping';
@@ -183,8 +184,11 @@ export async function DELETE(
 
     // Direct robust fallback: restore stock & record compensation movements in DB
     if (!rpcSuccess) {
+      // Use Admin Client to bypass RLS and guarantee stock updates succeed regardless of session permissions
+      const adminClient = getAdminClient();
+
       // 1. Fetch invoice and invoice_items
-      const { data: invoiceData } = await supabase
+      const { data: invoiceData } = await adminClient
         .from("factures")
         .select("id, bl_number, emplacement, organization_id, client_id, montant_restant, is_deleted")
         .eq("id", id)
@@ -194,7 +198,7 @@ export async function DELETE(
         const orgId = invoiceData.organization_id || session.organization_id || "00000000-0000-0000-0000-000000000001";
         const fallbackDepot = invoiceData.emplacement || session.emplacement || "Boutique";
 
-        const { data: items } = await supabase
+        const { data: items } = await adminClient
           .from("facture_items")
           .select("article_id, qte, pu_ht, depot_origine, depot_id")
           .eq("facture_id", id);
@@ -203,38 +207,41 @@ export async function DELETE(
           for (const item of items) {
             const artId = Number(item.article_id);
             const qte = Number(item.qte || 0);
-            const depotNom = item.depot_origine || fallbackDepot;
+            const rawDepotNom = String(item.depot_origine || fallbackDepot).trim();
 
-            // Fetch current stock row
-            const { data: stockRow } = await supabase
+            // Fetch all current stock rows for this article in the organization
+            const { data: stockRows } = await adminClient
               .from("stocks")
-              .select("id, quantite")
+              .select("id, quantite, depot_nom")
               .eq("article_id", artId)
-              .eq("depot_nom", depotNom)
-              .eq("organization_id", orgId)
-              .maybeSingle();
+              .eq("organization_id", orgId);
 
-            const oldQty = stockRow ? Number(stockRow.quantite || 0) : 0;
+            // Match depot case-insensitively
+            const matchedStock = (stockRows || []).find(
+              (s: any) => String(s.depot_nom || "").trim().toLowerCase() === rawDepotNom.toLowerCase()
+            );
+
+            const oldQty = matchedStock ? Number(matchedStock.quantite || 0) : 0;
             const newQty = oldQty + qte;
 
-            if (stockRow?.id) {
-              await supabase
+            if (matchedStock?.id) {
+              await adminClient
                 .from("stocks")
                 .update({ quantite: newQty })
-                .eq("id", stockRow.id);
+                .eq("id", matchedStock.id);
             } else {
-              await supabase
+              await adminClient
                 .from("stocks")
                 .insert({
                   article_id: artId,
-                  depot_nom: depotNom,
+                  depot_nom: rawDepotNom,
                   quantite: newQty,
                   organization_id: orgId
                 });
             }
 
             // Record compensating inventory movement (ENTREE)
-            await supabase.from("mouvements").insert({
+            await adminClient.from("mouvements").insert({
               article_id: artId,
               nr_doc: `ANN-${invoiceData.bl_number || id}`,
               date_mouvement: new Date().toISOString(),
@@ -246,7 +253,7 @@ export async function DELETE(
               stock_avant: oldQty,
               stock_apres: newQty,
               type: "ENTREE_ANNULATION",
-              depot: depotNom,
+              depot: rawDepotNom,
               utilisateur: session.username || "System",
               organization_id: orgId
             });
@@ -255,7 +262,7 @@ export async function DELETE(
 
         // Adjust client credit if debt remaining
         if (invoiceData.client_id && Number(invoiceData.montant_restant || 0) > 0) {
-          const { data: clientRow } = await supabase
+          const { data: clientRow } = await adminClient
             .from("clients")
             .select("credit_facture")
             .eq("id", invoiceData.client_id)
@@ -264,7 +271,7 @@ export async function DELETE(
           if (clientRow) {
             const currentCredit = Number(clientRow.credit_facture || 0);
             const newCredit = Math.max(0, currentCredit - Number(invoiceData.montant_restant));
-            await supabase
+            await adminClient
               .from("clients")
               .update({ credit_facture: newCredit })
               .eq("id", invoiceData.client_id);
@@ -272,7 +279,7 @@ export async function DELETE(
         }
 
         // Soft delete & mark as cancelled
-        await supabase
+        await adminClient
           .from("factures")
           .update({ 
             is_deleted: true, 
