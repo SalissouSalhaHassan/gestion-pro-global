@@ -27,9 +27,28 @@ export async function GET(request: Request) {
     // 1. Fetch Company Info (Scoped to Tenant)
     let compQuery = supabase
       .from('informations_entreprise')
-      .select('nom_entreprise, telephone, adresse, email, logo_url');
+      .select('nom_entreprise, telephone, adresse, email, logo_url, capital_social');
     if (orgId) compQuery = compQuery.eq('organization_id', orgId);
-    const { data: company } = await compQuery.maybeSingle();
+    const { data: rawCompany } = await compQuery.maybeSingle();
+
+    let whatsappNumber = rawCompany?.telephone || "";
+    if (rawCompany?.capital_social && rawCompany.capital_social.startsWith("{")) {
+      try {
+        const meta = JSON.parse(rawCompany.capital_social);
+        if (meta.telephone_whatsapp && typeof meta.telephone_whatsapp === "string" && meta.telephone_whatsapp.trim()) {
+          whatsappNumber = meta.telephone_whatsapp.trim();
+        }
+      } catch (_) {}
+    }
+
+    const company = rawCompany ? {
+      nom_entreprise: rawCompany.nom_entreprise,
+      telephone: whatsappNumber,
+      telephone_appel: rawCompany.telephone,
+      adresse: rawCompany.adresse,
+      email: rawCompany.email,
+      logo_url: rawCompany.logo_url,
+    } : null;
 
     // 2. Fetch Articles with Stock (Scoped to Tenant)
     let query = supabase

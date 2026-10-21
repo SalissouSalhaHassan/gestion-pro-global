@@ -147,6 +147,7 @@ export async function POST(req: NextRequest) {
       show_stamp: body.show_stamp !== false,
       show_qr_code: body.show_qr_code !== false,
       invoice_visibility_policy: invoiceVisibilityPolicy,
+      telephone_whatsapp: body.telephone_whatsapp || "",
     };
 
     // Standard guaranteed columns that exist across all schema versions

@@ -47,6 +47,7 @@ type CompanyInfo = {
   slogan?: string;
   adresse: string;
   telephone: string;
+  telephone_whatsapp?: string;
   email: string;
   site_web?: string;
   rc: string;
@@ -577,7 +578,7 @@ export default function SettingsPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                          Téléphone professionnel
+                          Téléphone professionnel (Factures / Appels)
                         </label>
                         <input
                           type="text"
@@ -585,10 +586,29 @@ export default function SettingsPage() {
                           value={info?.telephone || ""}
                           onChange={handleChange}
                           className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          placeholder="+227 00 00 00 00"
+                          placeholder="Ex: +227 96 97 75 68 / 94 44 69 09"
                         />
                       </div>
+
                       <div>
+                        <label className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 mb-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                          <span>Numéro WhatsApp (Commandes & Assistance)</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="telephone_whatsapp"
+                          value={info?.telephone_whatsapp || ""}
+                          onChange={handleChange}
+                          className="w-full px-4 py-2.5 rounded-xl border border-emerald-300 bg-emerald-50/20 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          placeholder="Ex: +227 96 97 75 68 (Un seul numéro WhatsApp valide)"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Ce numéro recevra automatiquement les commandes du panier et les demandes du catalogue.
+                        </p>
+                      </div>
+
+                      <div className="sm:col-span-2">
                         <label className="block text-xs font-bold text-slate-700 mb-1.5">
                           Adresse Email de contact
                         </label>

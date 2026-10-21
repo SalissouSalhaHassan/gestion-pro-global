@@ -19,7 +19,11 @@ export interface InvoiceWhatsAppDetails {
  */
 export function formatPhoneForWhatsApp(phone: string, defaultCountryCode: string = "227"): string {
   if (!phone) return "";
-  let cleaned = phone.replace(/[^0-9+]/g, "");
+  
+  // If multiple numbers are provided (e.g. "+227 96 97 75 68 / 94 44 69 09"), take the first one
+  const primaryPhone = phone.split(/[\/,;]/)[0]?.trim() || phone;
+
+  let cleaned = primaryPhone.replace(/[^0-9+]/g, "");
 
   // If starts with +, remove +
   if (cleaned.startsWith("+")) {
