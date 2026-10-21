@@ -56,6 +56,7 @@ export const translations: TranslationDict = {
   nav_settings: { fr: "Paramètres", ar: "الإعدادات العامة", en: "System Settings" },
   nav_platform: { fr: "Gestion de la plateforme", ar: "إدارة المنصة والاشتراكات", en: "Platform Management" },
   nav_super_admin: { fr: "Tableau de bord Super Admin", ar: "لوحة تحكم السوبر أدمن", en: "Super Admin Dashboard" },
+  nav_corbeille: { fr: "Corbeille", ar: "سلة المحذوفات", en: "Trash / Recycle Bin" },
   nav_copilot: { fr: "Assistant IA Copilot", ar: "المساعد الذكي للأعمال (AI)", en: "AI Business Copilot" },
   nav_support: { fr: "Support & Assistance", ar: "الدعم الفني والمساعدة", en: "Help & Support" },
 

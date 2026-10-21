@@ -435,6 +435,15 @@ export default function InvoicesPage() {
               </button>
             )}
 
+            <button
+              onClick={() => router.push("/dashboard/corbeille")}
+              className="px-4 py-3 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 hover:text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border border-rose-500/30"
+              title="Corbeille"
+            >
+              <Trash2 size={15} className="text-rose-400" />
+              <span>{locale === "ar" ? "سلة المحذوفات" : "Corbeille"}</span>
+            </button>
+
             <button 
               onClick={() => router.push("/dashboard/pos")}
               className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-2xl font-black text-xs shadow-xl shadow-indigo-600/25 transition-all flex items-center gap-2 cursor-pointer"

@@ -31,6 +31,7 @@ import 'settings_screen.dart';
 import 'loyers_list_screen.dart';
 import 'rent_payments_list_screen.dart';
 import 'ciment_list_screen.dart';
+import 'corbeille_screen.dart';
 import '../widgets/offline_sync_modal.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -189,6 +190,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 if (auth.isAdmin) ...[
                   _buildDrawerItem(Icons.lock_person_rounded, "Permissions", Colors.deepOrange, () => _nav(context, const PermissionsSummaryScreen())),
                   _buildDrawerItem(Icons.history_edu_rounded, "Journal d'Activité", Colors.blueGrey, () => _nav(context, const ActivityLogScreen())),
+                  _buildDrawerItem(Icons.delete_sweep_rounded, "Corbeille & Restaurations", Colors.redAccent, () => _nav(context, const CorbeilleScreen())),
                 ],
                 _buildDrawerItem(Icons.home_work_rounded, "Gestion des Loyers", Colors.indigo, () => _nav(context, const LoyersListScreen())),
                 _buildDrawerItem(Icons.receipt_long_rounded, "Paiements Loyers", Colors.blueGrey, () => _nav(context, const RentPaymentsListScreen())),

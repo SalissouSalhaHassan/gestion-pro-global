@@ -33,7 +33,8 @@ import {
   Sparkles,
   Bot,
   Headphones,
-  CreditCard
+  CreditCard,
+  Trash2
 } from "lucide-react";
 import UnifiedSearch from "@/components/UnifiedSearch";
 import NotificationBell from "@/components/NotificationBell";
@@ -119,6 +120,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: "/dashboard/settings", label: t("nav_settings", "Paramètres"), icon: Settings, adminOnly: true },
     { href: "/dashboard/platform", label: t("nav_platform", "Gestion de la plateforme"), icon: Landmark, superAdminOnly: true },
     { href: "/dashboard/super-admin", label: t("nav_super_admin", "Tableau de bord Super Admin"), icon: Crown, superAdminOnly: true },
+    { href: "/dashboard/corbeille", label: t("nav_corbeille", "Corbeille & Restaurations"), icon: Trash2, perm: "admin.settings" },
     { href: "/dashboard/copilot", label: t("nav_copilot", "Assistant IA Copilot"), icon: Bot, highlight: true },
     { href: "/dashboard/support", label: t("nav_support", "Support & Assistance"), icon: Headphones },
   ];
