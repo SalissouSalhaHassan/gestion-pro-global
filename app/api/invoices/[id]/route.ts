@@ -154,24 +154,8 @@ export async function DELETE(
     const session = await getServerSession();
     if (!session) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
-    const isAdmin = await isAdminOrManager(session);
     const isNumeric = !isNaN(Number(id));
     const numericId = isNumeric ? Number(id) : null;
-    
-    // Ownership check using centralized scoping
-    if (!isAdmin) {
-      let query = supabase.from("factures").select("id");
-      if (numericId !== null) {
-        query = query.or(`id.eq.${numericId},bl_number.eq.${id}`);
-      } else {
-        query = query.or(`bl_number.eq.${id}`);
-      }
-      query = applyUserScope(query as any, session, 'factures');
-      const { data: inv } = await query.maybeSingle();
-      if (!inv) {
-        return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
-      }
-    }
 
     // Use Admin Client directly to guarantee 100% reliable execution and bypass any RLS or missing RPC issues
     const adminClient = getAdminClient();
