@@ -235,12 +235,7 @@ export async function DELETE(
       }
     }
 
-    // Also try calling DB RPC delete_invoice_safe if available
-    try {
-      await adminClient.rpc("delete_invoice_safe", { p_invoice_id: Number(invoiceData.id) });
-    } catch (e) {
-      // Ignored if RPC fails or not present, direct JS execution below guarantees it
-    }
+    // Direct JS execution below guarantees accurate stock restoration and movement creation
 
     // Fetch active depots for resolving depot_id <-> depot_nom
     const { data: allDepots } = await adminClient
