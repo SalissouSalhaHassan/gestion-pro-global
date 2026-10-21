@@ -484,7 +484,7 @@ export default function ArticlesPage() {
             </button>
 
             <a
-              href="/catalog"
+              href={currentOrgId ? `/catalog?org=${currentOrgId}` : "/catalog"}
               target="_blank"
               rel="noopener noreferrer"
               className="px-4 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xl shadow-emerald-600/25 transition-all flex items-center gap-2 cursor-pointer"

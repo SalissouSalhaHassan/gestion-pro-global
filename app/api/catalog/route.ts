@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabase/admin';
+import { getServerSession } from '@/lib/auth_helper';
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -10,7 +11,18 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const search = searchParams.get('search');
-    const orgId = searchParams.get('org') || searchParams.get('organization_id') || '00000000-0000-0000-0000-000000000001';
+    
+    // Check if user is logged in to match their current active organization
+    let sessionOrgId: string | null = null;
+    try {
+      const session = await getServerSession();
+      if (session?.organization_id) {
+        sessionOrgId = session.organization_id;
+      }
+    } catch (_) {}
+
+    // Priority: Explicit URL param ?org=... -> Session Org -> Default
+    const orgId = searchParams.get('org') || searchParams.get('organization_id') || sessionOrgId || '00000000-0000-0000-0000-000000000001';
 
     // 1. Fetch Company Info (Scoped to Tenant)
     let compQuery = supabase

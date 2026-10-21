@@ -215,7 +215,10 @@ export default function PublicCatalogPage() {
     const fetchCatalog = async () => {
       try {
         setLoading(true);
-        const res = await fetch("/api/catalog");
+        // Forward query params (e.g., ?org=...) to the API
+        const params = typeof window !== "undefined" ? window.location.search : "";
+        const apiUrl = params ? `/api/catalog${params}` : "/api/catalog";
+        const res = await fetch(apiUrl);
         const data = await res.json();
         setProducts(data.products || []);
         setCategories(data.categories || []);

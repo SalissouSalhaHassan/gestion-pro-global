@@ -65,7 +65,9 @@ export async function proxy(request: NextRequest) {
   }
 
   // Si l'utilisateur n'est pas connecté et essaie d'ouvrir une page protégée, on le renvoie vers /login
-  if (!sessionData && !pathname.startsWith('/login') && pathname !== '/') {
+  // Les pages publiques (login, catalogue public, etc.) sont autorisées
+  const isPublicPage = pathname.startsWith('/login') || pathname.startsWith('/catalog') || pathname === '/';
+  if (!sessionData && !isPublicPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
