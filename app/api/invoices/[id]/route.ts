@@ -176,9 +176,6 @@ export async function DELETE(
     // Use Admin Client directly to guarantee 100% reliable execution and bypass any RLS or missing RPC issues
     const adminClient = getAdminClient();
 
-    const isNumeric = !isNaN(Number(id));
-    const numericId = isNumeric ? Number(id) : null;
-
     // 1. Fetch invoice and invoice_items before marking as deleted
     let query = adminClient
       .from("factures")
