@@ -205,6 +205,31 @@ export async function DELETE(
       }
     }
 
+    // Safety fallback: If facture_items is empty, fetch items from mouvements where nr_doc = invoice.bl_number
+    if ((!items || items.length === 0) && invoiceData.bl_number) {
+      const { data: mvts } = await adminClient
+        .from("mouvements")
+        .select("article_id, quantite, sortie, entree, pv, depot, warehouse_id")
+        .eq("nr_doc", invoiceData.bl_number);
+
+      if (mvts && mvts.length > 0) {
+        items = mvts.map((m: any) => ({
+          article_id: m.article_id,
+          qte: Number(m.sortie || m.quantite || 0),
+          pu_ht: Number(m.pv || 0),
+          depot_origine: m.depot,
+          depot_id: m.warehouse_id,
+        })).filter((i: any) => i.qte > 0);
+      }
+    }
+
+    // Also try calling DB RPC delete_invoice_safe if available
+    try {
+      await adminClient.rpc("delete_invoice_safe", { p_invoice_id: Number(invoiceData.id) });
+    } catch (e) {
+      // Ignored if RPC fails or not present, direct JS execution below guarantees it
+    }
+
     // Fetch active depots for resolving depot_id <-> depot_nom
     const { data: allDepots } = await adminClient
       .from("depots")
