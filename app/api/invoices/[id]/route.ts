@@ -357,7 +357,7 @@ export async function DELETE(
         deleted_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
-      .eq("id", id);
+      .eq("id", invoiceData.id);
 
     await logAuditEvent({
       action_type: "DELETE_INVOICE",

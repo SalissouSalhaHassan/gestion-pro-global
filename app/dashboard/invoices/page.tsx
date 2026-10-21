@@ -276,7 +276,9 @@ export default function InvoicesPage() {
         throw new Error(errData.error || (locale === "ar" ? "فشل حذف الفاتورة" : "Erreur lors de la suppression"));
       }
       
+      setInvoices(prev => prev.filter(inv => inv.id !== invoiceId && inv.bl_number !== invoiceId));
       setRefreshKey(prev => prev + 1);
+      await loadInvoices(true);
       alert(locale === "ar" ? "تم حذف الفاتورة وإرجاع الكميات إلى المخزن بنجاح ✅" : "Facture supprimée et stock réajusté avec succès ✅");
     } catch (err: any) {
       console.error("Error deleting invoice:", err);
