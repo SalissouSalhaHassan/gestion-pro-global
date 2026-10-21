@@ -21,18 +21,22 @@ class ProductsScreen extends StatefulWidget {
 }
 
 class _ProductsScreenState extends State<ProductsScreen> {
-  List<Article> _allArticles = [];
+  List<Article> _rawArticles = [];
+  List<Article> _filteredArticles = [];
   bool _isLoading = false;
   bool _isFetchingMore = false;
   bool _hasMore = true;
   int _currentPage = 0;
-  final int _pageSize = 30;
+  final int _pageSize = 100; // Increased page size for rich search experience
 
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final _numberFormat = NumberFormat("#,##0", "fr_FR");
   Timer? _debounce;
   final MobileScannerController _scannerController = MobileScannerController();
+
+  // Smart filter tags
+  String _selectedFilterTag = 'Tous'; // 'Tous', 'En Stock', 'Rupture', 'Prix Gros'
 
   // Colors
   final Color _primaryColor = const Color(0xFF4A00E0);
@@ -57,16 +61,72 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   void _scrollListener() {
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-      if (!_isFetchingMore && _hasMore && !_isLoading) {
+      if (!_isFetchingMore && _hasMore && !_isLoading && _searchController.text.trim().isEmpty) {
         _fetchArticles(loadMore: true);
       }
     }
   }
 
+  /// Normalize string for intelligent multi-dialect & French accents matching
+  String _normalizeString(String text) {
+    var s = text.toLowerCase().trim();
+    // French accents normalization
+    s = s.replaceAll(RegExp(r'[éèêë]'), 'e');
+    s = s.replaceAll(RegExp(r'[àâä]'), 'a');
+    s = s.replaceAll(RegExp(r'[îï]'), 'i');
+    s = s.replaceAll(RegExp(r'[ôö]'), 'o');
+    s = s.replaceAll(RegExp(r'[ùûü]'), 'u');
+    s = s.replaceAll(RegExp(r'[ç]'), 'c');
+    // Arabic normalization
+    s = s.replaceAll(RegExp(r'[أإآ]'), 'ا');
+    s = s.replaceAll('ة', 'ه');
+    s = s.replaceAll('ى', 'ي');
+    // Remove unnecessary punctuation
+    s = s.replaceAll(RegExp(r'[-_/,\.]'), ' ');
+    return s;
+  }
+
+  /// Instant local smart multi-keyword search
+  void _applyLocalSmartSearch() {
+    final query = _normalizeString(_searchController.text);
+    final keywords = query.split(RegExp(r'\s+')).where((k) => k.isNotEmpty).toList();
+
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+
+    setState(() {
+      _filteredArticles = _rawArticles.where((article) {
+        // Tag-based filtering
+        if (_selectedFilterTag == 'En Stock') {
+          final stock = auth.isAdmin ? article.totalAllDepotsStock : article.getStockForDepots(auth.allowedDepots);
+          if (stock <= 0) return false;
+        } else if (_selectedFilterTag == 'Rupture') {
+          final stock = auth.isAdmin ? article.totalAllDepotsStock : article.getStockForDepots(auth.allowedDepots);
+          if (stock > 0) return false;
+        } else if (_selectedFilterTag == 'Prix Gros') {
+          if (article.prixGros == null || article.prixGros! <= 0) return false;
+        }
+
+        if (keywords.isEmpty) return true;
+
+        final target = _normalizeString("${article.designation} ${article.reference} ${article.codeBarre ?? ''} ${article.famille ?? ''}");
+
+        // Smart AND match: every keyword must exist in the target
+        return keywords.every((kw) => target.contains(kw));
+      }).toList();
+    });
+  }
+
   void _onSearchChanged() {
+    // 1. Instant instant feedback locally (0 delay!)
+    _applyLocalSmartSearch();
+
+    // 2. Debounced server fetch if query has 2+ characters to find items not in first page
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      _fetchArticles(forceRefresh: true);
+    _debounce = Timer(const Duration(milliseconds: 600), () {
+      final q = _searchController.text.trim();
+      if (q.isNotEmpty) {
+        _fetchArticles(forceRefresh: true);
+      }
     });
   }
 
@@ -430,9 +490,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
       if (mounted) {
         setState(() {
           if (loadMore) {
-            _allArticles.addAll(loadedArticles);
+            _rawArticles.addAll(loadedArticles);
           } else {
-            _allArticles = loadedArticles;
+            _rawArticles = loadedArticles;
           }
           
           if (loadedArticles.length < _pageSize) {
@@ -444,6 +504,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
           _isLoading = false;
           _isFetchingMore = false;
         });
+
+        _applyLocalSmartSearch();
 
         if (!loadMore && loadedArticles.isNotEmpty && searchQuery.isEmpty) {
           await NotificationService().checkLowStock(loadedArticles, threshold: 5);
@@ -498,13 +560,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
             icon: const Icon(Icons.file_download, color: Colors.white),
             tooltip: 'Exporter Excel',
             onPressed: () {
-              if (_allArticles.isEmpty) {
+              if (_filteredArticles.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Aucune donnée à exporter")),
                 );
                 return;
               }
-              final data = _allArticles
+              final data = _filteredArticles
                   .map(
                     (a) => {
                       'reference': a.reference,
@@ -569,50 +631,65 @@ class _ProductsScreenState extends State<ProductsScreen> {
       ),
       body: Column(
         children: [
+          // Smart Search Bar with Camera & Clear
           Container(
-            padding: const EdgeInsets.fromLTRB(15, 15, 15, 10),
+            padding: const EdgeInsets.fromLTRB(15, 14, 15, 6),
             color: const Color(0xFFF3F5F9),
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    style: const TextStyle(fontSize: 16),
-                    decoration: InputDecoration(
-                      hintText: 'Rechercher (Nom, Réf)...',
-                      hintStyle: TextStyle(color: Colors.grey.shade500),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        color: _primaryColor,
-                        size: 26,
-                      ),
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 15),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-                        borderSide: BorderSide(color: Colors.grey.shade200),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-                        borderSide: BorderSide(
-                          color: _primaryColor,
-                          width: 1.5,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _primaryColor.withValues(alpha: 0.08),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
                         ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                      decoration: InputDecoration(
+                        hintText: 'Recherche intelligente (Nom, Réf, Famille)...',
+                        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          color: _primaryColor,
+                          size: 24,
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(
+                            color: _primaryColor,
+                            width: 2,
+                          ),
+                        ),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.cancel_rounded, color: Colors.grey, size: 20),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _applyLocalSmartSearch();
+                                  FocusScope.of(context).unfocus();
+                                },
+                              )
+                            : null,
                       ),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, color: Colors.grey),
-                              onPressed: () {
-                                _searchController.clear();
-                                FocusScope.of(context).unfocus();
-                              },
-                            )
-                          : null,
                     ),
                   ),
                 ),
@@ -620,51 +697,111 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 GestureDetector(
                   onTap: _openBarcodeScanner,
                   child: Container(
-                    height: 55,
-                    width: 55,
+                    height: 50,
+                    width: 50,
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: _primaryColor.withValues(alpha: 0.5)),
+                      gradient: LinearGradient(
+                        colors: [_primaryColor, _secondaryColor],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.grey.withValues(alpha: 0.1),
-                          blurRadius: 5,
-                          offset: const Offset(0, 2),
+                          color: _primaryColor.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
                         ),
                       ],
                     ),
-                    child: Icon(
-                      Icons.qr_code_scanner,
-                      color: _primaryColor,
-                      size: 28,
+                    child: const Icon(
+                      Icons.qr_code_scanner_rounded,
+                      color: Colors.white,
+                      size: 24,
                     ),
                   ),
                 ),
               ],
             ),
           ),
+
+          // Smart Filter Pills & Results Count
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
+            color: const Color(0xFFF3F5F9),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildFilterChip('Tous', Icons.apps_rounded),
+                        const SizedBox(width: 6),
+                        _buildFilterChip('En Stock', Icons.check_circle_outline_rounded),
+                        const SizedBox(width: 6),
+                        _buildFilterChip('Rupture', Icons.remove_circle_outline_rounded),
+                        const SizedBox(width: 6),
+                        _buildFilterChip('Prix Gros', Icons.loyalty_rounded),
+                      ],
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Text(
+                    "${_filteredArticles.length} art.",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _primaryColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           Expanded(
-            child: _isLoading
+            child: _isLoading && _rawArticles.isEmpty
                 ? Center(child: CircularProgressIndicator(color: _primaryColor))
-                : _allArticles.isEmpty
+                : _filteredArticles.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.inventory_2_outlined,
+                          Icons.search_off_rounded,
                           size: 70,
                           color: Colors.grey.shade300,
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 12),
                         Text(
-                          "Aucun article trouvé",
+                          _searchController.text.isNotEmpty 
+                              ? "Aucun résultat pour \"${_searchController.text}\""
+                              : "Aucun article disponible",
                           style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey.shade500,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade600,
                           ),
                         ),
+                        if (_searchController.text.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: () {
+                              _searchController.clear();
+                              _applyLocalSmartSearch();
+                            },
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text("Effacer la recherche"),
+                          ),
+                        ],
                       ],
                     ),
                   )
@@ -674,15 +811,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       horizontal: 15,
                       vertical: 5,
                     ),
-                    itemCount: _allArticles.length + (_hasMore ? 1 : 0),
+                    itemCount: _filteredArticles.length + (_hasMore && _searchController.text.isEmpty ? 1 : 0),
                     itemBuilder: (ctx, i) {
-                      if (i == _allArticles.length) {
+                      if (i == _filteredArticles.length) {
                         return Padding(
                           padding: const EdgeInsets.all(15),
                           child: Center(child: CircularProgressIndicator(color: _primaryColor)),
                         );
                       }
-                      return _buildProductCard(_allArticles[i]);
+                      return _buildProductCard(_filteredArticles[i]);
                     },
                   ),
           ),
@@ -845,6 +982,56 @@ class _ProductsScreenState extends State<ProductsScreen> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, IconData icon) {
+    final isSelected = _selectedFilterTag == label;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _selectedFilterTag = label);
+        _applyLocalSmartSearch();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? _primaryColor : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? _primaryColor : Colors.grey.shade300,
+            width: 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: _primaryColor.withValues(alpha: 0.25),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  )
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? Colors.white : Colors.grey.shade600,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? Colors.white : Colors.grey.shade800,
+              ),
+            ),
+          ],
         ),
       ),
     );
