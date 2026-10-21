@@ -43,7 +43,7 @@ import PaymentModal from "./PaymentModal";
 import WhatsAppShareModal from "@/components/WhatsAppShareModal";
 import { useLanguage } from "@/lib/i18n/context";
 import { formatCurrencyAmount } from "@/lib/utils/currency";
-import { getPendingOfflineInvoices, syncOfflineInvoicesToServer } from "@/lib/utils/offline-sync";
+import { getPendingOfflineInvoices, syncOfflineInvoicesToServer, removeSyncedOfflineInvoice } from "@/lib/utils/offline-sync";
 import { createClient } from "@/lib/supabase/client";
 
 type Invoice = {
@@ -261,7 +261,7 @@ export default function InvoicesPage() {
       const isOffline = offlinePending.some(inv => inv.offlineId === invoiceId || (inv as any).bl_number === invoiceId);
 
       if (isOffline) {
-        removePendingOfflineInvoice(String(invoiceId));
+        removeSyncedOfflineInvoice(String(invoiceId));
         setRefreshKey(prev => prev + 1);
         alert(locale === "ar" ? "تم حذف الفاتورة المحلية بنجاح." : "Facture locale supprimée avec succès.");
         return;
