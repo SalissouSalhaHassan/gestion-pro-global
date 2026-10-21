@@ -13,8 +13,13 @@ import 'cart_screen.dart';
 
 class MarketplaceStoreScreen extends StatefulWidget {
   final VoidCallback? onBackToApp;
+  final bool isGuest;
 
-  const MarketplaceStoreScreen({super.key, this.onBackToApp});
+  const MarketplaceStoreScreen({
+    super.key,
+    this.onBackToApp,
+    this.isGuest = false,
+  });
 
   @override
   State<MarketplaceStoreScreen> createState() => _MarketplaceStoreScreenState();
@@ -80,17 +85,13 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
 
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
-      if (auth.token == null) {
-        setState(() => _isLoading = false);
-        return;
-      }
-
       final query = _searchController.text.trim();
+      
       final data = await ApiService().getArticles(
-        auth.token!,
+        auth.token ?? '',
         forceRefresh: forceRefresh,
         page: 0,
-        pageSize: 60,
+        pageSize: 100,
         search: query.isNotEmpty ? query : null,
         userId: auth.userId,
         allowedDepots: auth.allowedDepots,
@@ -471,22 +472,90 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
 
   Widget _fallbackProductIcon(Article article) {
     final hash = article.designation.hashCode.abs();
-    final colors = [
-      const Color(0xFFE8F5E9),
-      const Color(0xFFE3F2FD),
-      const Color(0xFFF3E5F5),
-      const Color(0xFFFFF3E0),
-      const Color(0xFFFFEBEE),
-    ];
-    final color = colors[hash % colors.length];
+    
+    // Choose thematic icon and gradient based on keywords in designation or famille
+    final d = article.designation.toLowerCase();
+    IconData iconData = Icons.shopping_bag_rounded;
+    Color primaryColor = const Color(0xFF3F51B5);
+    Color secondaryColor = const Color(0xFF7986CB);
+
+    if (d.contains('filtir') || d.contains('filtre') || d.contains('huile') || d.contains('daf') || d.contains('man') || d.contains('auto')) {
+      iconData = Icons.directions_car_filled_rounded;
+      primaryColor = const Color(0xFF1E88E5);
+      secondaryColor = const Color(0xFF64B5F6);
+    } else if (d.contains('watch') || d.contains('montre') || d.contains('rolex')) {
+      iconData = Icons.watch_rounded;
+      primaryColor = const Color(0xFF2E7D32);
+      secondaryColor = const Color(0xFF81C784);
+    } else if (d.contains('phone') || d.contains('oppo') || d.contains('ecran') || d.contains('glass') || d.contains('chargeur')) {
+      iconData = Icons.smartphone_rounded;
+      primaryColor = const Color(0xFF6A1B9A);
+      secondaryColor = const Color(0xFFBA68C8);
+    } else if (d.contains('sac') || d.contains('fashion') || d.contains('robe') || d.contains('chemise')) {
+      iconData = Icons.shopping_basket_rounded;
+      primaryColor = const Color(0xFFE91E63);
+      secondaryColor = const Color(0xFFF48FB1);
+    } else {
+      final palette = [
+        [const Color(0xFFFF5722), const Color(0xFFFF8A65)],
+        [const Color(0xFF00897B), const Color(0xFF4DB6AC)],
+        [const Color(0xFF5C6BC0), const Color(0xFF9FA8DA)],
+        [const Color(0xFFD81B60), const Color(0xFFF06292)],
+      ];
+      final p = palette[hash % palette.length];
+      primaryColor = p[0];
+      secondaryColor = p[1];
+    }
 
     return Container(
-      color: color,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            primaryColor.withValues(alpha: 0.12),
+            secondaryColor.withValues(alpha: 0.05),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
       child: Center(
-        child: Icon(
-          Icons.inventory_2_rounded,
-          size: 38,
-          color: Colors.grey.shade500,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: primaryColor.withValues(alpha: 0.18),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Icon(
+                iconData,
+                size: 32,
+                color: primaryColor,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                article.reference.isNotEmpty ? article.reference : article.designation.split(' ').first,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: primaryColor,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -691,27 +760,48 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
                     itemCount: _quickPills.length,
                     itemBuilder: (context, index) {
                       final pill = _quickPills[index];
-                      return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(pill['icon'] as IconData, size: 16, color: pill['color'] as Color),
-                            const SizedBox(width: 6),
-                            Text(
-                              pill['label'] as String,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF424242),
+                      return GestureDetector(
+                        onTap: () {
+                          final label = pill['label'] as String;
+                          if (label == 'Coins' || label == 'Prize Land' || label == 'Play & Earn') {
+                            _showRewardDialog(label, pill['icon'] as IconData, pill['color'] as Color);
+                          } else if (label == 'Clearance') {
+                            setState(() => _selectedCategory = 'SuperDeals');
+                            _fetchProducts();
+                          } else if (label == 'Brand+') {
+                            setState(() => _selectedCategory = 'Explore');
+                            _fetchProducts();
+                          }
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.grey.shade200),
+                            boxShadow: [
+                              BoxShadow(
+                                color: (pill['color'] as Color).withValues(alpha: 0.12),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(pill['icon'] as IconData, size: 16, color: pill['color'] as Color),
+                              const SizedBox(width: 6),
+                              Text(
+                                pill['label'] as String,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF424242),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     },
@@ -878,39 +968,57 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
                   child: Row(
                     children: [
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text(
-                              "Top rankings",
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.black87),
-                            ),
-                            Text("Daily rankings", style: TextStyle(fontSize: 11, color: Colors.grey)),
-                          ],
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() => _selectedCategory = 'Explore');
+                            _fetchProducts();
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                "Top rankings",
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.black87),
+                              ),
+                              Text("Daily rankings", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                            ],
+                          ),
                         ),
                       ),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text(
-                              "Viva Fashion",
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.black87),
-                            ),
-                            Text("Your fashion choice", style: TextStyle(fontSize: 11, color: Colors.grey)),
-                          ],
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() => _selectedCategory = 'Fashion');
+                            _fetchProducts();
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                "Viva Fashion",
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.black87),
+                              ),
+                              Text("Your fashion choice", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                            ],
+                          ),
                         ),
                       ),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text(
-                              "Sports Hot",
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.black87),
-                            ),
-                            Text("Peak savings", style: TextStyle(fontSize: 11, color: Colors.grey)),
-                          ],
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() => _selectedCategory = 'Auto-Moto');
+                            _fetchProducts();
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                "Sports Hot",
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: Colors.black87),
+                              ),
+                              Text("Peak savings", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -1073,11 +1181,21 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
           elevation: 0,
           onTap: (index) {
             setState(() => _bottomNavIndex = index);
-            if (index == 3) {
+            if (index == 1) {
+              // Shop -> Focus search or reset category
+              setState(() => _selectedCategory = 'Explore');
+              _fetchProducts();
+            } else if (index == 2) {
+              // Feed -> Show discovery / deals feed
+              _showFeedModal();
+            } else if (index == 3) {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const CartScreen()),
               );
+            } else if (index == 4) {
+              // Account -> Open client account profile / login modal
+              _showAccountModal();
             }
           },
           items: [
@@ -1140,6 +1258,196 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
             const BottomNavigationBarItem(
               icon: Icon(Icons.person_outline_rounded),
               label: "Account",
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRewardDialog(String title, IconData icon, Color color) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(width: 10),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Bienvenue dans $title !", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            const Text(
+              "Gagnez des pièces et profitez de réductions exclusives sur vos prochaines commandes sur Gestion Pro Express.",
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.stars_rounded, color: color, size: 24),
+                  const SizedBox(width: 8),
+                  const Text("+100 Coins aujourd'hui", style: TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: color,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Récupérer", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFeedModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: const [
+                Icon(Icons.wifi_tethering_rounded, color: Color(0xFFFF2442), size: 26),
+                SizedBox(width: 10),
+                Text("Flux Découvertes & Live", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              "Découvrez en direct les nouveautés, arrivages récents et les meilleures opportunités tarifaires du catalogue.",
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const CircleAvatar(backgroundColor: Color(0xFFFFEBEE), child: Icon(Icons.bolt, color: Colors.red)),
+              title: const Text("Vente Flash 24H", style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text("Jusqu'à -50% sur l'outillage et les pièces"),
+              trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+              onTap: () {
+                Navigator.pop(ctx);
+                setState(() => _selectedCategory = 'SuperDeals');
+                _fetchProducts();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAccountModal() {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: const Color(0xFFFF2442).withValues(alpha: 0.1),
+                  child: const Icon(Icons.person, color: Color(0xFFFF2442), size: 30),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        auth.isAuthenticated ? (auth.username ?? "Client") : "Client Invité / Visiteur",
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        auth.isAuthenticated ? "Compte actif • ${auth.role}" : "Mode visiteur actif",
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 32),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.receipt_long_rounded, color: Colors.black87),
+              title: const Text("Mes Commandes & Devis", style: TextStyle(fontWeight: FontWeight.w600)),
+              trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen()));
+              },
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.contact_support_rounded, color: Colors.black87),
+              title: const Text("Assistance & WhatsApp", style: TextStyle(fontWeight: FontWeight.w600)),
+              trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+              onTap: () {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Support client WhatsApp: +227 99 42 52 98")),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF2442),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  if (!auth.isAuthenticated) {
+                    Navigator.pop(context); // Go back to LoginScreen
+                  } else {
+                    auth.logout();
+                    Navigator.pop(context);
+                  }
+                },
+                child: Text(
+                  auth.isAuthenticated ? "Se Déconnecter" : "Ouvrir / Se Connecter à mon compte",
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ),
             ),
           ],
         ),

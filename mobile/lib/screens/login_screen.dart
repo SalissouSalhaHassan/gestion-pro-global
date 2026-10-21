@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/auth_provider.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
+import 'marketplace_store_screen.dart';
 import '../utils/session_timer.dart';
 import '../services/update_service.dart';
 
@@ -332,6 +333,49 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ],
+
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Expanded(child: Divider(color: Colors.grey.shade300)),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: Text("OU VISITER", style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold)),
+                            ),
+                            Expanded(child: Divider(color: Colors.grey.shade300)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Guest Visitor Access to AliExpress Marketplace
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFFFF5000), width: 1.5),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                              backgroundColor: const Color(0xFFFFF4EE),
+                            ),
+                            icon: const Icon(Icons.storefront_rounded, color: Color(0xFFFF5000)),
+                            label: const Text(
+                              "Accès Visiteur / Boutique Express",
+                              style: TextStyle(
+                                color: Color(0xFFFF5000),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const MarketplaceStoreScreen(isGuest: true),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
 
                         // service client moved to top-right help icon
                         // see _showSupportDialog()
