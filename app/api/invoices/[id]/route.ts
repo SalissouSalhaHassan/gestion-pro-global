@@ -178,9 +178,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Facture introuvable ou déjà synchronisée" }, { status: 404 });
     }
 
-    if (invoiceData.is_deleted) {
-      return NextResponse.json({ ok: true, message: "Facture déjà supprimée" });
-    }
+    // If the invoice was already deleted in a prior failed attempt, continue restoring stock so user can recover stock
 
     const orgId = invoiceData.organization_id || session.organization_id || "00000000-0000-0000-0000-000000000001";
     const fallbackDepot = invoiceData.emplacement || session.emplacement || "Boutique";
