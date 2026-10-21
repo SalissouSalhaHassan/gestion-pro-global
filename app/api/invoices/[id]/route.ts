@@ -330,7 +330,7 @@ export async function DELETE(
     }
 
     // 4. Soft delete & mark as cancelled
-    await adminClient
+    const { error: updateErr, data: updatedRow } = await adminClient
       .from("factures")
       .update({ 
         is_deleted: true, 
@@ -338,7 +338,13 @@ export async function DELETE(
         deleted_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
-      .eq("id", invoiceData.id);
+      .or(`id.eq.${invoiceData.id}${invoiceData.bl_number ? `,bl_number.eq.${invoiceData.bl_number}` : ''}`)
+      .select('id, is_deleted, statut');
+
+    if (updateErr) {
+      console.error("[DELETE_INVOICE] Failed to update facture is_deleted:", updateErr);
+      throw new Error(`Erreur lors de la mise à jour de la facture: ${updateErr.message}`);
+    }
 
     await logAuditEvent({
       action_type: "DELETE_INVOICE",

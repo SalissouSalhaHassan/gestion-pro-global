@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server';
 import { InvoiceService } from '@/lib/services/invoice.service';
 import { getServerSession, isAdminOrManager } from '@/lib/auth_helper';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();

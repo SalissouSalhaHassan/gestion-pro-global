@@ -196,7 +196,13 @@ export default function InvoicesPage() {
     try {
       if (!silent) setLoading(true);
       
-      const response = await fetch('/api/invoices');
+      const response = await fetch(`/api/invoices?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       if (!response.ok) throw new Error('Erreur lors du chargement des factures');
       
       const data = await response.json();
