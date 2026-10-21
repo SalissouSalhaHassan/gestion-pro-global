@@ -193,31 +193,52 @@ export async function DELETE(
       .select("article_id, qte, pu_ht, depot_origine, depot_id")
       .eq("facture_id", id);
 
+    // Fetch active depots for resolving depot_id <-> depot_nom
+    const { data: allDepots } = await adminClient
+      .from("depots")
+      .select("id, nom, organization_id")
+      .eq("is_deleted", false);
+
+    const depotList = (allDepots || []) as Array<{ id: number; nom: string; organization_id?: string }>;
+
+    // Helper to resolve depot name and id
+    function resolveDepot(rawName?: string | null, rawId?: number | string | null) {
+      let dNom = String(rawName || fallbackDepot || "Boutique").trim();
+      let dId: number | null = rawId ? Number(rawId) : null;
+
+      if (!dId && dNom) {
+        const found = depotList.find((d) => d.nom.trim().toLowerCase() === dNom.toLowerCase());
+        if (found) {
+          dId = Number(found.id);
+          dNom = found.nom;
+        }
+      } else if (dId && (!dNom || dNom === "Boutique")) {
+        const found = depotList.find((d) => Number(d.id) === dId);
+        if (found) dNom = found.nom;
+      }
+      return { depotNom: dNom, depotId: dId };
+    }
+
     if (items && items.length > 0) {
       for (const item of items) {
         const artId = Number(item.article_id);
         const qte = Number(item.qte || 0);
         if (!artId || qte <= 0) continue;
 
-        const rawDepotNom = String(item.depot_origine || fallbackDepot).trim();
+        const { depotNom, depotId } = resolveDepot(item.depot_origine, item.depot_id);
 
         // Query stocks for this article
         const { data: stockRows } = await adminClient
           .from("stocks")
-          .select("id, quantite, depot_nom, organization_id")
+          .select("id, quantite, depot_nom, warehouse_id, organization_id")
           .eq("article_id", artId);
 
-        // Find matching stock row by normalized depot name
+        // Find matching stock row by warehouse_id OR normalized depot name
         const matchedStock = (stockRows || []).find((s: any) => {
+          if (depotId && s.warehouse_id && Number(s.warehouse_id) === Number(depotId)) return true;
           const sDepot = String(s.depot_nom || "").trim().toLowerCase();
-          const targetDepot = rawDepotNom.toLowerCase();
-          const matchesDepot = sDepot === targetDepot;
-          // Match same org or default org or null org
-          const matchesOrg = !s.organization_id || !orgId || s.organization_id === orgId;
-          return matchesDepot && matchesOrg;
-        }) || (stockRows || []).find((s: any) => {
-          return String(s.depot_nom || "").trim().toLowerCase() === rawDepotNom.toLowerCase();
-        });
+          return sDepot === depotNom.toLowerCase();
+        }) || (stockRows || [])[0];
 
         const oldQty = matchedStock ? Number(matchedStock.quantite || 0) : 0;
         const newQty = oldQty + qte;
@@ -225,14 +246,19 @@ export async function DELETE(
         if (matchedStock?.id) {
           await adminClient
             .from("stocks")
-            .update({ quantite: newQty })
+            .update({ 
+              quantite: newQty,
+              depot_nom: matchedStock.depot_nom || depotNom,
+              warehouse_id: matchedStock.warehouse_id || depotId || null
+            })
             .eq("id", matchedStock.id);
         } else {
           await adminClient
             .from("stocks")
             .insert({
               article_id: artId,
-              depot_nom: rawDepotNom,
+              depot_nom: depotNom,
+              warehouse_id: depotId || null,
               quantite: newQty,
               organization_id: orgId
             });
@@ -251,7 +277,8 @@ export async function DELETE(
           stock_avant: oldQty,
           stock_apres: newQty,
           type: "ENTREE_ANNULATION",
-          depot: rawDepotNom,
+          depot: depotNom,
+          warehouse_id: depotId || null,
           utilisateur: session.username || "System",
           organization_id: orgId
         });
