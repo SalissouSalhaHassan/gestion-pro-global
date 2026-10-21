@@ -255,19 +255,32 @@ export default function InvoicesPage() {
     
     try {
       setLoading(true);
+
+      // Check if it's a pending offline invoice
+      const offlinePending = getPendingOfflineInvoices();
+      const isOffline = offlinePending.some(inv => inv.offlineId === invoiceId || inv.bl_number === invoiceId);
+
+      if (isOffline) {
+        removePendingOfflineInvoice(String(invoiceId));
+        setRefreshKey(prev => prev + 1);
+        alert(locale === "ar" ? "تم حذف الفاتورة المحلية بنجاح." : "Facture locale supprimée avec succès.");
+        return;
+      }
+
       const response = await fetch(`/api/invoices/${invoiceId}`, {
         method: 'DELETE'
       });
 
       if (!response.ok) {
         const errData = await response.json();
-        throw new Error(errData.error || "Erreur lors de la suppression");
+        throw new Error(errData.error || (locale === "ar" ? "فشل حذف الفاتورة" : "Erreur lors de la suppression"));
       }
       
       setRefreshKey(prev => prev + 1);
+      alert(locale === "ar" ? "تم حذف الفاتورة وإرجاع الكميات إلى المخزن بنجاح ✅" : "Facture supprimée et stock réajusté avec succès ✅");
     } catch (err: any) {
       console.error("Error deleting invoice:", err);
-      alert(err.message || "Erreur lors de la suppression.");
+      alert(err.message || (locale === "ar" ? "حدث خطأ أثناء محاولة الحذف." : "Erreur lors de la suppression."));
     } finally {
       setLoading(false);
     }

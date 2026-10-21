@@ -169,17 +169,25 @@ export async function DELETE(
     // Use Admin Client directly to guarantee 100% reliable execution and bypass any RLS or missing RPC issues
     const adminClient = getAdminClient();
 
-    const numericId = !isNaN(Number(id)) ? Number(id) : id;
+    const isNumeric = !isNaN(Number(id));
+    const numericId = isNumeric ? Number(id) : null;
 
     // 1. Fetch invoice and invoice_items before marking as deleted
-    const { data: invoiceData, error: invFetchErr } = await adminClient
+    let query = adminClient
       .from("factures")
-      .select("id, bl_number, emplacement, organization_id, client_id, montant_restant, is_deleted")
-      .or(`id.eq.${id},id.eq.${numericId}`)
-      .maybeSingle();
+      .select("id, bl_number, emplacement, organization_id, client_id, montant_restant, is_deleted");
+
+    if (numericId !== null) {
+      query = query.or(`id.eq.${numericId},bl_number.eq.${id}`);
+    } else {
+      query = query.or(`bl_number.eq.${id}`);
+    }
+
+    const { data: invoiceData, error: invFetchErr } = await query.maybeSingle();
 
     if (invFetchErr || !invoiceData) {
-      return NextResponse.json({ error: "Facture introuvable" }, { status: 404 });
+      console.warn("DELETE invoice not found in DB for id/bl:", id);
+      return NextResponse.json({ error: "Facture introuvable ou déjà synchronisée" }, { status: 404 });
     }
 
     if (invoiceData.is_deleted) {
