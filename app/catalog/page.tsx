@@ -29,10 +29,101 @@ import {
   ExternalLink,
   ChevronRight,
   Clock,
-  Check
+  Check,
+  Globe,
+  Star,
+  Zap,
+  TrendingUp,
+  BadgeCheck
 } from "lucide-react";
 import { formatCurrencyAmount, convertCurrency, SUPPORTED_CURRENCIES } from "@/lib/utils/currency";
 import { openWhatsAppDirect } from "@/lib/utils/whatsapp";
+
+type Language = "fr" | "ar" | "en";
+
+const CATALOG_TRANSLATIONS = {
+  fr: {
+    heroBadge: "Plateforme B2B/B2C Internationale • Stocks Certifiés en Temps Réel",
+    heroTitle1: "Commandez vos produits en direct au",
+    heroHighlight: "Meilleur Tarif Mondial",
+    heroSub: "Explorez notre inventaire certifié en temps réel, bénéficiez de tarifs dégressifs d'usine et commandez instantanément avec assistance multilingue.",
+    searchPlaceholder: "Rechercher par article, référence, désignation, code-barres...",
+    filterAll: "Tous les articles",
+    inStock: "✓ En Stock Immédiat",
+    wholesale: "🏷️ Tarifs Gros Disponibles",
+    pillarExpress: "Livraison Mondiale Sécurisée",
+    pillarExpressSub: "Expédition rapide & suivi en direct",
+    pillarQuality: "Produits 100% Certifiés",
+    pillarQualitySub: "Garantie d'authenticité & conformité",
+    pillarPrice: "Tarifs Dégressifs d'Usine",
+    pillarPriceSub: "Prix direct fabricant & gros volume",
+    pillarSupport: "Support VIP Dédié 24/7",
+    pillarSupportSub: "Conseiller personnel multilingue",
+    quickView: "Aperçu rapide",
+    addToCart: "Ajouter au panier",
+    inCart: "au panier",
+    unitPrice: "Prix Unitaire :",
+    wholesaleDiscount: "Tarif Gros",
+    cartTitle: "Mon Panier d'Achat",
+    checkoutWhatsapp: "Finaliser la commande sur WhatsApp",
+    currency: "Devise",
+    verified: "Vérifié & Certifié",
+  },
+  ar: {
+    heroBadge: "المنصة العالمية للتجارة B2B/B2C • مخزون معتمد بالوقت الفعلي",
+    heroTitle1: "اطلب منتجاتك مباشرة وبأفضل",
+    heroHighlight: "الأسعار العالمية التنافسية",
+    heroSub: "استكشف كتالوج المنتجات المعتمدة في الوقت الفعلي، واستفد من أسعار الجملة المباشرة من المصنع، واطلب بنقرة واحدة عبر الواتساب.",
+    searchPlaceholder: "ابحث بالاسم، الكود، الباركود، أو الوصف...",
+    filterAll: "جميع المنتجات",
+    inStock: "✓ متوفر في المخزن فوراً",
+    wholesale: "🏷️ أسعار الجملة متاحة",
+    pillarExpress: "شحن وتوصيل عالمي فائق السرعة",
+    pillarExpressSub: "شحن آمن وتتبع فوري للطلبات",
+    pillarQuality: "منتجات أصلية معتمدة 100%",
+    pillarQualitySub: "ضمان الجودة والمطابقة الدولية",
+    pillarPrice: "أسعار الجملة من المصنع مباشرة",
+    pillarPriceSub: "تخفيضات تدريجية على الكميات الكبيرة",
+    pillarSupport: "دعم مخصص VIP على مدار الساعة",
+    pillarSupportSub: "مساعدك الشخصي للطلبيات السريعة",
+    quickView: "نظرة سريعة",
+    addToCart: "إضافة إلى السلة",
+    inCart: "في السلة",
+    unitPrice: "سعر القطعة :",
+    wholesaleDiscount: "سعر الجملة",
+    cartTitle: "سلة المشتريات",
+    checkoutWhatsapp: "إتمام وتأكيد الطلب عبر واتساب",
+    currency: "العملة",
+    verified: "موثق ومعتمد",
+  },
+  en: {
+    heroBadge: "Global B2B/B2C Enterprise Hub • Real-time Certified Inventory",
+    heroTitle1: "Order your products directly at the",
+    heroHighlight: "Best Global Price",
+    heroSub: "Browse our live certified inventory, unlock tier-1 wholesale discounts, and place instant orders via WhatsApp with multilingual support.",
+    searchPlaceholder: "Search by product, reference, barcode, SKU...",
+    filterAll: "All Products",
+    inStock: "✓ In Immediate Stock",
+    wholesale: "🏷️ Wholesale Tiers Available",
+    pillarExpress: "Global Express Delivery",
+    pillarExpressSub: "Fast & secured dispatch worldwide",
+    pillarQuality: "100% Certified Genuine",
+    pillarQualitySub: "Authenticity & compliance guarantee",
+    pillarPrice: "Factory Direct Pricing",
+    pillarPriceSub: "Volume-based wholesale discounts",
+    pillarSupport: "24/7 Dedicated VIP Support",
+    pillarSupportSub: "Personal multilingual business rep",
+    quickView: "Quick view",
+    addToCart: "Add to cart",
+    inCart: "in cart",
+    unitPrice: "Unit Price:",
+    wholesaleDiscount: "Wholesale",
+    cartTitle: "Shopping Bag",
+    checkoutWhatsapp: "Complete Order via WhatsApp",
+    currency: "Currency",
+    verified: "Verified & Certified",
+  }
+};
 
 type Product = {
   id: number;
@@ -89,6 +180,10 @@ export default function PublicCatalogPage() {
 
   // Currency conversion
   const [selectedCurrency, setSelectedCurrency] = useState<string>("FCFA");
+  
+  // International Language state (fr, ar, en)
+  const [lang, setLang] = useState<Language>("fr");
+  const tr = CATALOG_TRANSLATIONS[lang];
 
   // Cart Drawer & Quick View
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -208,11 +303,11 @@ export default function PublicCatalogPage() {
   const handleSendWhatsAppOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !customerPhone.trim()) {
-      alert("Veuillez renseigner votre nom et votre numéro de téléphone.");
+      alert(lang === "ar" ? "يرجى إدخال اسمك ورقم هاتفك." : lang === "en" ? "Please enter your full name and phone number." : "Veuillez renseigner votre nom et votre numéro de téléphone.");
       return;
     }
     if (cart.length === 0) {
-      alert("Votre panier est vide.");
+      alert(lang === "ar" ? "سلة التسوق فارغة." : lang === "en" ? "Your cart is empty." : "Votre panier est vide.");
       return;
     }
 
@@ -223,30 +318,59 @@ export default function PublicCatalogPage() {
       localStorage.setItem("gp_catalog_customer_address", deliveryAddress);
     } catch (e) {}
 
+    const isAr = lang === "ar";
+    const isEn = lang === "en";
+
     const itemsText = cart
       .map((it, idx) => {
-        const unitPriceStr = Number(it.product.p_vente_ttc).toLocaleString("fr-FR");
-        const lineTotalStr = (it.quantity * Number(it.product.p_vente_ttc)).toLocaleString("fr-FR");
-        return `${idx + 1}. *${it.product.designation}* (Réf: ${it.product.reference})\n   ↳ Qté : *${it.quantity}* × ${unitPriceStr} F = *${lineTotalStr} FCFA*`;
+        const unitPriceStr = displayPrice(it.product.p_vente_ttc);
+        const lineTotalStr = displayPrice(it.quantity * Number(it.product.p_vente_ttc));
+        if (isAr) {
+          return `${idx + 1}. *${it.product.designation}* (كود: ${it.product.reference})\n   ↳ الكمية: *${it.quantity}* × ${unitPriceStr} = *${lineTotalStr}*`;
+        }
+        if (isEn) {
+          return `${idx + 1}. *${it.product.designation}* (SKU: ${it.product.reference})\n   ↳ Qty: *${it.quantity}* × ${unitPriceStr} = *${lineTotalStr}*`;
+        }
+        return `${idx + 1}. *${it.product.designation}* (Réf: ${it.product.reference})\n   ↳ Qté : *${it.quantity}* × ${unitPriceStr} = *${lineTotalStr}*`;
       })
       .join("\n\n");
 
-    const message =
-      `🛍️ *NOUVELLE COMMANDE EN LIGNE - ${company.nom_entreprise.toUpperCase()}*\n\n` +
-      `👤 *Client :* ${customerName}\n` +
-      `📱 *Téléphone :* ${customerPhone}\n` +
-      (deliveryAddress ? `📍 *Adresse de livraison :* ${deliveryAddress}\n` : "") +
-      (orderNotes ? `📝 *Notes particulières :* ${orderNotes}\n` : "") +
-      `\n📋 *ARTICLES COMMANDÉS :*\n\n${itemsText}\n\n` +
-      `💰 *TOTAL À RÉGLER :* *${totalCartAmountFCFA.toLocaleString("fr-FR")} FCFA*\n\n` +
-      `⚡ Prière de confirmer la réception de ma commande et le délai de livraison. Merci !`;
+    const message = isAr
+      ? `🛍️ *طلب شراء دولي جديد - ${company.nom_entreprise.toUpperCase()}*\n\n` +
+        `👤 *العميل :* ${customerName}\n` +
+        `📱 *الهاتف :* ${customerPhone}\n` +
+        (deliveryAddress ? `📍 *عنوان التوصيل :* ${deliveryAddress}\n` : "") +
+        (orderNotes ? `📝 *ملاحظات خاصة :* ${orderNotes}\n` : "") +
+        `\n📋 *المنتجات المطلوبة :*\n\n${itemsText}\n\n` +
+        `💰 *إجمالي الطلب :* *${displayPrice(totalCartAmountFCFA)}*\n\n` +
+        `⚡ يرجى تأكيد استلام الطلب وتحديد موعد التوصيل. شكراً لك!`
+      : isEn
+      ? `🛍️ *NEW ENTERPRISE ORDER - ${company.nom_entreprise.toUpperCase()}*\n\n` +
+        `👤 *Customer :* ${customerName}\n` +
+        `📱 *Phone :* ${customerPhone}\n` +
+        (deliveryAddress ? `📍 *Shipping Address :* ${deliveryAddress}\n` : "") +
+        (orderNotes ? `📝 *Special Notes :* ${orderNotes}\n` : "") +
+        `\n📋 *ORDERED ITEMS :*\n\n${itemsText}\n\n` +
+        `💰 *TOTAL AMOUNT :* *${displayPrice(totalCartAmountFCFA)}*\n\n` +
+        `⚡ Please confirm order reception and estimated dispatch time. Thank you!`
+      : `🛍️ *NOUVELLE COMMANDE EN LIGNE - ${company.nom_entreprise.toUpperCase()}*\n\n` +
+        `👤 *Client :* ${customerName}\n` +
+        `📱 *Téléphone :* ${customerPhone}\n` +
+        (deliveryAddress ? `📍 *Adresse de livraison :* ${deliveryAddress}\n` : "") +
+        (orderNotes ? `📝 *Notes particulières :* ${orderNotes}\n` : "") +
+        `\n📋 *ARTICLES COMMANDÉS :*\n\n${itemsText}\n\n` +
+        `💰 *TOTAL À RÉGLER :* *${displayPrice(totalCartAmountFCFA)}*\n\n` +
+        `⚡ Prière de confirmer la réception de ma commande et le délai de livraison. Merci !`;
 
     openWhatsAppDirect(company.telephone || "", message);
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
-      {/* 1. Header Bar - Glassmorphism Luxury Header */}
+    <div
+      dir={lang === "ar" ? "rtl" : "ltr"}
+      className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white"
+    >
+      {/* 1. Header Bar - World-Class Enterprise Luxury Header */}
       <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-2xl border-b border-white/10 shadow-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
@@ -258,19 +382,56 @@ export default function PublicCatalogPage() {
                 <h1 className="text-base sm:text-lg font-black tracking-tight text-white">
                   {company.nom_entreprise}
                 </h1>
-                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                  Vérifié
+                  {tr.verified}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5">
-                <span>Catalogue Officiel & B2B/B2C</span>
+                <span>{lang === "ar" ? "الكتالوج الرسمي العالمي • B2B / B2C" : lang === "en" ? "Official Enterprise Catalog • B2B / B2C" : "Catalogue Officiel & B2B/B2C"}</span>
                 {company.adresse && <span>• {company.adresse}</span>}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Multilingual Selector (FR, AR, EN) */}
+            <div className="flex items-center bg-white/5 border border-white/15 rounded-xl p-1 gap-1">
+              <button
+                onClick={() => setLang("fr")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                  lang === "fr"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                    : "text-slate-400 hover:text-white"
+                }`}
+                title="Français"
+              >
+                FR 🇫🇷
+              </button>
+              <button
+                onClick={() => setLang("ar")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                  lang === "ar"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                    : "text-slate-400 hover:text-white"
+                }`}
+                title="العربية"
+              >
+                AR 🇸🇦
+              </button>
+              <button
+                onClick={() => setLang("en")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                  lang === "en"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                    : "text-slate-400 hover:text-white"
+                }`}
+                title="English"
+              >
+                EN 🇬🇧
+              </button>
+            </div>
+
             {/* Currency Selector */}
             <div className="relative hidden md:flex items-center">
               <select
@@ -289,12 +450,12 @@ export default function PublicCatalogPage() {
             {/* Direct WhatsApp Pill */}
             {company.telephone && (
               <button
-                onClick={() => openWhatsAppDirect(company.telephone, `Bonjour ${company.nom_entreprise}, je consulte votre catalogue et j'aimerais avoir des informations.`)}
+                onClick={() => openWhatsAppDirect(company.telephone, lang === "ar" ? `مرحباً ${company.nom_entreprise}، أود الاستفسار عن بعض المنتجات من الكتالوج.` : lang === "en" ? `Hello ${company.nom_entreprise}, I am browsing your catalog and would like some assistance.` : `Bonjour ${company.nom_entreprise}, je consulte votre catalogue et j'aimerais avoir des informations.`)}
                 className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition-all cursor-pointer"
-                title="Contacter sur WhatsApp"
+                title="WhatsApp Direct"
               >
                 <MessageCircle size={15} />
-                <span>Assistance Directe</span>
+                <span>{lang === "ar" ? "مساعدة مباشرة" : lang === "en" ? "VIP Direct Support" : "Assistance Directe"}</span>
               </button>
             )}
 
@@ -306,7 +467,7 @@ export default function PublicCatalogPage() {
             >
               {linkCopied ? <Check size={16} className="text-emerald-400" /> : <Share2 size={16} />}
               <span className="hidden sm:inline">
-                {linkCopied ? "Lien copié !" : "Partager"}
+                {linkCopied ? (lang === "ar" ? "تم النسخ!" : lang === "en" ? "Copied!" : "Lien copié !") : (lang === "ar" ? "مشاركة" : lang === "en" ? "Share" : "Partager")}
               </span>
             </button>
 
@@ -316,7 +477,7 @@ export default function PublicCatalogPage() {
               className="relative px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-black shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2 cursor-pointer border border-white/15 active:scale-95"
             >
               <ShoppingBag size={18} />
-              <span className="hidden sm:inline">Panier</span>
+              <span className="hidden sm:inline">{tr.cartTitle}</span>
               {totalCartItemsCount > 0 && (
                 <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black animate-pulse">
                   {totalCartItemsCount}
@@ -336,18 +497,18 @@ export default function PublicCatalogPage() {
         <div className="max-w-4xl mx-auto text-center space-y-5 relative z-10">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/15 text-indigo-300 text-xs font-bold backdrop-blur-xl shadow-inner">
             <Sparkles size={14} className="text-amber-400 animate-spin" />
-            <span>Catalogue Direct Grossiste & Détail • Synchronisé en Direct</span>
+            <span>{tr.heroBadge}</span>
           </div>
 
           <h2 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white leading-tight">
-            Commandez vos produits en direct au{" "}
+            {tr.heroTitle1}{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400">
-              Meilleur Tarif
+              {tr.heroHighlight}
             </span>
           </h2>
 
           <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed font-medium">
-            Explorez notre stock certifié en temps réel, bénéficiez de tarifs dégressifs pour commerçants et passez commande en 1 clic via WhatsApp.
+            {tr.heroSub}
           </p>
 
           {/* Luxury Search Engine Bar */}
@@ -355,13 +516,13 @@ export default function PublicCatalogPage() {
             <div className="relative group">
               <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-3xl blur-md opacity-25 group-hover:opacity-60 transition duration-300"></div>
               <div className="relative flex items-center bg-slate-900/90 rounded-2xl border border-white/20 p-1.5 shadow-2xl backdrop-blur-xl">
-                <Search size={20} className="ml-3 text-slate-400" />
+                <Search size={20} className="mx-3 text-slate-400 shrink-0" />
                 <input
                   type="text"
-                  placeholder="Rechercher par article, référence, désignation, code-barres..."
+                  placeholder={tr.searchPlaceholder}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full px-4 py-3 bg-transparent text-white placeholder:text-slate-400 text-sm font-semibold focus:outline-none"
+                  className="w-full px-2 py-3 bg-transparent text-white placeholder:text-slate-400 text-sm font-semibold focus:outline-none"
                 />
                 {search && (
                   <button
@@ -384,7 +545,7 @@ export default function PublicCatalogPage() {
                     : "bg-white/5 border-white/10 text-slate-400 hover:text-white"
                 }`}
               >
-                ✓ En Stock Immédiat
+                {tr.inStock}
               </button>
               <button
                 onClick={() => setFilterWholesaleOnly(!filterWholesaleOnly)}
@@ -394,7 +555,7 @@ export default function PublicCatalogPage() {
                     : "bg-white/5 border-white/10 text-slate-400 hover:text-white"
                 }`}
               >
-                🏷️ Tarif Gros Disponible
+                {tr.wholesale}
               </button>
             </div>
           </div>
@@ -409,8 +570,8 @@ export default function PublicCatalogPage() {
               <Truck size={18} />
             </div>
             <div>
-              <span className="font-bold block text-white">Livraison Express</span>
-              <span className="text-[11px] text-slate-400">Expédition rapide sécurisée</span>
+              <span className="font-bold block text-white">{tr.pillarExpress}</span>
+              <span className="text-[11px] text-slate-400">{tr.pillarExpressSub}</span>
             </div>
           </div>
 
@@ -419,8 +580,8 @@ export default function PublicCatalogPage() {
               <ShieldCheck size={18} />
             </div>
             <div>
-              <span className="font-bold block text-white">Produits Certifiés</span>
-              <span className="text-[11px] text-slate-400">Garantie d'authenticité</span>
+              <span className="font-bold block text-white">{tr.pillarQuality}</span>
+              <span className="text-[11px] text-slate-400">{tr.pillarQualitySub}</span>
             </div>
           </div>
 
@@ -429,8 +590,8 @@ export default function PublicCatalogPage() {
               <Tag size={18} />
             </div>
             <div>
-              <span className="font-bold block text-white">Tarifs Dégressifs</span>
-              <span className="text-[11px] text-slate-400">Prix de gros sur volume</span>
+              <span className="font-bold block text-white">{tr.pillarPrice}</span>
+              <span className="text-[11px] text-slate-400">{tr.pillarPriceSub}</span>
             </div>
           </div>
 
@@ -439,8 +600,8 @@ export default function PublicCatalogPage() {
               <MessageCircle size={18} />
             </div>
             <div>
-              <span className="font-bold block text-white">WhatsApp Direct</span>
-              <span className="text-[11px] text-slate-400">Devis & commande instantanée</span>
+              <span className="font-bold block text-white">{tr.pillarSupport}</span>
+              <span className="text-[11px] text-slate-400">{tr.pillarSupportSub}</span>
             </div>
           </div>
         </div>
@@ -458,7 +619,7 @@ export default function PublicCatalogPage() {
             }`}
           >
             <Layers size={14} />
-            <span>Tous les articles ({products.length})</span>
+            <span>{tr.filterAll} ({products.length})</span>
           </button>
           {categories.map((cat) => {
             const countInCat = products.filter((p) => p.famille === cat).length;
@@ -551,11 +712,11 @@ export default function PublicCatalogPage() {
                       {product.is_in_stock ? (
                         <span className="px-2.5 py-1 rounded-xl text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 backdrop-blur-md flex items-center gap-1 shadow-sm">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                          En stock
+                          {lang === "ar" ? "متوفر" : lang === "en" ? "In Stock" : "En stock"}
                         </span>
                       ) : (
                         <span className="px-2.5 py-1 rounded-xl text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 backdrop-blur-md">
-                          Sur commande
+                          {lang === "ar" ? "عند الطلب" : lang === "en" ? "On Order" : "Sur commande"}
                         </span>
                       )}
                     </div>
@@ -564,7 +725,7 @@ export default function PublicCatalogPage() {
                     <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                       <span className="px-3.5 py-1.5 rounded-xl bg-white text-slate-950 text-xs font-black shadow-xl flex items-center gap-1.5 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-200">
                         <Eye size={14} />
-                        <span>Aperçu rapide</span>
+                        <span>{tr.quickView}</span>
                       </span>
                     </div>
 
@@ -587,7 +748,7 @@ export default function PublicCatalogPage() {
                         </span>
                         {product.article_par_colis && Number(product.article_par_colis) > 1 && (
                           <span className="text-[10px] text-slate-400">
-                            Colis de {product.article_par_colis}
+                            {lang === "ar" ? `طرد من ${product.article_par_colis}` : lang === "en" ? `Pack of ${product.article_par_colis}` : `Colis de ${product.article_par_colis}`}
                           </span>
                         )}
                       </div>
@@ -606,7 +767,7 @@ export default function PublicCatalogPage() {
                       <div className="flex items-baseline justify-between pt-2">
                         <div>
                           <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">
-                            Prix Unitaire :
+                            {tr.unitPrice}
                           </span>
                           <span className="text-lg font-black font-mono text-white">
                             {displayPrice(product.p_vente_ttc)}
@@ -616,7 +777,7 @@ export default function PublicCatalogPage() {
                         {hasWholesale && (
                           <div className="text-right">
                             <span className="inline-block px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[9px] font-black border border-purple-500/30">
-                              -{wholesaleDiscount}% Gros
+                              -{wholesaleDiscount}% {tr.wholesaleDiscount}
                             </span>
                             <span className="text-xs font-black font-mono text-purple-400 block mt-0.5">
                               {displayPrice(product.prix_gros!)}
@@ -639,7 +800,7 @@ export default function PublicCatalogPage() {
                               {inCartItem.quantity}
                             </span>
                             <span className="block text-[9px] text-slate-400 uppercase font-bold">
-                              au panier
+                              {tr.inCart}
                             </span>
                           </div>
                           <button
@@ -655,7 +816,7 @@ export default function PublicCatalogPage() {
                           className="w-full py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/20 border border-white/10 active:scale-98"
                         >
                           <Plus size={16} />
-                          <span>Ajouter au panier</span>
+                          <span>{tr.addToCart}</span>
                         </button>
                       )}
                     </div>
@@ -746,7 +907,7 @@ export default function PublicCatalogPage() {
                   onClick={() => setQuickViewProduct(null)}
                   className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all cursor-pointer"
                 >
-                  Fermer
+                  {lang === "ar" ? "إغلاق" : lang === "en" ? "Close" : "Fermer"}
                 </button>
                 <button
                   onClick={() => {
@@ -756,7 +917,7 @@ export default function PublicCatalogPage() {
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-black shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <Plus size={16} />
-                  <span>Ajouter au Panier</span>
+                  <span>{tr.addToCart}</span>
                 </button>
               </div>
             </div>
@@ -775,8 +936,10 @@ export default function PublicCatalogPage() {
                   <ShoppingBag size={20} />
                 </div>
                 <div>
-                  <h3 className="font-black text-sm text-white">Votre Panier Direct</h3>
-                  <p className="text-[11px] text-slate-400">{totalCartItemsCount} article(s) sélectionnés</p>
+                  <h3 className="font-black text-sm text-white">{tr.cartTitle}</h3>
+                  <p className="text-[11px] text-slate-400">
+                    {lang === "ar" ? `${totalCartItemsCount} منتج محدد` : lang === "en" ? `${totalCartItemsCount} item(s) selected` : `${totalCartItemsCount} article(s) sélectionnés`}
+                  </p>
                 </div>
               </div>
               <button
@@ -792,15 +955,17 @@ export default function PublicCatalogPage() {
               {cart.length === 0 ? (
                 <div className="py-20 text-center space-y-3">
                   <ShoppingBag size={48} className="mx-auto text-slate-600" />
-                  <p className="font-bold text-slate-300 text-sm">Votre panier est encore vide</p>
+                  <p className="font-bold text-slate-300 text-sm">
+                    {lang === "ar" ? "سلة المشتريات فارغة حالياً" : lang === "en" ? "Your cart is currently empty" : "Votre panier est encore vide"}
+                  </p>
                   <p className="text-xs text-slate-500">
-                    Parcourez les articles et cliquez sur "Ajouter au panier".
+                    {lang === "ar" ? "تصفح المنتجات وأضف ما ترغب لشرائه بنقرة واحدة." : lang === "en" ? "Browse products and click 'Add to Cart'." : 'Parcourez les articles et cliquez sur "Ajouter au panier".'}
                   </p>
                   <button
                     onClick={() => setIsCartOpen(false)}
                     className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all cursor-pointer mt-2"
                   >
-                    Retour aux produits
+                    {lang === "ar" ? "العودة للتسوق" : lang === "en" ? "Return to Products" : "Retour aux produits"}
                   </button>
                 </div>
               ) : (
@@ -872,11 +1037,11 @@ export default function PublicCatalogPage() {
                 {/* Total Summary */}
                 <div className="space-y-1.5 text-xs">
                   <div className="flex items-center justify-between text-slate-400">
-                    <span>Nombre d'articles :</span>
+                    <span>{lang === "ar" ? "عدد المنتجات :" : lang === "en" ? "Items count:" : "Nombre d'articles :"}</span>
                     <span className="font-bold text-white">{totalCartItemsCount}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm pt-1 border-t border-white/5">
-                    <span className="font-bold text-slate-300">Total Commande :</span>
+                    <span className="font-bold text-slate-300">{lang === "ar" ? "المجموع الكلي للطلب :" : lang === "en" ? "Order Total:" : "Total Commande :"}</span>
                     <span className="font-black text-xl text-white font-mono">
                       {displayPrice(totalCartAmountFCFA)}
                     </span>
@@ -888,7 +1053,7 @@ export default function PublicCatalogPage() {
                   <input
                     type="text"
                     required
-                    placeholder="Votre nom complet *"
+                    placeholder={lang === "ar" ? "الاسم الكامل *" : lang === "en" ? "Full Name *" : "Votre nom complet *"}
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     className="w-full px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -897,7 +1062,7 @@ export default function PublicCatalogPage() {
                   <input
                     type="tel"
                     required
-                    placeholder="Votre numéro de téléphone (WhatsApp) *"
+                    placeholder={lang === "ar" ? "رقم الهاتف / الواتساب للتواصل *" : lang === "en" ? "Phone number / WhatsApp *" : "Votre numéro de téléphone (WhatsApp) *"}
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
                     className="w-full px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -905,7 +1070,7 @@ export default function PublicCatalogPage() {
 
                   <input
                     type="text"
-                    placeholder="Adresse / Quartier de livraison (Optionnel)"
+                    placeholder={lang === "ar" ? "عنوان التوصيل أو المدينة (اختياري)" : lang === "en" ? "Delivery address or city (Optional)" : "Adresse / Quartier de livraison (Optionnel)"}
                     value={deliveryAddress}
                     onChange={(e) => setDeliveryAddress(e.target.value)}
                     className="w-full px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -916,7 +1081,7 @@ export default function PublicCatalogPage() {
                     className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-black shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 mt-2"
                   >
                     <MessageCircle size={18} />
-                    <span>Envoyer ma commande sur WhatsApp</span>
+                    <span>{tr.checkoutWhatsapp}</span>
                   </button>
                 </form>
               </div>
@@ -930,11 +1095,17 @@ export default function PublicCatalogPage() {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
           <div>
             <span className="font-bold text-slate-300 block">{company.nom_entreprise}</span>
-            <span>Système de vente et distribution officiel • Tous droits réservés 2026</span>
+            <span>
+              {lang === "ar"
+                ? "منظومة التجارة والتوزيع والمبيعات المعتمدة عالمياً • جميع الحقوق محفوظة 2026"
+                : lang === "en"
+                ? "Global Certified Distribution & Sales System • All rights reserved 2026"
+                : "Système de vente et distribution officiel • Tous droits réservés 2026"}
+            </span>
           </div>
           <div className="flex items-center gap-3">
             <span className="px-2.5 py-1 rounded-lg bg-white/5 text-slate-400 border border-white/10">
-              Propulsé par GestionPro Global Enterprise
+              {lang === "ar" ? "مدعوم بواسطة GestionPro Global Enterprise العالمية" : "Propulsé par GestionPro Global Enterprise"}
             </span>
           </div>
         </div>
