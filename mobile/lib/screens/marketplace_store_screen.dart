@@ -938,7 +938,7 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
                       mainAxisSpacing: 16,
                       childAspectRatio: 0.68,
                     ),
-                    sliver: SliverChildBuilderDelegate(
+                    delegate: SliverChildBuilderDelegate(
                       (context, index) {
                         final article = _articles[index];
                         final discount = _calculateDiscount(article);

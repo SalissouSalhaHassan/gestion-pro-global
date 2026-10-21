@@ -37,7 +37,7 @@ class _CorbeilleScreenState extends State<CorbeilleScreen> with SingleTickerProv
 
   Future<void> _loadDeletedItems() async {
     setState(() => _isLoading = true);
-    final supabase = SupabaseService.instance;
+    final supabase = SupabaseService();
     await supabase.init();
     final client = supabase.client;
 
@@ -51,41 +51,37 @@ class _CorbeilleScreenState extends State<CorbeilleScreen> with SingleTickerProv
       final orgId = auth.organizationId;
 
       // 1. Fetch deleted invoices
-      var invQuery = client
+      var invBuilder = client
           .from('factures')
           .select('id, bl_number, date_facture, total_ttc, deleted_at, vendeur, emplacement, clients(nom)')
-          .eq('is_deleted', true)
-          .order('deleted_at', {ascending: false})
-          .limit(100);
+          .eq('is_deleted', true);
 
-      if (orgId.isNotEmpty) {
-        invQuery = invQuery.eq('organization_id', orgId);
+      if (orgId != null && orgId.isNotEmpty) {
+        invBuilder = invBuilder.eq('organization_id', orgId);
       }
-      final invRes = await invQuery;
+      final invRes = await invBuilder.order('deleted_at', ascending: false).limit(100);
 
       // 2. Fetch deleted articles
-      var artQuery = client
+      var artBuilder = client
           .from('articles')
           .select('id, reference, designation, p_vente_ttc, updated_at')
-          .eq('is_deleted', true)
-          .limit(100);
+          .eq('is_deleted', true);
 
-      if (orgId.isNotEmpty) {
-        artQuery = artQuery.eq('organization_id', orgId);
+      if (orgId != null && orgId.isNotEmpty) {
+        artBuilder = artBuilder.eq('organization_id', orgId);
       }
-      final artRes = await artQuery;
+      final artRes = await artBuilder.order('updated_at', ascending: false).limit(100);
 
       // 3. Fetch deleted clients
-      var cltQuery = client
+      var cltBuilder = client
           .from('clients')
           .select('id, nom, tel, adresse, updated_at')
-          .eq('is_deleted', true)
-          .limit(100);
+          .eq('is_deleted', true);
 
-      if (orgId.isNotEmpty) {
-        cltQuery = cltQuery.eq('organization_id', orgId);
+      if (orgId != null && orgId.isNotEmpty) {
+        cltBuilder = cltBuilder.eq('organization_id', orgId);
       }
-      final cltRes = await cltQuery;
+      final cltRes = await cltBuilder.order('updated_at', ascending: false).limit(100);
 
       if (mounted) {
         setState(() {
@@ -124,7 +120,8 @@ class _CorbeilleScreenState extends State<CorbeilleScreen> with SingleTickerProv
     setState(() => _restoringId = id.toString());
 
     try {
-      final supabase = SupabaseService.instance;
+      final supabase = SupabaseService();
+      await supabase.init();
       final client = supabase.client!;
 
       // Deduct stock back when restoring a previously deleted sale
@@ -191,7 +188,7 @@ class _CorbeilleScreenState extends State<CorbeilleScreen> with SingleTickerProv
         foregroundColor: Colors.white,
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.roseAccent,
+          indicatorColor: Colors.pinkAccent,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white60,
           tabs: [
@@ -237,7 +234,7 @@ class _CorbeilleScreenState extends State<CorbeilleScreen> with SingleTickerProv
               ),
               title: Text(
                 inv['bl_number'] ?? 'FA-${inv['id']}',
-                style: const TextStyle(fontWeight: FontWeight.black, fontSize: 15),
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
               ),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
