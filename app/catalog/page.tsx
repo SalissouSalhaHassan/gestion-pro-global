@@ -43,85 +43,85 @@ type Language = "fr" | "ar" | "en";
 
 const CATALOG_TRANSLATIONS = {
   fr: {
-    heroBadge: "Plateforme B2B/B2C Internationale • Stocks Certifiés en Temps Réel",
-    heroTitle1: "Commandez vos produits en direct au",
-    heroHighlight: "Meilleur Tarif Mondial",
-    heroSub: "Explorez notre inventaire certifié en temps réel, bénéficiez de tarifs dégressifs d'usine et commandez instantanément avec assistance multilingue.",
-    searchPlaceholder: "Rechercher par article, référence, désignation, code-barres...",
+    heroBadge: "Boutique Officielle Directe",
+    heroTitle1: "Commandez en direct au",
+    heroHighlight: "Meilleur Prix",
+    heroSub: "Stock certifié en direct • Tarifs de gros • Commande rapide WhatsApp",
+    searchPlaceholder: "Rechercher un article, référence, désignation...",
     filterAll: "Tous les articles",
-    inStock: "✓ En Stock Immédiat",
-    wholesale: "🏷️ Tarifs Gros Disponibles",
-    pillarExpress: "Livraison Mondiale Sécurisée",
-    pillarExpressSub: "Expédition rapide & suivi en direct",
-    pillarQuality: "Produits 100% Certifiés",
-    pillarQualitySub: "Garantie d'authenticité & conformité",
-    pillarPrice: "Tarifs Dégressifs d'Usine",
-    pillarPriceSub: "Prix direct fabricant & gros volume",
-    pillarSupport: "Support VIP Dédié 24/7",
-    pillarSupportSub: "Conseiller personnel multilingue",
-    quickView: "Aperçu rapide",
-    addToCart: "Ajouter au panier",
+    inStock: "✓ En Stock",
+    wholesale: "🏷️ Prix de Gros",
+    pillarExpress: "Livraison Rapide",
+    pillarExpressSub: "Expédition sécurisée",
+    pillarQuality: "100% Authentique",
+    pillarQualitySub: "Produits certifiés",
+    pillarPrice: "Tarifs Directs",
+    pillarPriceSub: "Prix dégressifs",
+    pillarSupport: "Support Direct",
+    pillarSupportSub: "Assistance WhatsApp 7j/7",
+    quickView: "Aperçu",
+    addToCart: "Ajouter",
     inCart: "au panier",
-    unitPrice: "Prix Unitaire :",
-    wholesaleDiscount: "Tarif Gros",
-    cartTitle: "Mon Panier d'Achat",
-    checkoutWhatsapp: "Finaliser la commande sur WhatsApp",
+    unitPrice: "Prix :",
+    wholesaleDiscount: "Gros",
+    cartTitle: "Mon Panier",
+    checkoutWhatsapp: "Commander sur WhatsApp",
     currency: "Devise",
-    verified: "Vérifié & Certifié",
+    verified: "Certifié",
   },
   ar: {
-    heroBadge: "المنصة العالمية للتجارة B2B/B2C • مخزون معتمد بالوقت الفعلي",
-    heroTitle1: "اطلب منتجاتك مباشرة وبأفضل",
-    heroHighlight: "الأسعار العالمية التنافسية",
-    heroSub: "استكشف كتالوج المنتجات المعتمدة في الوقت الفعلي، واستفد من أسعار الجملة المباشرة من المصنع، واطلب بنقرة واحدة عبر الواتساب.",
-    searchPlaceholder: "ابحث بالاسم، الكود، الباركود، أو الوصف...",
+    heroBadge: "المتجر الرسمي المباشر",
+    heroTitle1: "اطلب منتجاتك بأفضل",
+    heroHighlight: "سعر مباشر",
+    heroSub: "مخزون لحظي معتمد • أسعار الجملة والتجزئة • طلب فوري عبر الواتساب",
+    searchPlaceholder: "ابحث عن صنف، كود، أو اسم منتج...",
     filterAll: "جميع المنتجات",
-    inStock: "✓ متوفر في المخزن فوراً",
-    wholesale: "🏷️ أسعار الجملة متاحة",
-    pillarExpress: "شحن وتوصيل عالمي فائق السرعة",
-    pillarExpressSub: "شحن آمن وتتبع فوري للطلبات",
-    pillarQuality: "منتجات أصلية معتمدة 100%",
-    pillarQualitySub: "ضمان الجودة والمطابقة الدولية",
-    pillarPrice: "أسعار الجملة من المصنع مباشرة",
-    pillarPriceSub: "تخفيضات تدريجية على الكميات الكبيرة",
-    pillarSupport: "دعم مخصص VIP على مدار الساعة",
-    pillarSupportSub: "مساعدك الشخصي للطلبيات السريعة",
+    inStock: "✓ متوفر فوراً",
+    wholesale: "🏷️ سعر الجملة",
+    pillarExpress: "توصيل سريع",
+    pillarExpressSub: "شحن آمن ومضمون",
+    pillarQuality: "أصلي 100%",
+    pillarQualitySub: "منتجات معتمدة",
+    pillarPrice: "أسعار مباشرة",
+    pillarPriceSub: "تخفيضات كميات",
+    pillarSupport: "دعم مباشر",
+    pillarSupportSub: "خدمة واتساب فورية",
     quickView: "نظرة سريعة",
-    addToCart: "إضافة إلى السلة",
+    addToCart: "إضافة للسلة",
     inCart: "في السلة",
-    unitPrice: "سعر القطعة :",
-    wholesaleDiscount: "سعر الجملة",
+    unitPrice: "السعر :",
+    wholesaleDiscount: "جملة",
     cartTitle: "سلة المشتريات",
-    checkoutWhatsapp: "إتمام وتأكيد الطلب عبر واتساب",
+    checkoutWhatsapp: "إتمام الطلب عبر واتساب",
     currency: "العملة",
-    verified: "موثق ومعتمد",
+    verified: "معتمد",
   },
   en: {
-    heroBadge: "Global B2B/B2C Enterprise Hub • Real-time Certified Inventory",
-    heroTitle1: "Order your products directly at the",
-    heroHighlight: "Best Global Price",
-    heroSub: "Browse our live certified inventory, unlock tier-1 wholesale discounts, and place instant orders via WhatsApp with multilingual support.",
-    searchPlaceholder: "Search by product, reference, barcode, SKU...",
+    heroBadge: "Official Direct Store",
+    heroTitle1: "Order directly at the",
+    heroHighlight: "Best Price",
+    heroSub: "Real-time stock • Wholesale pricing • Fast WhatsApp ordering",
+    searchPlaceholder: "Search products, SKU, barcodes...",
     filterAll: "All Products",
-    inStock: "✓ In Immediate Stock",
-    wholesale: "🏷️ Wholesale Tiers Available",
-    pillarExpress: "Global Express Delivery",
-    pillarExpressSub: "Fast & secured dispatch worldwide",
-    pillarQuality: "100% Certified Genuine",
-    pillarQualitySub: "Authenticity & compliance guarantee",
-    pillarPrice: "Factory Direct Pricing",
-    pillarPriceSub: "Volume-based wholesale discounts",
-    pillarSupport: "24/7 Dedicated VIP Support",
-    pillarSupportSub: "Personal multilingual business rep",
-    quickView: "Quick view",
-    addToCart: "Add to cart",
+    inStock: "✓ In Stock",
+    wholesale: "🏷️ Wholesale",
+    pillarExpress: "Fast Delivery",
+    pillarExpressSub: "Secure dispatch",
+    pillarQuality: "100% Genuine",
+    pillarQualitySub: "Certified authentic",
+    pillarPrice: "Direct Pricing",
+    pillarPriceSub: "Volume discounts",
+    pillarSupport: "Direct Support",
+    pillarSupportSub: "7/7 WhatsApp Help",
+    quickView: "Quick View",
+    addToCart: "Add to Cart",
     inCart: "in cart",
-    unitPrice: "Unit Price:",
+    unitPrice: "Price:",
     wholesaleDiscount: "Wholesale",
-    cartTitle: "Shopping Bag",
-    checkoutWhatsapp: "Complete Order via WhatsApp",
+    cartTitle: "Cart",
+    checkoutWhatsapp: "Order via WhatsApp",
     currency: "Currency",
-    verified: "Verified & Certified",
+    verified: "Verified",
   }
 };
 
@@ -491,60 +491,60 @@ export default function PublicCatalogPage() {
         </div>
       </header>
 
-      {/* 2. Hero Section - Ultra-Modern Mesh Background */}
-      <section className="relative overflow-hidden pt-12 pb-16 px-4 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-b border-white/5">
+      {/* 2. Compact Hero Section */}
+      <section className="relative overflow-hidden py-6 sm:py-8 px-4 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-b border-white/5">
         {/* Ambient Glowing Orbs */}
-        <div className="absolute -top-24 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute top-1/2 right-1/4 w-96 h-96 bg-purple-600/15 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute -top-24 left-1/4 w-80 h-80 bg-indigo-600/15 rounded-full blur-[100px] pointer-events-none" />
+        <div className="absolute top-1/2 right-1/4 w-80 h-80 bg-purple-600/10 rounded-full blur-[120px] pointer-events-none" />
 
-        <div className="max-w-4xl mx-auto text-center space-y-5 relative z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/15 text-indigo-300 text-xs font-bold backdrop-blur-xl shadow-inner">
-            <Sparkles size={14} className="text-amber-400 animate-spin" />
+        <div className="max-w-3xl mx-auto text-center space-y-3 relative z-10">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-indigo-300 text-[11px] font-bold backdrop-blur-xl">
+            <Sparkles size={12} className="text-amber-400 animate-spin" />
             <span>{tr.heroBadge}</span>
           </div>
 
-          <h2 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white leading-tight">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white leading-tight">
             {tr.heroTitle1}{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400">
               {tr.heroHighlight}
             </span>
           </h2>
 
-          <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed font-medium">
+          <p className="text-xs sm:text-sm text-slate-300 max-w-xl mx-auto font-medium">
             {tr.heroSub}
           </p>
 
-          {/* Luxury Search Engine Bar */}
-          <div className="max-w-2xl mx-auto pt-4">
+          {/* Compact Search Engine Bar */}
+          <div className="max-w-xl mx-auto pt-2">
             <div className="relative group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-3xl blur-md opacity-25 group-hover:opacity-60 transition duration-300"></div>
-              <div className="relative flex items-center bg-slate-900/90 rounded-2xl border border-white/20 p-1.5 shadow-2xl backdrop-blur-xl">
-                <Search size={20} className="mx-3 text-slate-400 shrink-0" />
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl blur-xs opacity-25 group-hover:opacity-50 transition duration-300"></div>
+              <div className="relative flex items-center bg-slate-900/95 rounded-xl border border-white/15 p-1 shadow-lg backdrop-blur-xl">
+                <Search size={18} className="mx-2.5 text-slate-400 shrink-0" />
                 <input
                   type="text"
                   placeholder={tr.searchPlaceholder}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full px-2 py-3 bg-transparent text-white placeholder:text-slate-400 text-sm font-semibold focus:outline-none"
+                  className="w-full px-2 py-2 bg-transparent text-white placeholder:text-slate-400 text-xs sm:text-sm font-semibold focus:outline-none"
                 />
                 {search && (
                   <button
                     onClick={() => setSearch("")}
-                    className="p-2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
                   >
-                    <X size={18} />
+                    <X size={16} />
                   </button>
                 )}
               </div>
             </div>
 
             {/* Quick Filter Tags */}
-            <div className="flex flex-wrap items-center justify-center gap-2 mt-4 text-xs font-semibold">
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-2.5 text-xs font-semibold">
               <button
                 onClick={() => setFilterInStockOnly(!filterInStockOnly)}
-                className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${
                   filterInStockOnly
-                    ? "bg-emerald-500/20 border-emerald-500/60 text-emerald-300 shadow-sm"
+                    ? "bg-emerald-500/20 border-emerald-500/60 text-emerald-300 shadow-xs"
                     : "bg-white/5 border-white/10 text-slate-400 hover:text-white"
                 }`}
               >
@@ -552,9 +552,9 @@ export default function PublicCatalogPage() {
               </button>
               <button
                 onClick={() => setFilterWholesaleOnly(!filterWholesaleOnly)}
-                className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg border text-[11px] transition-all cursor-pointer ${
                   filterWholesaleOnly
-                    ? "bg-purple-500/20 border-purple-500/60 text-purple-300 shadow-sm"
+                    ? "bg-purple-500/20 border-purple-500/60 text-purple-300 shadow-xs"
                     : "bg-white/5 border-white/10 text-slate-400 hover:text-white"
                 }`}
               >
@@ -565,59 +565,39 @@ export default function PublicCatalogPage() {
         </div>
       </section>
 
-      {/* 3. Value Proposition / Trust Pillars Bar */}
-      <div className="border-b border-white/5 bg-slate-900/40 py-4 px-4">
-        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-          <div className="flex items-center gap-3 p-2 text-slate-300">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-500/20">
-              <Truck size={18} />
-            </div>
-            <div>
-              <span className="font-bold block text-white">{tr.pillarExpress}</span>
-              <span className="text-[11px] text-slate-400">{tr.pillarExpressSub}</span>
-            </div>
+      {/* 3. Compact Trust Highlights Bar */}
+      <div className="border-b border-white/5 bg-slate-900/40 py-2.5 px-4">
+        <div className="max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="flex items-center gap-2 px-2 py-1 text-slate-300">
+            <Truck size={15} className="text-indigo-400 shrink-0" />
+            <span className="font-bold text-[11px] text-white truncate">{tr.pillarExpress}</span>
           </div>
 
-          <div className="flex items-center gap-3 p-2 text-slate-300">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
-              <ShieldCheck size={18} />
-            </div>
-            <div>
-              <span className="font-bold block text-white">{tr.pillarQuality}</span>
-              <span className="text-[11px] text-slate-400">{tr.pillarQualitySub}</span>
-            </div>
+          <div className="flex items-center gap-2 px-2 py-1 text-slate-300">
+            <ShieldCheck size={15} className="text-emerald-400 shrink-0" />
+            <span className="font-bold text-[11px] text-white truncate">{tr.pillarQuality}</span>
           </div>
 
-          <div className="flex items-center gap-3 p-2 text-slate-300">
-            <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
-              <Tag size={18} />
-            </div>
-            <div>
-              <span className="font-bold block text-white">{tr.pillarPrice}</span>
-              <span className="text-[11px] text-slate-400">{tr.pillarPriceSub}</span>
-            </div>
+          <div className="flex items-center gap-2 px-2 py-1 text-slate-300">
+            <Tag size={15} className="text-purple-400 shrink-0" />
+            <span className="font-bold text-[11px] text-white truncate">{tr.pillarPrice}</span>
           </div>
 
-          <div className="flex items-center gap-3 p-2 text-slate-300">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20">
-              <MessageCircle size={18} />
-            </div>
-            <div>
-              <span className="font-bold block text-white">{tr.pillarSupport}</span>
-              <span className="text-[11px] text-slate-400">{tr.pillarSupportSub}</span>
-            </div>
+          <div className="flex items-center gap-2 px-2 py-1 text-slate-300">
+            <MessageCircle size={15} className="text-amber-400 shrink-0" />
+            <span className="font-bold text-[11px] text-white truncate">{tr.pillarSupport}</span>
           </div>
         </div>
       </div>
 
       {/* 4. Category Navigation Tabs */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 custom-scrollbar">
           <button
             onClick={() => setSelectedCategory("ALL")}
-            className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-2 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
               selectedCategory === "ALL"
-                ? "bg-white text-slate-950 shadow-lg shadow-white/10 font-black"
+                ? "bg-white text-slate-950 shadow-md shadow-white/10 font-black"
                 : "bg-slate-900 text-slate-300 hover:bg-slate-800 border border-white/10"
             }`}
           >
