@@ -258,7 +258,7 @@ export default function InvoicesPage() {
 
       // Check if it's a pending offline invoice
       const offlinePending = getPendingOfflineInvoices();
-      const isOffline = offlinePending.some(inv => inv.offlineId === invoiceId || inv.bl_number === invoiceId);
+      const isOffline = offlinePending.some(inv => inv.offlineId === invoiceId || (inv as any).bl_number === invoiceId);
 
       if (isOffline) {
         removePendingOfflineInvoice(String(invoiceId));
