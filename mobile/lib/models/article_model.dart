@@ -12,6 +12,11 @@ class Article {
   // الكمية الإجمالية
   final double quantite;
 
+  final String? famille;
+  final String? imagePath;
+  final double? prixGros;
+  final double? prixSpecial;
+
   // خريطة لتخزين اسم المستودع وكميته ديناميكياً
   final Map<String, double> depotStocks;
 
@@ -50,6 +55,10 @@ class Article {
     required this.prixVenteHT,
     required this.taxe,
     required this.quantite,
+    this.famille,
+    this.imagePath,
+    this.prixGros,
+    this.prixSpecial,
     this.depotStocks = const {},
   });
 
@@ -113,6 +122,10 @@ class Article {
       prixVenteHT: toDouble(json['p_vente_ttc'] ?? json['p_vente_ht'] ?? json['prix_vente'] ?? json['price'] ?? 0),
       taxe: toDouble(json['taxe'] ?? 0.0),
       quantite: toDouble(json['quantite'] ?? json['qte'] ?? 0),
+      famille: json['famille']?.toString(),
+      imagePath: (json['image_path'] ?? json['image'] ?? json['photo'] ?? json['image_url'])?.toString(),
+      prixGros: json['prix_gros'] != null ? toDouble(json['prix_gros']) : null,
+      prixSpecial: json['prix_special'] != null ? toDouble(json['prix_special']) : null,
       depotStocks: stocks,
     );
   }

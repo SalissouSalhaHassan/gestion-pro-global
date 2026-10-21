@@ -32,6 +32,7 @@ import 'loyers_list_screen.dart';
 import 'rent_payments_list_screen.dart';
 import 'ciment_list_screen.dart';
 import 'corbeille_screen.dart';
+import 'marketplace_store_screen.dart';
 import '../widgets/offline_sync_modal.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -180,6 +181,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
+                _buildDrawerSectionTitle("Boutique & Vente"),
+                _buildDrawerItem(Icons.storefront_rounded, "Boutique Express (AliExpress)", Colors.redAccent, () => _nav(context, const MarketplaceStoreScreen())),
                 _buildDrawerSectionTitle("Opérations Système"),
                 if (auth.isAdmin || auth.canManageUsers) ...[
                   _buildDrawerItem(Icons.add_box_rounded, "Nouveau Produit", Colors.orange, () => _nav(context, AddProductScreen())),
@@ -532,26 +535,91 @@ class _HomeDashboardFragment extends StatelessWidget {
   Widget _buildQuickActionsGrid(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: _buildActionCard(
-              context,
-              "VENTE DIRECTE",
-              Icons.add_shopping_cart,
-              const Color(0xFF2900DF),
-              () => _nav(context, const ProductsScreen()),
+          // Banner AliExpress / Boutique Express
+          GestureDetector(
+            onTap: () => _nav(context, const MarketplaceStoreScreen()),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFF3344), Color(0xFFFF6A00)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFF3344).withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.bolt_rounded, color: Colors.white, size: 26),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          "Boutique Express • SuperDeals",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          "AliExpress Style • Jusqu'à -80% • Scan Caméra",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 16),
+                ],
+              ),
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: _buildActionCard(
-              context,
-              "LISTE FACTURES",
-              Icons.receipt_long,
-              const Color(0xFFFFA726),
-              () => _nav(context, const InvoicesListScreen()),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionCard(
+                  context,
+                  "VENTE DIRECTE",
+                  Icons.add_shopping_cart,
+                  const Color(0xFF2900DF),
+                  () => _nav(context, const ProductsScreen()),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildActionCard(
+                  context,
+                  "LISTE FACTURES",
+                  Icons.receipt_long,
+                  const Color(0xFFFFA726),
+                  () => _nav(context, const InvoicesListScreen()),
+                ),
+              ),
+            ],
           ),
         ],
       ),
