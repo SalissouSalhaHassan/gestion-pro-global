@@ -820,16 +820,28 @@ class SupabaseService {
   Future<bool> cancelInvoiceDirect(String id) async {
     if (!_isInitialized) await init();
     try {
+      final numericId = int.tryParse(id) ?? id;
+
       // 1. Get Invoice Data
-      final inv = await _client!.from('factures').select('client_id, total_ttc, statut, bl_number').eq('id', id).single();
+      final inv = await _client!
+          .from('factures')
+          .select('id, client_id, total_ttc, statut, bl_number, emplacement')
+          .eq('id', numericId)
+          .single();
+
       if (inv['statut'] == 'Annulée') return true;
 
-      final String clientId = inv['client_id'];
+      final dynamic rawClientId = inv['client_id'];
       final double totalTtc = ((inv['total_ttc'] ?? 0) as num).toDouble();
       final String blNumber = inv['bl_number'] ?? 'INV-$id';
+      final String fallbackDepot = (inv['emplacement'] ?? 'Boutique').toString().trim();
 
       // 2. Restore Stock for each item
-      final items = await _client!.from('facture_items').select('article_id, qte, depot_origine').eq('facture_id', id);
+      final items = await _client!
+          .from('facture_items')
+          .select('article_id, qte, pu_ht, depot_origine, depot_id')
+          .eq('facture_id', numericId);
+
       final orgId = await getOrganizationId();
       
       for (var item in items) {
@@ -838,7 +850,9 @@ class SupabaseService {
         if (artId == null) continue;
 
         final double qte = ((item['qte'] ?? 0) as num).toDouble();
-        final String depot = (item['depot_origine'] ?? 'Boutique').toString().trim();
+        if (qte <= 0) continue;
+
+        final String depot = (item['depot_origine'] ?? fallbackDepot).toString().trim();
 
         // Query stocks for this article
         var stockQuery = _client!.from('stocks').select().eq('article_id', artId);
@@ -848,7 +862,7 @@ class SupabaseService {
         final stockRows = await stockQuery;
         final matchingStock = (stockRows as List<dynamic>?)?.firstWhere(
           (s) => (s['depot_nom'] ?? '').toString().trim().toLowerCase() == depot.toLowerCase(),
-          orElse: () => null,
+          orElse: () => (stockRows as List<dynamic>?)?.isNotEmpty == true ? (stockRows as List<dynamic>).first : null,
         );
 
         double oldQty = 0.0;
@@ -857,7 +871,10 @@ class SupabaseService {
         if (matchingStock != null) {
           oldQty = ((matchingStock['quantite'] ?? 0) as num).toDouble();
           newQty = oldQty + qte;
-          await _client!.from('stocks').update({'quantite': newQty}).eq('id', matchingStock['id']);
+          await _client!.from('stocks').update({
+            'quantite': newQty,
+            'depot_nom': matchingStock['depot_nom'] ?? depot,
+          }).eq('id', matchingStock['id']);
         } else {
           await _client!.from('stocks').insert({
             'article_id': artId,
@@ -871,34 +888,39 @@ class SupabaseService {
         await _client!.from('mouvements').insert({
           if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
           'article_id': artId,
-          'type': 'ENTREE',
+          'type': 'ENTREE_ANNULATION',
           'quantite': qte,
-          'date_mouvement': DateTime.now().toIso8601String().split('T')[0],
+          'date_mouvement': DateTime.now().toIso8601String(),
           'nr_doc': 'ANN-$blNumber',
           'depot': depot,
           'utilisateur': 'MobileApp',
           'entree': qte,
           'sortie': 0,
           'stock_avant': oldQty,
-          'stock_apres': newQty
+          'stock_apres': newQty,
+          'fournisseur_client': 'Annulation Facture #$blNumber',
         });
       }
 
-      // 3. Update Client Credit
-      try {
-        final cRes = await _client!.from('clients').select('credit_facture').eq('id', clientId).single();
-        final double oldCredit = ((cRes['credit_facture'] ?? 0) as num).toDouble();
-        await _client!.from('clients').update({'credit_facture': oldCredit - totalTtc}).eq('id', clientId);
-      } catch (e) {
-        debugPrint('⚠️ Client credit update error: $e');
+      // 3. Update Client Credit if applicable
+      if (rawClientId != null) {
+        try {
+          final cRes = await _client!.from('clients').select('credit_facture').eq('id', rawClientId).single();
+          final double oldCredit = ((cRes['credit_facture'] ?? 0) as num).toDouble();
+          final double newCredit = (oldCredit - totalTtc) > 0 ? (oldCredit - totalTtc) : 0.0;
+          await _client!.from('clients').update({'credit_facture': newCredit}).eq('id', rawClientId);
+        } catch (e) {
+          debugPrint('⚠️ Client credit update error: $e');
+        }
       }
 
       // 4. Update Invoice Status
       await _client!.from('factures').update({
         'statut': 'Annulée',
+        'is_deleted': true,
         'montant_restant': 0.0,
         'updated_at': DateTime.now().toIso8601String()
-      }).eq('id', id);
+      }).eq('id', numericId);
 
       // Log Activity
       await logActivity(
@@ -912,7 +934,7 @@ class SupabaseService {
       return true;
     } catch (e) {
       debugPrint('❌ cancelInvoiceDirect error: $e');
-      return false;
+      rethrow;
     }
   }
 

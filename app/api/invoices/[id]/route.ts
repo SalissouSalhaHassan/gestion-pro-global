@@ -169,12 +169,14 @@ export async function DELETE(
     // Use Admin Client directly to guarantee 100% reliable execution and bypass any RLS or missing RPC issues
     const adminClient = getAdminClient();
 
+    const numericId = !isNaN(Number(id)) ? Number(id) : id;
+
     // 1. Fetch invoice and invoice_items before marking as deleted
     const { data: invoiceData, error: invFetchErr } = await adminClient
       .from("factures")
       .select("id, bl_number, emplacement, organization_id, client_id, montant_restant, is_deleted")
-      .eq("id", id)
-      .single();
+      .or(`id.eq.${id},id.eq.${numericId}`)
+      .maybeSingle();
 
     if (invFetchErr || !invoiceData) {
       return NextResponse.json({ error: "Facture introuvable" }, { status: 404 });
@@ -187,11 +189,21 @@ export async function DELETE(
     const orgId = invoiceData.organization_id || session.organization_id || "00000000-0000-0000-0000-000000000001";
     const fallbackDepot = invoiceData.emplacement || session.emplacement || "Boutique";
 
-    // 2. Fetch all items of this invoice
-    const { data: items, error: itemsErr } = await adminClient
+    // 2. Fetch all items of this invoice using exact matched invoice id
+    let { data: items, error: itemsErr } = await adminClient
       .from("facture_items")
       .select("article_id, qte, pu_ht, depot_origine, depot_id")
-      .eq("facture_id", id);
+      .eq("facture_id", invoiceData.id);
+
+    if (!items || items.length === 0) {
+      const { data: fallbackItems } = await adminClient
+        .from("facture_items")
+        .select("article_id, qte, pu_ht, depot_origine, depot_id")
+        .eq("facture_id", id);
+      if (fallbackItems && fallbackItems.length > 0) {
+        items = fallbackItems;
+      }
+    }
 
     // Fetch active depots for resolving depot_id <-> depot_nom
     const { data: allDepots } = await adminClient
