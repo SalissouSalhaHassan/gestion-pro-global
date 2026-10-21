@@ -34,7 +34,8 @@ import {
   Bot,
   Headphones,
   CreditCard,
-  Trash2
+  Trash2,
+  Store,
 } from "lucide-react";
 import UnifiedSearch from "@/components/UnifiedSearch";
 import NotificationBell from "@/components/NotificationBell";
@@ -87,6 +88,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const allNavItems = [
     { href: "/dashboard", label: t("nav_dashboard", "Tableau de bord"), icon: LayoutDashboard, perm: "sale.dashboard" },
     { href: "/dashboard/pos", label: t("nav_pos", "Point de vente (POS)"), icon: ShoppingCart, highlight: true, perm: "pos.access" },
+    { 
+      href: userSession?.organization_id ? `/catalog?org=${userSession.organization_id}` : "/catalog", 
+      label: t("nav_catalog_public", "Boutique en Ligne"), 
+      icon: Store, 
+      isExternal: true 
+    },
     { href: "/dashboard/articles", label: t("nav_articles", "Articles"), icon: Package, perm: "stock.articles" },
     { href: "/dashboard/stock", label: t("nav_stock", "Gestion du Stock"), icon: Boxes, perm: "stock.inventory" },
     { href: "/dashboard/stock/valuation", label: t("nav_valuation", "Valorisation Stock"), icon: BarChart3, perm: "report.stock_valuation" },
@@ -164,12 +171,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div className="flex-1 min-h-0 px-3 py-1 flex flex-col overflow-hidden">
           <div className="flex-1 min-h-0 bg-white/[0.02] border border-white/5 rounded-[28px] overflow-hidden flex flex-col shadow-inner">
             <nav className="flex-1 space-y-1.5 overflow-y-auto px-2.5 py-3 custom-scrollbar">
-              {visibleNavItems.map((item) => {
+              {visibleNavItems.map((item: any) => {
                 const isActive = pathname === item.href;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
+                    target={item.isExternal ? "_blank" : undefined}
+                    rel={item.isExternal ? "noopener noreferrer" : undefined}
                     className={`flex items-center gap-3.5 rounded-2xl px-3.5 py-3 text-xs font-black transition-all duration-200 group relative ${isActive
                       ? "bg-gradient-to-r from-indigo-600 via-indigo-600 to-indigo-500 text-white shadow-[0_8px_25px_rgba(79,70,229,0.4)] border-t border-white/10 scale-[1.01] z-10"
                       : item.highlight
