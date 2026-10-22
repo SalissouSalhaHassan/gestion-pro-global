@@ -5,7 +5,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, Pencil, Trash2, BarChart3, Wallet, ListChecks,
-  Loader2, Search, Home, Users, FileText, Printer, TrendingUp
+  Loader2, Search, Home, Users, FileText, Printer, TrendingUp, AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,12 @@ import ContractFormDialog from "@/components/loyers/ContractFormDialog";
 import PaymentFormDialog from "@/components/loyers/PaymentFormDialog";
 import LoyerReportModal from "@/components/loyers/LoyerReportModal";
 import type { Contract } from "@/lib/services/loyer.service";
+import { useLanguage } from "@/lib/i18n/context";
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
-  Actif: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-  Expiré: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500" },
-  Annulé: { bg: "bg-rose-50", text: "text-rose-700", dot: "bg-rose-500" },
+  Actif: { bg: "bg-emerald-50 text-emerald-700 border border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500" },
+  Expiré: { bg: "bg-amber-50 text-amber-700 border border-amber-200", text: "text-amber-700", dot: "bg-amber-500" },
+  Annulé: { bg: "bg-rose-50 text-rose-700 border border-rose-200", text: "text-rose-700", dot: "bg-rose-500" },
 };
 
 function fmt(n: number) {
@@ -26,6 +27,7 @@ function fmt(n: number) {
 
 export default function LoyersPage() {
   const router = useRouter();
+  const { locale, dir } = useLanguage();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -76,17 +78,21 @@ export default function LoyersPage() {
     const actifs = filtered.filter((c) => c.statut === "Actif").length;
     const impayes = filtered.filter((c) => (c.retards || 0) > 0 || c.mois_impayes?.includes("m")).length;
     const totalPaye = filtered.reduce((sum, c) => sum + (c.total_paye || 0), 0);
-    return { total, actifs, impayes, totalPaye };
+    const totalRetards = filtered.reduce((sum, c) => sum + (c.retards || 0), 0);
+    return { total, actifs, impayes, totalPaye, totalRetards };
   }, [filtered]);
 
   const handleDelete = async () => {
     if (!selected) return;
-    if (!confirm(`Supprimer le contrat de "${selected.locataire_nom_complet}" ?`)) return;
+    const confirmMsg = locale === "ar"
+      ? `هل أنت متأكد من حذف عقد المستأجر "${selected.locataire_nom_complet}"؟`
+      : `Supprimer le contrat de "${selected.locataire_nom_complet}" ?`;
+    if (!confirm(confirmMsg)) return;
     setDeleting(true);
     try {
       const res = await fetch(`/api/loyers/${selected.id}`, { method: "DELETE" });
       if (res.ok) {
-        showToast("Contrat supprimé.");
+        showToast(locale === "ar" ? "تم حذف العقد بنجاح." : "Contrat supprimé.");
         setSelected(null);
         fetchContracts();
       }
@@ -96,7 +102,7 @@ export default function LoyersPage() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700" dir={dir}>
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-[#0f172a] text-white px-6 py-3 rounded-2xl shadow-2xl font-black text-sm flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -107,29 +113,58 @@ export default function LoyersPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-            <Home className="text-indigo-500" size={32} />
-            Gestion des Loyers
+          <h1 className="text-3xl lg:text-4xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+            <Home className="text-indigo-600" size={32} />
+            {locale === "ar" ? "إدارة الإيجارات والعقارات" : "Gestion des Loyers"}
           </h1>
-          <p className="text-slate-500 font-medium mt-1">Gérez vos contrats de location et paiements.</p>
+          <p className="text-slate-500 font-medium mt-1 text-sm">
+            {locale === "ar"
+              ? "متابعة عقود الإيجار، تسجيل المقبوضات الشهرية، كشف المتأخرات، وطباعة إيصالات التسديد المعتمدة."
+              : "Gérez vos contrats de location, paiements mensuels, arriérés et quittances de loyer."}
+          </p>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {[
-          { label: "Total Contrats", value: stats.total, icon: FileText, gradient: "from-indigo-600 to-indigo-500", shadow: "shadow-indigo-500/30" },
-          { label: "Contrats Actifs", value: stats.actifs, icon: Users, gradient: "from-emerald-600 to-emerald-500", shadow: "shadow-emerald-500/30" },
-          { label: "Total Encaissé", value: `${fmt(stats.totalPaye)} F`, icon: Wallet, gradient: "from-amber-500 to-orange-500", shadow: "shadow-amber-500/30" },
+          {
+            label: locale === "ar" ? "إجمالي العقود" : "Total Contrats",
+            value: stats.total,
+            icon: FileText,
+            gradient: "from-indigo-600 to-indigo-500",
+            shadow: "shadow-indigo-500/20",
+          },
+          {
+            label: locale === "ar" ? "العقود السارية" : "Contrats Actifs",
+            value: stats.actifs,
+            icon: Users,
+            gradient: "from-emerald-600 to-emerald-500",
+            shadow: "shadow-emerald-500/20",
+          },
+          {
+            label: locale === "ar" ? "عقود عليها متأخرات" : "Contrats en Retard",
+            value: stats.impayes,
+            icon: AlertCircle,
+            gradient: "from-rose-600 to-rose-500",
+            shadow: "shadow-rose-500/20",
+          },
+          {
+            label: locale === "ar" ? "إجمالي المحصّل" : "Total Encaissé",
+            value: `${fmt(stats.totalPaye)} F`,
+            icon: Wallet,
+            gradient: "from-amber-500 to-orange-500",
+            shadow: "shadow-amber-500/20",
+          },
         ].map((s, i) => (
-          <div key={i} className={`group relative overflow-hidden rounded-[28px] p-7 text-white bg-gradient-to-r ${s.gradient} shadow-xl ${s.shadow} transition-all duration-300 hover:scale-[1.03]`}>
-            <div className="absolute -right-4 -top-4 w-28 h-28 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-all duration-500" />
+          <div key={i} className={`group relative overflow-hidden rounded-[26px] p-6 text-white bg-gradient-to-r ${s.gradient} shadow-xl ${s.shadow} transition-all duration-300 hover:scale-[1.02]`}>
+            <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-all duration-500" />
             <div className="relative z-10">
-              <div className="p-3 bg-white/20 backdrop-blur-lg rounded-2xl w-fit mb-4">
-                <s.icon size={22} />
+              <div className="p-2.5 bg-white/20 backdrop-blur-lg rounded-2xl w-fit mb-3">
+                <s.icon size={20} />
               </div>
-              <p className="text-xs font-bold opacity-80 uppercase tracking-widest">{s.label}</p>
-              <p className="text-3xl font-black mt-1">{loading ? "..." : s.value}</p>
+              <p className="text-[11px] font-bold opacity-85 uppercase tracking-wider">{s.label}</p>
+              <p className="text-2xl lg:text-3xl font-black mt-1">{loading ? "..." : s.value}</p>
             </div>
           </div>
         ))}
@@ -141,27 +176,28 @@ export default function LoyersPage() {
           onClick={() => { setEditContractId(null); setShowContractForm(true); }}
           className="rounded-xl h-11 px-5 font-black bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 shadow-lg shadow-emerald-500/30"
         >
-          <Plus size={18} className="mr-2" /> Nouveau Contrat
+          <Plus size={18} className="mr-2" /> {locale === "ar" ? "عقد جديد" : "Nouveau Contrat"}
         </Button>
         <Button
           disabled={!selected}
           onClick={() => { setEditContractId(selected!.id); setShowContractForm(true); }}
           className="rounded-xl h-11 px-5 font-black bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 shadow-lg shadow-indigo-500/30 disabled:opacity-40"
         >
-          <Pencil size={16} className="mr-2" /> Modifier
+          <Pencil size={16} className="mr-2" /> {locale === "ar" ? "تعديل" : "Modifier"}
         </Button>
         <Button
           disabled={!selected || deleting}
           onClick={handleDelete}
           className="rounded-xl h-11 px-5 font-black bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-700 hover:to-rose-600 shadow-lg shadow-rose-500/30 disabled:opacity-40"
         >
-          {deleting ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Trash2 size={16} className="mr-2" />} Supprimer
+          {deleting ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Trash2 size={16} className="mr-2" />}{" "}
+          {locale === "ar" ? "حذف" : "Supprimer"}
         </Button>
         <Button
           onClick={() => router.push("/dashboard/loyers/reports")}
           className="rounded-xl h-11 px-5 font-black bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 flex items-center gap-2"
         >
-          <TrendingUp size={18} /> Rapports Détaillés
+          <TrendingUp size={18} /> {locale === "ar" ? "التقارير المفصلة" : "Rapports Détaillés"}
         </Button>
 
         <Button
@@ -170,21 +206,21 @@ export default function LoyersPage() {
           className="rounded-xl h-11 px-5 font-black bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 shadow-sm disabled:opacity-40"
           variant="outline"
         >
-          <BarChart3 size={16} className="mr-2" /> Tableau de Bord
+          <BarChart3 size={16} className="mr-2" /> {locale === "ar" ? "لوحة المستأجر" : "Tableau de Bord"}
         </Button>
         <Button
           disabled={!selected}
           onClick={() => selected && setShowPaymentForm(true)}
           className="rounded-xl h-11 px-5 font-black bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-lg shadow-amber-500/30 disabled:opacity-40"
         >
-          <Wallet size={16} className="mr-2" /> Paiement
+          <Wallet size={16} className="mr-2" /> {locale === "ar" ? "تسجيل دفعة" : "Paiement"}
         </Button>
         <Button
           onClick={() => router.push("/dashboard/loyers/payments")}
           className="rounded-xl h-11 px-5 font-black bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 shadow-sm"
           variant="outline"
         >
-          <ListChecks size={16} className="mr-2" /> Liste Paiements
+          <ListChecks size={16} className="mr-2" /> {locale === "ar" ? "قائمة المدفوعات" : "Liste Paiements"}
         </Button>
 
         <Button
@@ -192,7 +228,7 @@ export default function LoyersPage() {
           className="rounded-xl h-11 px-5 font-black bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50 shadow-sm"
           variant="outline"
         >
-          <Printer size={16} className="mr-2" /> Imprimer Rapport
+          <Printer size={16} className="mr-2" /> {locale === "ar" ? "طباعة تقرير" : "Imprimer Rapport"}
         </Button>
 
         {/* Search */}
@@ -200,7 +236,7 @@ export default function LoyersPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <Input
-              placeholder="Rechercher..."
+              placeholder={locale === "ar" ? "بحث عن مستأجر، عقار، حي..." : "Rechercher..."}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10 h-11 bg-white/60 border-slate-200/80 rounded-xl font-medium"
@@ -215,7 +251,10 @@ export default function LoyersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10 text-slate-400">
-                {["ID", "Référence", "Nom", "Loyer", "Total Payé", "Retards", "Mois Impayés", "Échéance", "Statut"].map((h) => (
+                {(locale === "ar"
+                  ? ["المعرف", "المرجع", "اسم المستأجر", "الإيجار الشهري", "إجمالي المدفوع", "المتأخرات", "الأشهر غير المسددة", "تاريخ الاستحقاق", "الحالة"]
+                  : ["ID", "Référence", "Nom", "Loyer", "Total Payé", "Retards", "Mois Impayés", "Échéance", "Statut"]
+                ).map((h) => (
                   <th key={h} className="px-5 py-4 text-left text-[10px] font-black uppercase tracking-[0.15em]">{h}</th>
                 ))}
               </tr>
@@ -229,7 +268,9 @@ export default function LoyersPage() {
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-20 text-slate-500 font-bold">Aucun contrat trouvé.</td>
+                  <td colSpan={9} className="text-center py-20 text-slate-500 font-bold">
+                    {locale === "ar" ? "لا توجد عقود مسجلة تطابق البحث." : "Aucun contrat trouvé."}
+                  </td>
                 </tr>
               ) : (
                 filtered.map((c, i) => {
@@ -284,11 +325,11 @@ export default function LoyersPage() {
         {/* Footer */}
         <div className="px-6 py-4 border-t border-white/5 flex items-center justify-between text-xs font-black uppercase tracking-widest">
           <div className="flex gap-6">
-            <span className="text-slate-500">Total: <span className="text-white">{stats.total}</span></span>
-            <span className="text-rose-500">Impayés: <span className="text-rose-400">{stats.impayes}</span></span>
+            <span className="text-slate-500">{locale === "ar" ? "الإجمالي:" : "Total:"} <span className="text-white">{stats.total}</span></span>
+            <span className="text-rose-500">{locale === "ar" ? "المتأخرات:" : "Impayés:"} <span className="text-rose-400">{stats.impayes}</span></span>
           </div>
           <div className="text-indigo-400">
-            Contrats Actifs: <span className="text-white">{stats.actifs}</span>
+            {locale === "ar" ? "العقود السارية:" : "Contrats Actifs:"} <span className="text-white">{stats.actifs}</span>
           </div>
         </div>
       </div>

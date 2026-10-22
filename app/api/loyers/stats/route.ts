@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth_helper';
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,12 +9,17 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('end_date');
 
     const supabase = await createClient();
+    const session = await getServerSession();
+    const orgId = session?.organization_id;
 
     // 1. Total Revenue
     let query = supabase
       .from('contrat_paiements')
-      .select('montant, date_paiement, mode_paiement');
+      .select('montant, date_paiement, mode_paiement, contrats!inner(organization_id)');
     
+    if (orgId) {
+      query = query.eq('contrats.organization_id', orgId);
+    }
     if (startDate) query = query.gte('date_paiement', startDate);
     if (endDate) query = query.lte('date_paiement', endDate);
 
@@ -21,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     if (payError) throw payError;
 
-    const totalRevenue = payments.reduce((sum, p) => sum + Number(p.montant), 0);
+    const totalRevenue = (payments || []).reduce((sum, p) => sum + Number(p.montant), 0);
 
     // 2. Revenue by Month (Last 12 months)
     const monthlyRevenue: Record<string, number> = {};
@@ -32,7 +38,7 @@ export async function GET(request: NextRequest) {
       monthlyRevenue[key] = 0;
     }
 
-    payments.forEach(p => {
+    (payments || []).forEach(p => {
       const d = new Date(p.date_paiement);
       const key = d.toLocaleString('fr-FR', { month: 'short', year: 'numeric' });
       if (monthlyRevenue[key] !== undefined) {
@@ -42,15 +48,22 @@ export async function GET(request: NextRequest) {
 
     // 3. Revenue by Mode
     const modeRevenue: Record<string, number> = {};
-    payments.forEach(p => {
+    (payments || []).forEach(p => {
       const mode = p.mode_paiement || 'Inconnu';
       modeRevenue[mode] = (modeRevenue[mode] || 0) + Number(p.montant);
     });
 
     // 4. Contract Stats
-    const { data: contracts, error: contractError } = await supabase
+    let contractQuery = supabase
       .from('contrats')
-      .select('statut, loyer_mensuel');
+      .select('statut, loyer_mensuel')
+      .eq('is_deleted', false);
+
+    if (orgId) {
+      contractQuery = contractQuery.eq('organization_id', orgId);
+    }
+
+    const { data: contracts, error: contractError } = await contractQuery;
 
     if (contractError) throw contractError;
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth_helper';
 import { ContractService } from '@/lib/services/loyer.service';
 
 export async function GET(request: NextRequest) {
@@ -14,8 +15,9 @@ export async function GET(request: NextRequest) {
     };
 
     const supabase = await createClient();
+    const session = await getServerSession();
     const service = new ContractService(supabase);
-    const payments = await service.loadPayments(filters);
+    const payments = await service.loadPayments(filters, session?.organization_id);
 
     const today = new Date();
     

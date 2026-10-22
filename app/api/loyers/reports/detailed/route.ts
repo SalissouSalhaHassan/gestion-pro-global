@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth_helper';
 import { ContractService } from '@/lib/services/loyer.service';
 
 export async function GET(request: NextRequest) {
@@ -10,19 +11,33 @@ export async function GET(request: NextRequest) {
     const statusFilter = searchParams.get('status') || 'All'; // All, Paid, Unpaid
 
     const supabase = await createClient();
+    const session = await getServerSession();
+    const orgId = session?.organization_id;
     const service = new ContractService(supabase);
     
-    // Fetch all contracts and payments
-    const { data: contracts, error: contractError } = await supabase
+    // Fetch all contracts and payments strictly scoped to organization
+    let contractQuery = supabase
       .from('contrats')
       .select('*')
       .eq('is_deleted', false);
 
+    if (orgId) {
+      contractQuery = contractQuery.eq('organization_id', orgId);
+    }
+
+    const { data: contracts, error: contractError } = await contractQuery;
+
     if (contractError) throw contractError;
 
-    const { data: payments, error: payError } = await supabase
+    let payQuery = supabase
       .from('contrat_paiements')
-      .select('contrat_id, montant, date_paiement');
+      .select('contrat_id, montant, date_paiement, contrats!inner(organization_id)');
+
+    if (orgId) {
+      payQuery = payQuery.eq('contrats.organization_id', orgId);
+    }
+
+    const { data: payments, error: payError } = await payQuery;
 
     if (payError) throw payError;
 
