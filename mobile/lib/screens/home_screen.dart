@@ -182,7 +182,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               padding: EdgeInsets.zero,
               children: [
                 _buildDrawerSectionTitle("Boutique & Vente"),
-                _buildDrawerItem(Icons.storefront_rounded, "Boutique Express (AliExpress)", Colors.redAccent, () => _nav(context, const MarketplaceStoreScreen())),
+                _buildDrawerItem(Icons.storefront_rounded, "Boutique Express (Gestion Pro Global)", Colors.redAccent, () => _nav(context, const MarketplaceStoreScreen())),
                 _buildDrawerSectionTitle("Opérations Système"),
                 if (auth.isAdmin || auth.canManageUsers) ...[
                   _buildDrawerItem(Icons.add_box_rounded, "Nouveau Produit", Colors.orange, () => _nav(context, AddProductScreen())),
@@ -537,7 +537,7 @@ class _HomeDashboardFragment extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         children: [
-          // Banner AliExpress / Boutique Express
+          // Banner Gestion Pro Global / Boutique Express
           GestureDetector(
             onTap: () => _nav(context, const MarketplaceStoreScreen()),
             child: Container(
@@ -552,7 +552,7 @@ class _HomeDashboardFragment extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFFF3344).withOpacity(0.3),
+                    color: const Color(0xFFFF3344).withValues(alpha: 0.3),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -563,7 +563,7 @@ class _HomeDashboardFragment extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.bolt_rounded, color: Colors.white, size: 26),
@@ -583,7 +583,7 @@ class _HomeDashboardFragment extends StatelessWidget {
                         ),
                         SizedBox(height: 2),
                         Text(
-                          "AliExpress Style • Jusqu'à -80% • Scan Caméra",
+                          "Gestion Pro Global • Jusqu'à -80% • Scan Caméra",
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 11,

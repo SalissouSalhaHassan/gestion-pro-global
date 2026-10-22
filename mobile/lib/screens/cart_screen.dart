@@ -524,6 +524,32 @@ class _CartScreenState extends State<CartScreen> {
       body: Column(
         children: [
           _buildClientSelector(),
+          if (cart.items.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE8F5E9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFA5D6A7)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.verified_outlined, color: Color(0xFF2E7D32), size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Commande client centralisée • Multi-fournisseurs / dépôts • Déstockage automatique à la validation du paiement",
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.green.shade900,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: cart.items.isEmpty
                 ? _buildEmptyState()

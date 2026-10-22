@@ -27,6 +27,7 @@ class MarketplaceStoreScreen extends StatefulWidget {
 
 class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   final NumberFormat _currencyFormat = NumberFormat("#,##0", "fr_FR");
   Timer? _debounce;
@@ -48,7 +49,7 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
     "Accessoires",
   ];
 
-  final List<Map<String, dynamic>> _quickPills = [
+  final List<Map<String, dynamic>> _quickPills = const [
     {"label": "Coins", "icon": Icons.monetization_on_rounded, "color": Color(0xFFFFB300)},
     {"label": "Prize Land", "icon": Icons.videogame_asset_rounded, "color": Color(0xFF7C4DFF)},
     {"label": "Brand+", "icon": Icons.verified_rounded, "color": Color(0xFF00B0FF)},
@@ -66,6 +67,7 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     _scrollController.dispose();
     _debounce?.cancel();
     _scannerController.dispose();
@@ -454,7 +456,7 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
       final pct = ((article.prixVente - article.prixGros!) / article.prixVente * 100).round();
       if (pct > 0) return pct;
     }
-    // Subtle fallback discount based on article ID hash to match AliExpress deals feel
+    // Subtle fallback discount based on article ID hash to match marketplace deals feel
     final pseudo = (article.id.hashCode.abs() % 45) + 15;
     return pseudo;
   }
@@ -574,7 +576,7 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
           child: CustomScrollView(
             controller: _scrollController,
             slivers: [
-              // 1. TOP HEADER (AliExpress Brand + Notifications)
+              // 1. TOP HEADER (Gestion Pro Global Brand + Notifications)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -595,18 +597,18 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
                             text: const TextSpan(
                               children: [
                                 TextSpan(
-                                  text: "Ali",
+                                  text: "Gestion Pro ",
                                   style: TextStyle(
-                                    fontSize: 26,
+                                    fontSize: 22,
                                     fontWeight: FontWeight.w900,
-                                    color: Color(0xFFFF5000), // AliExpress Orange/Red
+                                    color: Color(0xFFFF5000), // Brand Accent Orange/Red
                                     letterSpacing: -0.5,
                                   ),
                                 ),
                                 TextSpan(
-                                  text: "Express",
+                                  text: "Global",
                                   style: TextStyle(
-                                    fontSize: 26,
+                                    fontSize: 22,
                                     fontWeight: FontWeight.w900,
                                     color: Color(0xFF111111),
                                     letterSpacing: -0.5,
@@ -649,7 +651,7 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
                       border: Border.all(color: const Color(0xFFE0E0E0), width: 1.5),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
+                          color: Colors.black.withValues(alpha: 0.04),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -668,8 +670,13 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
                         Expanded(
                           child: TextField(
                             controller: _searchController,
+                            focusNode: _searchFocusNode,
+                            textInputAction: TextInputAction.search,
+                            onSubmitted: (value) {
+                              _fetchProducts(forceRefresh: true);
+                            },
                             decoration: const InputDecoration(
-                              hintText: "OPPO Find X9 Ultra / Rechercher...",
+                              hintText: "Gestion Pro Global / Rechercher un produit...",
                               hintStyle: TextStyle(color: Color(0xFF9E9E9E), fontSize: 14),
                               border: InputBorder.none,
                               isDense: true,
@@ -684,15 +691,21 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
                               _fetchProducts();
                             },
                           ),
-                        Container(
-                          margin: const EdgeInsets.only(right: 4),
-                          width: 40,
-                          height: 40,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF111111),
-                            shape: BoxShape.circle,
+                        GestureDetector(
+                          onTap: () {
+                            FocusScope.of(context).unfocus();
+                            _fetchProducts(forceRefresh: true);
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 4),
+                            width: 40,
+                            height: 40,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF111111),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.search, color: Colors.white, size: 20),
                           ),
-                          child: const Icon(Icons.search, color: Colors.white, size: 20),
                         ),
                       ],
                     ),
@@ -1124,7 +1137,7 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
                                           width: double.infinity,
                                           padding: const EdgeInsets.symmetric(vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFFFF2442).withOpacity(0.08),
+                                            color: const Color(0xFFFF2442).withValues(alpha: 0.08),
                                             borderRadius: BorderRadius.circular(6),
                                           ),
                                           alignment: Alignment.center,
@@ -1180,21 +1193,37 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
           unselectedLabelStyle: const TextStyle(fontSize: 11),
           elevation: 0,
           onTap: (index) {
-            setState(() => _bottomNavIndex = index);
-            if (index == 1) {
-              // Shop -> Focus search or reset category
-              setState(() => _selectedCategory = 'Explore');
+            if (index == 0) {
+              setState(() => _bottomNavIndex = 0);
+              _scrollController.animateTo(
+                0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            } else if (index == 1) {
+              // Shop -> Reset category to Explore, refresh, scroll to products grid, and focus search
+              setState(() {
+                _bottomNavIndex = 1;
+                _selectedCategory = 'Explore';
+              });
               _fetchProducts();
+              _searchFocusNode.requestFocus();
             } else if (index == 2) {
-              // Feed -> Show discovery / deals feed
+              // Feed -> Show discovery / deals feed modal with direct filters
+              setState(() => _bottomNavIndex = 2);
               _showFeedModal();
             } else if (index == 3) {
+              // Cart -> Open dedicated CartScreen
+              setState(() => _bottomNavIndex = 3);
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const CartScreen()),
-              );
+              ).then((_) {
+                if (mounted) setState(() => _bottomNavIndex = 0);
+              });
             } else if (index == 4) {
               // Account -> Open client account profile / login modal
+              setState(() => _bottomNavIndex = 4);
               _showAccountModal();
             }
           },

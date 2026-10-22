@@ -347,7 +347,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Guest Visitor Access to AliExpress Marketplace
+                        // Guest Visitor Access to Gestion Pro Global Marketplace
                         SizedBox(
                           width: double.infinity,
                           height: 50,
