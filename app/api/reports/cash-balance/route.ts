@@ -33,7 +33,7 @@ export async function GET(request: Request) {
       .from("paiements")
       .select(`
         id, date_operation, montant_regle, moyen_reglement, reference_paiement,
-        factures!inner ( id, date_facture, bl_number, total_ttc, montant_paye, montant_restant, statut, vendeur, organization_id )
+        factures!inner ( id, date_facture, bl_number, total_ttc, montant_paye, montant_restant, statut, vendeur, organization_id, clients (nom) )
       `)
       .neq("moyen_reglement", "Crédit");
 
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
         .from("paiements")
         .select(`
           id, date_operation, montant_regle, moyen_reglement, reference_paiement,
-          factures ( id, date_facture, bl_number, total_ttc, montant_paye, montant_restant, statut, vendeur )
+          factures ( id, date_facture, bl_number, total_ttc, montant_paye, montant_restant, statut, vendeur, clients (nom) )
         `)
         .neq("moyen_reglement", "Crédit")
         .gte("date_operation", start || "1970-01-01")
@@ -163,8 +163,11 @@ export async function GET(request: Request) {
         moyen: p.moyen_reglement || "Espèces",
         entree: p.montant_regle > 0 ? p.montant_regle : 0,
         sortie: p.montant_regle < 0 ? Math.abs(p.montant_regle) : 0,
+        total_doc: Number(fact?.total_ttc || 0),
+        reste: Number(fact?.montant_restant || 0),
         user: fact?.vendeur || "Caisse",
         emplacement: "BOUTIQUE",
+        client: fact?.clients?.nom || null,
         isAdvanceConsumption,
       });
     });
