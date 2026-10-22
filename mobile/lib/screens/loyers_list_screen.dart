@@ -33,11 +33,13 @@ class _LoyersListScreenState extends State<LoyersListScreen> {
   final Color _secondaryColor = const Color(0xFF8E2DE2);
   final Color _backgroundColor = const Color(0xFFF8FAFF);
 
+  String _selectedFilter = "Tous"; // "Tous", "Actif", "Retard", "Expiré"
+
   @override
   void initState() {
     super.initState();
     _fetchContracts();
-    _searchController.addListener(_onSearchChanged);
+    _searchController.addListener(_applyFilters);
   }
 
   @override
@@ -46,19 +48,30 @@ class _LoyersListScreenState extends State<LoyersListScreen> {
     super.dispose();
   }
 
-  void _onSearchChanged() {
+  void _applyFilters() {
     final query = _searchController.text.toLowerCase().trim();
-    if (query.isEmpty) {
-      _displayContracts = List.from(_allContracts);
-    } else {
+    setState(() {
       _displayContracts = _allContracts.where((c) {
-        return c.locataireNomComplet.toLowerCase().contains(query) ||
+        // Query match
+        final matchesQuery = query.isEmpty ||
+            c.locataireNomComplet.toLowerCase().contains(query) ||
             c.refLocataire.toLowerCase().contains(query) ||
             c.bienLoueDetails.toLowerCase().contains(query) ||
             (c.quartier?.toLowerCase().contains(query) ?? false);
+
+        if (!matchesQuery) return false;
+
+        // Status filter match
+        if (_selectedFilter == "Actif") {
+          return c.statut == "Actif";
+        } else if (_selectedFilter == "Retard") {
+          return c.retards > 0 || c.moisImpayes.contains('m');
+        } else if (_selectedFilter == "Expiré") {
+          return c.statut == "Expiré";
+        }
+        return true;
       }).toList();
-    }
-    setState(() {});
+    });
   }
 
   Future<void> _fetchContracts() async {
@@ -71,9 +84,9 @@ class _LoyersListScreenState extends State<LoyersListScreen> {
       if (mounted) {
         setState(() {
           _allContracts = rentProvider.contracts;
-          _displayContracts = List.from(_allContracts);
           _isLoading = false;
         });
+        _applyFilters();
       }
     } catch (e) {
       debugPrint("Error loading contracts: $e");
@@ -82,11 +95,15 @@ class _LoyersListScreenState extends State<LoyersListScreen> {
   }
 
   double get _totalCollected {
-    return _displayContracts.fold(0.0, (sum, c) => sum + (c.totalPaye));
+    return _allContracts.fold(0.0, (sum, c) => sum + (c.totalPaye));
   }
 
   int get _activeContractsCount {
-    return _displayContracts.where((c) => c.statut == "Actif").length;
+    return _allContracts.where((c) => c.statut == "Actif").length;
+  }
+
+  int get _lateContractsCount {
+    return _allContracts.where((c) => c.retards > 0 || c.moisImpayes.contains('m')).length;
   }
 
   @override
@@ -132,6 +149,7 @@ class _LoyersListScreenState extends State<LoyersListScreen> {
         children: [
           _buildSearchBar(),
           _buildStatsCards(),
+          _buildFilterChips(),
           Expanded(
             child: _isLoading
                 ? Center(child: CircularProgressIndicator(color: _primaryColor))
@@ -197,7 +215,7 @@ class _LoyersListScreenState extends State<LoyersListScreen> {
                   icon: const Icon(Icons.cancel_rounded, color: Colors.grey),
                   onPressed: () {
                     _searchController.clear();
-                    _onSearchChanged();
+                    _applyFilters();
                   },
                 )
               : null,
@@ -230,7 +248,7 @@ class _LoyersListScreenState extends State<LoyersListScreen> {
         children: [
           _buildStatCard(
             "Total Contrats",
-            "${_displayContracts.length}",
+            "${_allContracts.length}",
             [const Color(0xFF4F46E5), const Color(0xFF6366F1)],
             Icons.file_copy_rounded,
           ),
@@ -241,12 +259,95 @@ class _LoyersListScreenState extends State<LoyersListScreen> {
             Icons.people_alt_rounded,
           ),
           _buildStatCard(
+            "Contrats en Retard",
+            "$_lateContractsCount",
+            [const Color(0xFFE11D48), const Color(0xFFF43F5E)],
+            Icons.warning_amber_rounded,
+          ),
+          _buildStatCard(
             "Total Encaissé",
             "${_numberFormat.format(_totalCollected)} F",
             [const Color(0xFFF59E0B), const Color(0xFFF97316)],
             Icons.account_balance_wallet_rounded,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChips() {
+    final filters = [
+      {"id": "Tous", "label": "Tous (${_allContracts.length})"},
+      {"id": "Actif", "label": "Actifs ($_activeContractsCount)"},
+      {"id": "Retard", "label": "En Retard ($_lateContractsCount)"},
+      {"id": "Expiré", "label": "Expirés (${_allContracts.where((c) => c.statut == 'Expiré').length})"},
+    ];
+
+    return Container(
+      height: 40,
+      margin: const EdgeInsets.only(bottom: 8, left: 12, right: 12),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: filters.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final f = filters[index];
+          final bool isSelected = _selectedFilter == f["id"];
+          final bool isLateTab = f["id"] == "Retard";
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                _selectedFilter = f["id"]!;
+              });
+              _applyFilters();
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? (isLateTab ? const Color(0xFFE11D48) : _primaryColor)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: (isLateTab ? const Color(0xFFE11D48) : _primaryColor).withOpacity(0.3),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        )
+                      ]
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        )
+                      ],
+                border: Border.all(
+                  color: isSelected
+                      ? Colors.transparent
+                      : (isLateTab && _lateContractsCount > 0
+                          ? const Color(0xFFFDA4AF)
+                          : Colors.grey.shade200),
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  f["label"]!,
+                  style: TextStyle(
+                    color: isSelected
+                        ? Colors.white
+                        : (isLateTab && _lateContractsCount > 0 ? const Color(0xFFE11D48) : Colors.grey.shade800),
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
