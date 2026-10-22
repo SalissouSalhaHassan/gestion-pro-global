@@ -41,6 +41,7 @@ type CashClosureModalProps = {
       totalPaidInvoicesPeriod: number;
       totalAdvancesPeriod: number;
       totalCementPeriod: number;
+      totalLoyersPeriod?: number;
     };
   };
   filters: { start: string; end: string; cashier: string };

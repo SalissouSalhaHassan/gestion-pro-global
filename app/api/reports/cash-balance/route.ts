@@ -93,7 +93,31 @@ export async function GET(request: Request) {
       cimData = data || [];
     } catch (e) {}
 
-    // 5. Active Invoices of the period (Factures du jour / de la période)
+    // 5. Rent Payments (Paiements Loyers / Contrats)
+    let loyersData: any[] = [];
+    try {
+      let loyersQuery = supabase
+        .from("contrat_paiements")
+        .select(`
+          id, date_paiement, montant, mode_paiement, nom_de_mois, description, utilisateur,
+          contrats ( id, locataire_nom_complet, ref_locataire, bien_loue_details, organization_id )
+        `);
+      if (start) loyersQuery = loyersQuery.gte("date_paiement", start);
+      if (end) loyersQuery = loyersQuery.lte("date_paiement", `${end}T23:59:59.999Z`);
+      const { data: rawLoyers } = await loyersQuery;
+      if (rawLoyers) {
+        loyersData = rawLoyers.filter((l: any) => {
+          const c = Array.isArray(l.contrats) ? l.contrats[0] : l.contrats;
+          if (orgId && c?.organization_id && c.organization_id !== orgId) return false;
+          if (cashier && l.utilisateur && l.utilisateur !== cashier) return false;
+          return true;
+        });
+      }
+    } catch (e) {
+      console.error("Loyer payments fetch error in cash-balance:", e);
+    }
+
+    // 6. Active Invoices of the period (Factures du jour / de la période)
     let fQuery = supabase
       .from("factures")
       .select("id, date_facture, bl_number, total_ttc, montant_paye, montant_restant, vendeur, statut, clients(nom)")
@@ -107,7 +131,7 @@ export async function GET(request: Request) {
 
     const { data: fData } = await fQuery;
 
-    // 6. Organization Users / Cashiers for filtering
+    // 7. Organization Users / Cashiers for filtering
     let uQuery = supabase.from("users").select("utilisateur, nom_prenom");
     if (orgId) uQuery = uQuery.eq("organization_id", orgId);
     const { data: uData } = await uQuery;
@@ -157,6 +181,22 @@ export async function GET(request: Request) {
         user: a.utilisateur || "Caisse",
         emplacement: "BOUTIQUE",
         client: a.clients?.nom || null,
+      });
+    });
+
+    // Rent Payments (Loyers)
+    loyersData?.forEach((l: any) => {
+      const c = Array.isArray(l.contrats) ? l.contrats[0] : l.contrats;
+      entries.push({
+        date: l.date_paiement,
+        ref: c?.ref_locataire || `LOY-${l.id}`,
+        type: "Paiement Loyer",
+        moyen: l.mode_paiement || "Espèces",
+        entree: Number(l.montant || 0),
+        sortie: 0,
+        user: l.utilisateur || "Caisse Loyers",
+        emplacement: c?.bien_loue_details || "IMMOBILIER",
+        client: c?.locataire_nom_complet || "Locataire",
       });
     });
 
@@ -219,6 +259,7 @@ export async function GET(request: Request) {
     const totalPaidInvoicesPeriod = (fData || []).reduce((sum, f) => sum + Number(f.montant_paye || 0), 0);
     const totalAdvancesPeriod = (aData || []).reduce((sum, a) => sum + Number(a.montant_initial || 0), 0);
     const totalCementPeriod = cimData.reduce((sum, c) => sum + Number(c.montant || 0), 0);
+    const totalLoyersPeriod = loyersData.reduce((sum, l) => sum + Number(l.montant || 0), 0);
     const totalExpenses = entries.reduce((sum, item) => sum + item.sortie, 0);
 
     return NextResponse.json(
@@ -235,6 +276,7 @@ export async function GET(request: Request) {
             totalPaidOlderInvoicesPeriod: 0,
             totalAdvancesPeriod,
             totalCementPeriod,
+            totalLoyersPeriod,
           },
         },
         entries,

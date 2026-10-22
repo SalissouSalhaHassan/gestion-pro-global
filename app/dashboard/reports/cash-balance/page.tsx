@@ -44,6 +44,7 @@ export default function CashBalancePage() {
         totalPaidOlderInvoicesPeriod: number;
         totalAdvancesPeriod: number;
         totalCementPeriod: number;
+        totalLoyersPeriod?: number;
       }
     };
     entries: any[];
@@ -254,11 +255,12 @@ export default function CashBalancePage() {
             value={filters.type}
             onChange={(e) => setFilters({...filters, type: e.target.value})}
           >
-            <option value="Tous">Tous les types de flux</option>
-            <option value="Vente">Ventes Facturées</option>
-            <option value="Dépôt">Dépôts / Avances</option>
-            <option value="Dépense">Dépenses Caisse</option>
-            <option value="Paiement Ciment">Ciment</option>
+            <option value="Tous">{locale === "ar" ? "جميع أنواع الحركات" : "Tous les types de flux"}</option>
+            <option value="Vente">{locale === "ar" ? "مبيعات الفواتير" : "Ventes Facturées"}</option>
+            <option value="Dépôt">{locale === "ar" ? "الودائع / الأرصدة" : "Dépôts / Avances"}</option>
+            <option value="Loyer">{locale === "ar" ? "مدفوعات الإيجارات" : "Paiements Loyers"}</option>
+            <option value="Dépense">{locale === "ar" ? "مصروفات الصندوق" : "Dépenses Caisse"}</option>
+            <option value="Paiement Ciment">{locale === "ar" ? "الأسمنت" : "Ciment"}</option>
           </select>
         </div>
       </div>
@@ -339,6 +341,17 @@ export default function CashBalancePage() {
                   </span>
                   <span className="font-black text-sm">
                     +{formatCurrencyAmount(data.summary.reconciliation.totalCementPeriod)}
+                  </span>
+                </div>
+              )}
+
+              {(data.summary.reconciliation.totalLoyersPeriod || 0) > 0 && (
+                <div className="flex justify-between items-center py-2 border-b border-slate-200/80 text-emerald-600">
+                  <span className="text-xs font-bold">
+                    {locale === "ar" ? "(+) مقبوضات الإيجارات والعقارات" : "(+) Paiements Loyers perçus"}
+                  </span>
+                  <span className="font-black text-sm">
+                    +{formatCurrencyAmount(data.summary.reconciliation.totalLoyersPeriod!)}
                   </span>
                 </div>
               )}

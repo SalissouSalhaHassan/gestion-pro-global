@@ -1016,6 +1016,8 @@ class _LoyersListScreenState extends State<LoyersListScreen> {
                             "periode_fin": apiFormatter.format(endPeriod),
                             "nom_de_mois": DateFormat('MMMM yyyy', 'fr_FR').format(startPeriod),
                             "description": descController.text.trim(),
+                            "utilisateur": auth.username ?? "Caissier",
+                            if (auth.organizationId != null) "organization_id": auth.organizationId,
                           };
 
                           await Provider.of<RentProvider>(context, listen: false).addPayment(auth, c.id, payload);

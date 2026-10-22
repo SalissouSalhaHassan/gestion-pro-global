@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth_helper';
 import { ContractService } from '@/lib/services/loyer.service';
 
 // GET /api/loyers/:id/payments — Get payments for a specific contract
@@ -22,10 +23,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params;
     const body = await request.json();
     const supabase = await createClient();
+    const session = await getServerSession();
     const service = new ContractService(supabase);
 
-    // Ensure contrat_id is set
+    // Ensure contrat_id and cashier are set
     body.contrat_id = parseInt(id);
+    if (!body.utilisateur && session?.username) {
+      body.utilisateur = session.username;
+    }
+    if (!body.organization_id && session?.organization_id) {
+      body.organization_id = session.organization_id;
+    }
+
     await service.savePayment(body);
 
     // Update contract status to Actif after payment
