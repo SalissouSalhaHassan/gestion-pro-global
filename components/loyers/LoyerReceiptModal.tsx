@@ -60,9 +60,23 @@ export default function LoyerReceiptModal({ paymentId, onClose }: LoyerReceiptMo
         setLoading(true);
         const numericId = typeof paymentId === 'string' ? Number(paymentId) : paymentId;
         
-        // 1. Fetch Company Info
-        const { data: compData } = await supabase.from("informations_entreprise").select("*").limit(1);
-        setCompany(compData && compData.length > 0 ? compData[0] : null);
+        // 1. Fetch Company Info dynamically via /api/settings/company
+        try {
+          const compRes = await fetch("/api/settings/company");
+          if (compRes.ok) {
+            const compJson = await compRes.json();
+            if (compJson.company) {
+              setCompany(compJson.company);
+            }
+          }
+        } catch (e) {
+          console.warn("Failed fetching /api/settings/company in LoyerReceiptModal:", e);
+        }
+
+        if (!company) {
+          const { data: compData } = await supabase.from("informations_entreprise").select("*").limit(1).maybeSingle();
+          if (compData) setCompany(compData);
+        }
 
         // 2. Fetch Payment with Contract
         const { data: payData, error: payErr } = await supabase

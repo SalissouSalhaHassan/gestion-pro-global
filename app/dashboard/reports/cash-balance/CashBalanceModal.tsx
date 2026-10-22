@@ -36,12 +36,26 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
       try {
         setLoading(true);
         
-        const { data: comp } = await supabase
-          .from("informations_entreprise")
-          .select("*")
-          .limit(1)
-          .single();
-        setCompany(comp);
+        try {
+          const compRes = await fetch("/api/settings/company");
+          if (compRes.ok) {
+            const compJson = await compRes.json();
+            if (compJson.company) {
+              setCompany(compJson.company);
+            }
+          }
+        } catch (e) {
+          console.warn("Failed fetching /api/settings/company in CashBalanceModal:", e);
+        }
+
+        if (!company) {
+          const { data: comp } = await supabase
+            .from("informations_entreprise")
+            .select("*")
+            .limit(1)
+            .maybeSingle();
+          if (comp) setCompany(comp);
+        }
 
         const params = new URLSearchParams({
             start: filters.start,
@@ -108,10 +122,10 @@ export default function CashBalanceModal({ filters, onClose }: CashBalanceModalP
           {/* HEADER */}
           <div className="pb-4 border-b border-black">
             <h1 className="text-xl font-bold uppercase tracking-tight text-black">
-              {company?.nom_entreprise || "ETS TASSIOU KOMMA"}
+              {company?.nom_entreprise || "ENTREPRISE"}
             </h1>
             <p className="text-xs uppercase text-slate-800 mt-0.5">
-              {company?.adresse || "MARADI, NIGER KAMPALA"}
+              {company?.adresse || ""}
             </p>
             {company?.telephone && (
               <p className="text-[11px] text-slate-800">

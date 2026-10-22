@@ -25,6 +25,10 @@ type CompanyInfo = {
   nom_entreprise?: string;
   telephone?: string;
   adresse?: string;
+  nif?: string;
+  rc?: string;
+  email?: string;
+  [key: string]: any;
 };
 
 type ContractReport = {
@@ -180,9 +184,23 @@ export default function LoyerReportsPage() {
       const paymentsData = await paymentsRes.json();
       setPayments(Array.isArray(paymentsData) ? paymentsData : []);
 
-      // 3. Fetch Company Info
-      const { data: compData } = await supabase.from("informations_entreprise").select("*").single();
-      if (compData) setCompany(compData);
+      // 3. Fetch Company Info dynamically via /api/settings/company
+      try {
+        const compRes = await fetch("/api/settings/company");
+        if (compRes.ok) {
+          const compJson = await compRes.json();
+          if (compJson.company) {
+            setCompany(compJson.company);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed fetching /api/settings/company:", e);
+      }
+
+      if (!company) {
+        const { data: compData } = await supabase.from("informations_entreprise").select("*").limit(1).maybeSingle();
+        if (compData) setCompany(compData);
+      }
 
       // 4. Fetch Current User
       const sessionUser = getClientSessionUser();
@@ -1515,14 +1533,22 @@ export default function LoyerReportsPage() {
         {/* 1. Header Details */}
         <div className="flex justify-between items-start mb-4 border-b border-black pb-3">
           <div className="flex items-center gap-3">
-            {/* SVG Logo */}
+            {/* SVG Logo / Initials */}
             <div className="w-12 h-12 border-2 border-black flex items-center justify-center rotate-6">
-              <span className="text-[10px] font-black text-center leading-tight">ETS<br/>SOUNO</span>
+              <span className="text-[10px] font-black text-center leading-tight">
+                {company?.nom_entreprise ? company.nom_entreprise.split(' ').slice(0, 2).join('\n') : "ENTR"}
+              </span>
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight uppercase leading-none">ETS SOUNO</h1>
-              <p className="text-xs font-black text-slate-700 mt-1">MARADI-NIGER</p>
-              <p className="text-[9px] font-bold text-slate-500">Tél: 98 41 03 99 / 96 97 01 57</p>
+              <h1 className="text-2xl font-black tracking-tight uppercase leading-none">
+                {company?.nom_entreprise || "ENTREPRISE"}
+              </h1>
+              <p className="text-xs font-black text-slate-700 mt-1 uppercase">{company?.adresse || ""}</p>
+              <div className="text-[9px] font-bold text-slate-500 flex flex-wrap gap-2">
+                {company?.telephone && <span>Tél: {company.telephone}</span>}
+                {company?.nif && <span>NIF: {company.nif}</span>}
+                {company?.rc && <span>RC: {company.rc}</span>}
+              </div>
             </div>
           </div>
           <div className="text-right text-[10px] font-bold text-slate-500 space-y-1">

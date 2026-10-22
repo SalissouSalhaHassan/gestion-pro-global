@@ -57,9 +57,23 @@ export default function LoyerReceiptModalV2({ paymentId, onClose }: LoyerReceipt
         
         setAllYearPayments(yearData || []);
 
-        // Fetch Company
-        const { data: compData } = await supabase.from("informations_entreprise").select("*").single();
-        setCompany(compData);
+        // Fetch Company via /api/settings/company for multi-tenant accuracy
+        try {
+          const compRes = await fetch("/api/settings/company");
+          if (compRes.ok) {
+            const compJson = await compRes.json();
+            if (compJson.company) {
+              setCompany(compJson.company);
+            }
+          }
+        } catch (e) {
+          console.warn("Failed fetching /api/settings/company, falling back to direct query:", e);
+        }
+
+        if (!company) {
+          const { data: compData } = await supabase.from("informations_entreprise").select("*").limit(1).maybeSingle();
+          if (compData) setCompany(compData);
+        }
 
       } catch (err: any) {
         setError(err.message);
@@ -160,13 +174,13 @@ export default function LoyerReceiptModalV2({ paymentId, onClose }: LoyerReceipt
               <div className="flex justify-between items-start mb-6">
                 <div>
                   <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase mb-1">
-                    {company?.nom_entreprise || "ETS SOUNO"}
+                    {company?.nom_entreprise || "ENTREPRISE"}
                   </h1>
-                  <p className="text-slate-500 font-bold text-sm uppercase">{company?.adresse || "MARADI-NIGER"}</p>
+                  <p className="text-slate-500 font-bold text-sm uppercase">{company?.adresse || ""}</p>
                   <div className="mt-2 flex flex-wrap gap-4 text-[10px] font-black text-slate-400 uppercase">
-                    <span>Tél: {company?.telephone || "98 41 03 99"}</span>
-                    <span>NIF: {company?.nif || "11835/R"}</span>
-                    <span>RC: {company?.rc || "NI-MAR-2007-A-93"}</span>
+                    {company?.telephone && <span>Tél: {company.telephone}</span>}
+                    {company?.nif && <span>NIF: {company.nif}</span>}
+                    {company?.rc && <span>RC: {company.rc}</span>}
                   </div>
                 </div>
               </div>
