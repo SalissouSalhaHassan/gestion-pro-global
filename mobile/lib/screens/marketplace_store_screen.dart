@@ -1213,11 +1213,11 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
               setState(() => _bottomNavIndex = 2);
               _showFeedModal();
             } else if (index == 3) {
-              // Cart -> Open dedicated CartScreen
+              // Cart -> Open dedicated CartScreen (Customer mode: no direct stock deduction)
               setState(() => _bottomNavIndex = 3);
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const CartScreen()),
+                MaterialPageRoute(builder: (_) => const CartScreen(isCustomer: true)),
               ).then((_) {
                 if (mounted) setState(() => _bottomNavIndex = 0);
               });
@@ -1439,7 +1439,7 @@ class _MarketplaceStoreScreenState extends State<MarketplaceStoreScreen> with Si
               trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
               onTap: () {
                 Navigator.pop(ctx);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen()));
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen(isCustomer: true)));
               },
             ),
             ListTile(

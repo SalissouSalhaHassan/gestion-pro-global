@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api_service.dart';
 import '../providers/auth_provider.dart';
@@ -17,7 +18,8 @@ import 'pdf_preview_screen.dart';
 import 'printer_screen.dart';
 
 class CartScreen extends StatefulWidget {
-  const CartScreen({super.key});
+  final bool isCustomer;
+  const CartScreen({super.key, this.isCustomer = false});
 
   @override
   State<CartScreen> createState() => _CartScreenState();
@@ -35,10 +37,17 @@ class _CartScreenState extends State<CartScreen> {
   Deposit? _selectedAcompte;
   bool _loadingAcomptes = false;
 
+  final TextEditingController _customerNameCtrl = TextEditingController();
+  final TextEditingController _customerPhoneCtrl = TextEditingController();
+  final TextEditingController _customerNoteCtrl = TextEditingController();
+
   final _numberFormat = NumberFormat("#,##0", "fr_FR");
 
   final Color _primaryColor = const Color(0xFF4A00E0);
   final Color _secondaryColor = const Color(0xFF8E2DE2);
+
+  static const String _defaultSupportWhatsapp = "22799425298";
+  String _companyWhatsapp = _defaultSupportWhatsapp;
 
   @override
   void initState() {
@@ -46,36 +55,64 @@ class _CartScreenState extends State<CartScreen> {
     _loadData();
   }
 
+  @override
+  void dispose() {
+    _customerNameCtrl.dispose();
+    _customerPhoneCtrl.dispose();
+    _customerNoteCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadData() async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
-    try {
-      final clientsData = await ApiService().getClients(auth.token!);
-      if (mounted) {
-        setState(() {
-          _clients = clientsData.map((item) => Client.fromJson(item)).toList();
-          if (_clients.isNotEmpty && _selectedClient == null) {
-            final def = _clients.firstWhere(
-              (c) => c.nom.toLowerCase().contains('divers'),
-              orElse: () => _clients.first,
-            );
-            _selectedClient = def;
-          }
-        });
-      }
-    } catch (e) {
-      debugPrint("Clients load error: $e");
+    
+    // Auto-fill customer name if logged in
+    if (auth.username != null && auth.username!.isNotEmpty) {
+      _customerNameCtrl.text = auth.username!;
     }
-    try {
-      final articlesData = await ApiService().getArticles(auth.token!);
-      if (mounted) {
-        setState(() {
-          _allArticles = articlesData
-              .map((item) => Article.fromJson(item))
-              .toList();
-        });
+
+    if (auth.token != null) {
+      try {
+        final clientsData = await ApiService().getClients(auth.token!);
+        if (mounted) {
+          setState(() {
+            _clients = clientsData.map((item) => Client.fromJson(item)).toList();
+            if (_clients.isNotEmpty && _selectedClient == null) {
+              final def = _clients.firstWhere(
+                (c) => c.nom.toLowerCase().contains('divers'),
+                orElse: () => _clients.first,
+              );
+              _selectedClient = def;
+            }
+          });
+        }
+      } catch (e) {
+        debugPrint("Clients load error: $e");
       }
-    } catch (e) {
-      debugPrint("Articles load error: $e");
+      try {
+        final articlesData = await ApiService().getArticles(auth.token!);
+        if (mounted) {
+          setState(() {
+            _allArticles = articlesData
+                .map((item) => Article.fromJson(item))
+                .toList();
+          });
+        }
+      } catch (e) {
+        debugPrint("Articles load error: $e");
+      }
+      try {
+        final companyInfo = await ApiService().getCompanyInfo(auth.token!);
+        final rawTel = companyInfo['telephone_whatsapp'] ?? companyInfo['telephone'] ?? companyInfo['tel'];
+        if (rawTel != null && rawTel.toString().trim().isNotEmpty) {
+          final cleaned = rawTel.toString().replaceAll(RegExp(r'[^0-9]'), '');
+          if (cleaned.length >= 8) {
+            _companyWhatsapp = cleaned.startsWith('227') ? cleaned : '227$cleaned';
+          }
+        }
+      } catch (e) {
+        debugPrint("Company info load error: $e");
+      }
     }
   }
 
@@ -485,6 +522,8 @@ class _CartScreenState extends State<CartScreen> {
   @override
   Widget build(BuildContext context) {
     final cart = Provider.of<CartProvider>(context);
+    final auth = Provider.of<AuthProvider>(context);
+    final isClient = _isClientFlow(auth);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F5F9),
@@ -498,9 +537,9 @@ class _CartScreenState extends State<CartScreen> {
             ),
           ),
         ),
-        title: const Text(
-          "Mon Panier",
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        title: Text(
+          isClient ? "Mon Panier d'Achat" : "Caisse / Panier Vendeur",
+          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         centerTitle: true,
         elevation: 0,
@@ -523,26 +562,37 @@ class _CartScreenState extends State<CartScreen> {
       ),
       body: Column(
         children: [
-          _buildClientSelector(),
+          if (isClient)
+            _buildCustomerInfoForm()
+          else
+            _buildClientSelector(),
           if (cart.items.isNotEmpty)
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFE8F5E9),
+                color: isClient ? const Color(0xFFE8F5E9) : const Color(0xFFEFF6FF),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFA5D6A7)),
+                border: Border.all(
+                  color: isClient ? const Color(0xFFA5D6A7) : const Color(0xFFBFDBFE),
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.verified_outlined, color: Color(0xFF2E7D32), size: 18),
+                  Icon(
+                    isClient ? Icons.shield_outlined : Icons.point_of_sale_rounded,
+                    color: isClient ? const Color(0xFF2E7D32) : const Color(0xFF1D4ED8),
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      "Commande client centralisée • Multi-fournisseurs / dépôts • Déstockage automatique à la validation du paiement",
+                      isClient
+                          ? "Commande client sécurisée • Aucun déstockage immédiat • Traitement & confirmation par l'équipe"
+                          : "Mode Vendeur POS • Déstockage immédiat des entrepôts à la validation de la facture",
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.green.shade900,
+                        color: isClient ? Colors.green.shade900 : const Color(0xFF1E3A8A),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -807,6 +857,203 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
+  bool _isClientFlow(AuthProvider auth) {
+    return widget.isCustomer || !auth.isAuthenticated || !auth.canAccessPOS;
+  }
+
+  Future<void> _submitCustomerOrder(CartProvider cart) async {
+    if (cart.items.isEmpty) {
+      _showSnackBar("Le panier est vide !", Colors.orange);
+      return;
+    }
+
+    final clientName = _customerNameCtrl.text.trim().isEmpty ? "Client" : _customerNameCtrl.text.trim();
+    final clientPhone = _customerPhoneCtrl.text.trim().isEmpty ? "Non spécifié" : _customerPhoneCtrl.text.trim();
+    final clientNote = _customerNoteCtrl.text.trim();
+
+    final dateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+    final StringBuffer sb = StringBuffer();
+    sb.writeln("🛍️ *NOUVELLE COMMANDE CLIENT - GESTION PRO GLOBAL*");
+    sb.writeln("📅 Date: $dateStr");
+    sb.writeln("👤 Client: $clientName");
+    sb.writeln("📞 Téléphone: $clientPhone");
+    if (clientNote.isNotEmpty) {
+      sb.writeln("📝 Note: $clientNote");
+    }
+    sb.writeln("\n📦 *ARTICLES COMMANDÉS :*");
+
+    for (int i = 0; i < cart.items.length; i++) {
+      final item = cart.items[i];
+      final lineTotal = item.unitPrice * item.quantity;
+      sb.writeln("${i + 1}. *${item.article.designation}*");
+      if (item.article.reference.isNotEmpty) {
+        sb.writeln("   Réf: ${item.article.reference}");
+      }
+      sb.writeln("   Quantité: ${item.quantity} x ${_numberFormat.format(item.unitPrice)} FCFA = ${_numberFormat.format(lineTotal)} FCFA");
+    }
+
+    sb.writeln("\n💰 *TOTAL COMMANDE : ${_numberFormat.format(cart.totalAmount)} FCFA*");
+    sb.writeln("\n_Merci de confirmer la disponibilité et les modalités de livraison / retrait. (Commande en attente de validation)_");
+
+    final encodedMessage = Uri.encodeComponent(sb.toString());
+    final Uri whatsappUri = Uri.parse("https://wa.me/$_companyWhatsapp?text=$encodedMessage");
+
+    try {
+      final launched = await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        await launchUrl(whatsappUri, mode: LaunchMode.platformDefault);
+      }
+      
+      // Clear cart and show confirmation dialog
+      cart.clearCart();
+      if (mounted) {
+        _showCustomerOrderSuccessDialog(clientName);
+      }
+    } catch (e) {
+      debugPrint("WhatsApp launch error: $e");
+      if (mounted) {
+        _showSnackBar("Impossible d'ouvrir WhatsApp. Contactez le +$_companyWhatsapp", Colors.red);
+      }
+    }
+  }
+
+  void _showCustomerOrderSuccessDialog(String clientName) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle_rounded, color: Color(0xFF1EBE57), size: 28),
+            SizedBox(width: 10),
+            Text("Commande Transmise", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE8F5E9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFA5D6A7)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.inventory_2_outlined, color: Color(0xFF2E7D32), size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Votre commande est transmise sans déstockage immédiat. Notre équipe prépare vos articles.",
+                      style: TextStyle(fontSize: 12, color: Color(0xFF1B5E20), fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              "Merci $clientName ! Votre récapitulatif a été envoyé à l'équipe commerciale via WhatsApp. Vous serez contacté très rapidement pour la livraison et le règlement.",
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1EBE57),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+            },
+            child: const Text("Retour aux achats", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomerInfoForm() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.person_pin_circle_outlined, color: Color(0xFF1EBE57), size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                "Coordonnées de Commande",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _customerNameCtrl,
+            decoration: InputDecoration(
+              labelText: "Votre Nom / Raison sociale",
+              isDense: true,
+              prefixIcon: const Icon(Icons.person_outline, size: 20),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _customerPhoneCtrl,
+            keyboardType: TextInputType.phone,
+            decoration: InputDecoration(
+              labelText: "Téléphone / WhatsApp",
+              isDense: true,
+              prefixIcon: const Icon(Icons.phone_outlined, size: 20),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _customerNoteCtrl,
+            maxLines: 2,
+            decoration: InputDecoration(
+              labelText: "Instructions ou adresse de livraison (optionnel)",
+              isDense: true,
+              prefixIcon: const Icon(Icons.note_alt_outlined, size: 20),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -821,8 +1068,11 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Widget _buildBottomSection(CartProvider cart) {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final isClient = _isClientFlow(auth);
+
     return Container(
-      padding: const EdgeInsets.all(25),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
@@ -833,41 +1083,89 @@ class _CartScreenState extends State<CartScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Total à payer", style: TextStyle(fontSize: 16, color: Colors.grey)),
+              Text(
+                isClient ? "Montant Total Devis" : "Total à payer",
+                style: const TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.w600),
+              ),
               Text("${_numberFormat.format(cart.totalAmount)} FCFA", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 15),
-          _buildPaymentMethodSelector(),
-          const SizedBox(height: 15),
-          InkWell(
-            onTap: (cart.items.isEmpty || _isLoading) ? null : _submitOrder,
-            borderRadius: BorderRadius.circular(15),
-            child: Container(
-              height: 55,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: (cart.items.isEmpty || _isLoading)
-                      ? [Colors.grey.shade300, Colors.grey.shade400]
-                      : [_primaryColor, _secondaryColor],
+          if (!isClient) ...[
+            _buildPaymentMethodSelector(),
+            const SizedBox(height: 15),
+            InkWell(
+              onTap: (cart.items.isEmpty || _isLoading) ? null : _submitOrder,
+              borderRadius: BorderRadius.circular(15),
+              child: Container(
+                height: 55,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: (cart.items.isEmpty || _isLoading)
+                        ? [Colors.grey.shade300, Colors.grey.shade400]
+                        : [_primaryColor, _secondaryColor],
+                  ),
+                  borderRadius: BorderRadius.circular(15),
                 ),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Center(
-                child: _isLoading
-                    ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.check_circle_outline, color: Colors.white),
-                          SizedBox(width: 10),
-                          Text("VALIDER LA COMMANDE", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-                        ],
-                      ),
+                child: Center(
+                  child: _isLoading
+                      ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.check_circle_outline, color: Colors.white),
+                            SizedBox(width: 10),
+                            Text("VALIDER LA VENTE (POS)", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                          ],
+                        ),
+                ),
               ),
             ),
-          ),
+          ] else ...[
+            // Customer Order Action: Send WhatsApp Order / Devis (No stock deduction)
+            InkWell(
+              onTap: cart.items.isEmpty ? null : () => _submitCustomerOrder(cart),
+              borderRadius: BorderRadius.circular(15),
+              child: Container(
+                height: 55,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: cart.items.isEmpty
+                        ? [Colors.grey.shade300, Colors.grey.shade400]
+                        : [const Color(0xFF1EBE57), const Color(0xFF128C7E)],
+                  ),
+                  borderRadius: BorderRadius.circular(15),
+                  boxShadow: cart.items.isNotEmpty
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF1EBE57).withOpacity(0.35),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          )
+                        ]
+                      : null,
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                    SizedBox(width: 10),
+                    Text(
+                      "TRANSMETTRE LA COMMANDE (WHATSAPP)",
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              "🔒 Aucun déstockage immédiat • Traitement après validation",
+              style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500),
+            ),
+          ],
         ],
       ),
     );
